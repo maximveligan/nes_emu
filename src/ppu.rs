@@ -1,15 +1,21 @@
 pub struct Ppu {
-    regs: PRegisters
+    pub regs: PRegisters
 }
 
-struct PRegisters {
-    PPUCTRL: u8,
-    PPUMASK: u8,
-    PPUSTATUS: u8,
-    OAMADDR: u8,
-    OAMDATA: u8,
-    PPUSCROLL: u8,
-    PPUADDR: u8,
-    PPUDATA: u8,
-    OAMDMA: u8
+impl Ppu {
+    pub fn load(&self, val: u16) -> u8 {
+        unimplemented!();
+    }
+}
+
+pub struct PRegisters {
+    pub ppuctrl: u8,
+    pub ppumask: u8,
+    pub ppustatus: u8,
+    pub oamaddr: u8,
+    pub oamdata: u8,
+    pub ppuscroll: u8,
+    pub ppuaddr: u8,
+    pub ppudata: u8,
+    pub oamdma: u8
 }

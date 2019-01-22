@@ -1,184 +1,24 @@
 use mmu::MemManageUnit;
 use std::ops::Add;
-
-const INC_ABSX: u8 = 0xFE;
-const SBC_ABSX: u8 = 0xFD;
-const SBC_ABSY: u8 = 0xF9;
-const INC_ZPX: u8 = 0xF6;
-const SBC_ZPX: u8 = 0xF5;
-const SBC_INDY: u8 = 0xF1;
-const INC_ABS: u8 = 0xEE;
-const SED: u8 = 0xF8;
-const CPX_ABS: u8 = 0xEC;
-const NOP: u8 = 0xEA;
-const SBC_IMM: u8 = 0xE9;
-const INX: u8 = 0xE8;
-const INC_ZP: u8 = 0xE6;
-const SBC_ZP: u8 = 0xE5;
-const CPX_ZP: u8 = 0xE4;
-const SBC_INDX: u8 = 0xE1;
-const CPX_IMM: u8 = 0xE0;
-const CMP_ABSX: u8 = 0xDD;
-const CMP_ABSY: u8 = 0xD9;
-const CLD: u8 = 0xD8;
-const DEC_ZPX: u8 = 0xD6;
-const CMP_ZPX: u8 = 0xD5;
-const CMP_INDY: u8 = 0xD1;
-const BNE: u8 = 0xD0;
-const DEC_ABS: u8 = 0xCE;
-const CMP_ABS: u8 = 0xCD;
-const DEX: u8 = 0xCA;
-const CMP_IMM: u8 = 0xC9;
-const INY: u8 = 0xC8;
-const DEC_ZP: u8 = 0xC6;
-const CMP_ZP: u8 = 0xC5;
-const CPY_ZP: u8 = 0xC4;
-const CMP_INDX: u8 = 0xC1;
-const CPY_IMM: u8 = 0xC0;
-const BEQ: u8 = 0xF0;
-const LDA_ABSX: u8 = 0xBD;
-const LDY_ABSX: u8 = 0xBC;
-const TSX: u8 = 0xBA;
-const LDA_ABSY: u8 = 0xB9;
-const CLV: u8 = 0xB8;
-const LDX_ZPY: u8 = 0xB6;
-const LDA_ZPX: u8 = 0xB5;
-const LDY_ZPX: u8 = 0xB4;
-const LDA_INDY: u8 = 0xB1;
-const BCS: u8 = 0xB0;
-const LDX_ABS: u8 = 0xAE;
-const LDA_ABS: u8 = 0xAD;
-const LDY_ABS: u8 = 0xAC;
-const TAX: u8 = 0xAA;
-const LDA_IMM: u8 = 0xA9;
-const TAY: u8 = 0xA8;
-const LDX_ZP: u8 = 0xA6;
-const LDA_ZP: u8 = 0xA5;
-const LDY_ZP: u8 = 0xA4;
-const LDX_IMM: u8 = 0xA2;
-const LDA_INDX: u8 = 0xA1;
-const LDY_IMM: u8 = 0xA0;
-const STA_ABSX: u8 = 0x9D;
-const TXS: u8 = 0x9A;
-const STA_ABSY: u8 = 0x99;
-const TYA: u8 = 0x98;
-const STX_ZPY: u8 = 0x96;
-const STA_ZPX: u8 = 0x95;
-const STY_ZPX: u8 = 0x94;
-const STA_INDY: u8 = 0x91;
-const BCC: u8 = 0x90;
-const STX_ABS: u8 = 0x8E;
-const STA_ABS: u8 = 0x8D;
-const STY_ABS: u8 = 0x8C;
-const TXA: u8 = 0x8A;
-const DEY: u8 = 0x88;
-const STX_ZP: u8 = 0x86;
-const STA_ZP: u8 = 0x85;
-const STY_ZP: u8 = 0x84;
-const STA_INDX: u8 = 0x81;
-const ROR_ABSX: u8 = 0x7E;
-const ADC_ABSX: u8 = 0x7D;
-const ADC_ABSY: u8 = 0x79;
-const SEI: u8 = 0x78;
-const ROR_ZPX: u8 = 0x76;
-const ADC_ZPX: u8 = 0x75;
-const ADC_INDY: u8 = 0x71;
-const BVS: u8 = 0x70;
-const ROR_ABS: u8 = 0x6E;
-const ADC_ABS: u8 = 0x6D;
-const JMP_IND: u8 = 0x6C;
-const ROR_ACC: u8 = 0x6A;
-const ADC_IMM: u8 = 0x69;
-const PLA: u8 = 0x68;
-const ROR_ZP: u8 = 0x66;
-const ADC_ZP: u8 = 0x65;
-const ADC_INDX: u8 = 0x61;
-const RTS: u8 = 0x60;
-const LSR_ABSX: u8 = 0x5E;
-const EOR_ABSX: u8 = 0x5D;
-const EOR_ABSY: u8 = 0x59;
-const CLI: u8 = 0x58;
-const LSR_ZPX: u8 = 0x56;
-const EOR_ZPX: u8 = 0x55;
-const EOR_INDY: u8 = 0x51;
-const BVC: u8 = 0x50;
-const LSR_ABS: u8 = 0x4E;
-const EOR_ABS: u8 = 0x4D;
-const JMP_ABS: u8 = 0x4C;
-const LSR_ACC: u8 = 0x4A;
-const EOR_IMM: u8 = 0x49;
-const PHA: u8 = 0x48;
-const LSR_ZP: u8 = 0x46;
-const EOR_ZP: u8 = 0x45;
-const EOR_INDX: u8 = 0x41;
-const RTI: u8 = 0x40;
-const ROL_ABSX: u8 = 0x3E;
-const AND_ABSX: u8 = 0x3D;
-const AND_ABSY: u8 = 0x39;
-const SEC: u8 = 0x38;
-const ROL_ZPX: u8 = 0x36;
-const AND_ZP_X: u8 = 0x35;
-const AND_INDY: u8 = 0x31;
-const BMI: u8 = 0x30;
-const ROL_ABS: u8 = 0x2E;
-const AND_ABS: u8 = 0x2D;
-const BIT_ABS: u8 = 0x2C;
-const ROL_ACC: u8 = 0x2A;
-const AND_IMM: u8 = 0x29;
-const PLP: u8 = 0x28;
-const ROL_ZP: u8 = 0x26;
-const AND_ZP: u8 = 0x25;
-const BIT_ZP: u8 = 0x24;
-const AND_INDX: u8 = 0x21;
-const JSR: u8 = 0x20;
-const ASL_ABSX: u8 = 0x1E;
-const ORA_ABSX: u8 = 0x1D;
-const ORA_ABSY: u8 = 0x19;
-const CLC: u8 = 0x18;
-const ASL_ZPX: u8 = 0x16;
-const ORA_ZPX: u8 = 0x15;
-const ORA_INDY: u8 = 0x11;
-const BPL: u8      = 0x10;
-const ASL_ABS: u8  = 0x0E;
-const ORA_ABS: u8  = 0x0D;
-const ASL_ACC: u8  = 0x0A;
-const ORA_IMM: u8  = 0x09;
-const PHP: u8      = 0x08;
-const ASL_ZP: u8   = 0x06;
-const ORA_ZP: u8   = 0x05;
-const ORA_INDX: u8 = 0x01;
-const BRK: u8      = 0x00;
-
-static CYCLES: [u8; 256] = [7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
-                            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-                            6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
-                            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-                            6, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 3, 4, 6, 6,
-                            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-                            6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
-                            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-                            2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
-                            2, 6, 2, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
-                            2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
-                            2, 5, 2, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
-                            2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
-                            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-                            2, 6, 3, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
-                            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7];
+use cpu_const::*;
 
 pub struct Registers {
-    acc: u8,
-    x: u8,
-    y: u8,
-    pc: ProgramCounter,
-    sp: u8,
-    flags: u8
+    pub acc: u8,
+    pub x: u8,
+    pub y: u8,
+    pub pc: ProgramCounter,
+    pub sp: u8,
+    pub flags: u8
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
+    pub fn new(val: u16) -> ProgramCounter {
+        ProgramCounter { 0: val }
+    }
+
     fn add(&mut self, offset: u16) {
         self.0 += offset;
     }
@@ -192,8 +32,9 @@ impl ProgramCounter {
 }
 
 pub struct Cpu {
-    regs: Registers,
-    mem: MemManageUnit,
+    pub regs: Registers,
+    pub mem: MemManageUnit,
+    pub cycle_count: usize,
 }
 
 pub enum Opcode {
@@ -203,96 +44,64 @@ pub enum Opcode {
     Branch(Branch),
     Jump(Jump),
     RegOps(RegOps),
-    Stack(Stack),
     System(System)
 }
 
-pub enum AddressingMode {
-    Immediate,
-    ZeroPage,
-    Absolute,
-    Implied,
-    Accumulator,
-    Indexed,
-    ZeroPageIndexed,
-    Indirect,
-    PreIndexedIndirect,
-    PostIndexedIndirect,
-    Relative
-}
-
-impl AddressingMode {
-    // Returns the first index of where the data needed to be retrieved lives
-    fn address_mem(&self, pc: ProgramCounter) -> (u16, bool) {
-        let page_crossed = false;
-        let mem_pointer = 0x0000;
-        match &self {
-            Immediate => (3, true),
-            ZeroPage =>  (3, true),
-            Absolute =>  (3, true),
-            Implied =>  (3, true),
-            Accumulator =>  (3, true),
-            Indexed =>  (3, true),
-            ZeroPageIndexed =>  (3, true),
-            Indirect =>  (3, true),
-            PreIndexedIndirect =>  (3, true),
-            PostIndexedIndirect =>  (3, true),
-            Relativ =>  (3, true),
-        }
-    }
-}
-
 pub enum Storage {
-    LDA(u16),
-    LDX(u16),
-    LDY(u16),
-    STA(u16),
-    STX(u16),
-    STY(u16),
+    LDA,
+    LDX,
+    LDY,
+    STA,
+    STX,
+    STY,
     TAX,
     TAY,
     TSX,
     TXA,
     TXS,
     TYA,
+    PHA,
+    PHP,
+    PLA,
+    PLP,
 }
 
 pub enum Math {
-    ADC(u16),
-    DEC(u16),
+    ADC,
+    DEC,
     DEX,
     DEY,
-    INC(u16),
+    INC,
     INX,
     INY,
-    SBC(u16),
+    SBC,
 }
 
 pub enum Bitwise {
-    AND(u16),
-    ASL(u16),
-    BIT(u16),
-    EOR(u16),
-    LSR(u16),
-    ORA(u16),
-    ROL(u16),
-    ROR(u16),
+    AND,
+    ASL,
+    BIT,
+    EOR,
+    LSR,
+    ORA,
+    ROL,
+    ROR,
 }
 
 pub enum Branch {
-    BCC(u16),
-    BCS(u16),
-    BEQ(u16),
-    BMI(u16),
-    BNE(u16),
-    BPL(u16),
-    BVC(u16),
-    BVS(u16),
+    BCC,
+    BCS,
+    BEQ,
+    BMI,
+    BNE,
+    BPL,
+    BVC,
+    BVS,
 }
 
 pub enum Jump {
-    JMP(u16),
-    JSR(u16),
+    JMP,
+    JSR,
     RTI,
     RTS,
 }
@@ -302,20 +111,14 @@ pub enum RegOps {
     CLD,
     CLI,
     CLV,
-    CMP(u16),
-    CPX(u16),
-    CPY(u16),
+    CMP,
+    CPX,
+    CPY,
     SEC,
     SED,
     SEI,
 }
 
-pub enum Stack {
-    PHA,
-    PHP,
-    PLA,
-    PLP,
-}
 
 pub enum System {
     BRK,
@@ -326,15 +129,100 @@ pub enum InvalidOpcode {
     DoesntExist(String, u8)
 }
 
+pub enum AddressingMode {
+    Immediate(u8),
+    Implied,
+    Accumulator,
+    ZeroPage(u8),
+    ZeroPageX(u8),
+    ZeroPageY(u8),
+    Abs(u16),
+    AbsX(u16),
+    AbsY(u16),
+    Indirect(u16),
+    IndexedIndirectX(u8),
+    IndirectIndexedY(u8),
+    Relative(i8)
+}
+
+enum AddrDataType {
+    Address(u16),
+    Constant(u8),
+}
+
+impl AddressingMode {
+    // Returns the first index of where the data needed to be retrieved lives
+    fn address_mem(&self, cpu: &Cpu) -> (Option<AddrDataType>, bool) {
+        match *self {
+            AddressingMode::Immediate(v) => (Some(AddrDataType::Constant(v)), false),
+            AddressingMode::Implied => (None, false),
+            AddressingMode::Accumulator => (None, false),
+            AddressingMode::ZeroPage(v) => (Some(AddrDataType::Address(cpu.mem.load_u8(v as u16) as u16)), false),
+            AddressingMode::ZeroPageX(v) => (Some(AddrDataType::Address((cpu.mem.load_u8(v as u16) + cpu.regs.x) as u16)), false),
+            AddressingMode::ZeroPageY(v) => (Some(AddrDataType::Address((cpu.mem.load_u8(v as u16) + cpu.regs.y) as u16)), false),
+            AddressingMode::Abs(v) => (Some(AddrDataType::Address(cpu.mem.load_u16(v))), false),
+            AddressingMode::AbsX(v) => (Some(AddrDataType::Address(cpu.mem.load_u16(v) + (cpu.regs.x as u16))), true), //TODO: Implement logic for bound check
+            AddressingMode::AbsY(v) => (Some(AddrDataType::Address(cpu.mem.load_u16(v) + (cpu.regs.y as u16))), true), //TODO: Implement logic for bound check
+            AddressingMode::Indirect(v) => unimplemented!("No page boundary cross"),
+            AddressingMode::IndexedIndirectX(v) => unimplemented!("No page boundary cross"),
+            AddressingMode::IndirectIndexedY(v) => unimplemented!("Possible cross over"),
+            AddressingMode::Relative(v) => unimplemented!("No page boundary cross")
+        }
+    }
+}
+
 impl Cpu {
-    fn execute_op(&mut self, op: Opcode) -> Result<(), InvalidOpcode> {
-        Ok(())
+    fn execute_op(&mut self, op: Opcode, addr_mode: Option<AddrDataType>) -> Result<(), InvalidOpcode> {
+        match addr_mode {
+            Some(mode) => match mode {
+                AddrDataType::Address(addr) => unimplemented!(),
+                AddrDataType::Constant(c) => unimplemented!(),
+            }
+
+            None => match op {
+                Opcode::Storage(Storage::TAX) => unimplemented!(),
+                Opcode::Storage(Storage::TAY) => unimplemented!(),
+                Opcode::Storage(Storage::TSX) => unimplemented!(),
+                Opcode::Storage(Storage::TXA) => unimplemented!(),
+                Opcode::Storage(Storage::TXS) => unimplemented!(),
+                Opcode::Storage(Storage::TYA) => unimplemented!(),
+                Opcode::Storage(Storage::PHA) => unimplemented!(),
+                Opcode::Storage(Storage::PHP) => unimplemented!(),
+                Opcode::Storage(Storage::PLA) => unimplemented!(),
+                Opcode::Storage(Storage::PLP) => unimplemented!(),
+                Opcode::Math(Math::DEX) => unimplemented!(),
+                Opcode::Math(Math::DEY) => unimplemented!(),
+                Opcode::Math(Math::INX) => unimplemented!(),
+                Opcode::Math(Math::INY) => unimplemented!(),
+                Opcode::Jump(Jump::RTI) => unimplemented!(),
+                Opcode::Jump(Jump::RTS) => unimplemented!(),
+                Opcode::RegOps(RegOps::CLC) => unimplemented!(),
+                Opcode::RegOps(RegOps::CLD) => unimplemented!(),
+                Opcode::RegOps(RegOps::CLI) => unimplemented!(),
+                Opcode::RegOps(RegOps::CLV) => unimplemented!(),
+                Opcode::RegOps(RegOps::SEC) => unimplemented!(),
+                Opcode::RegOps(RegOps::SED) => unimplemented!(),
+                Opcode::RegOps(RegOps::SEI) => unimplemented!(),
+                Opcode::System(System::BRK) => unimplemented!(),
+                Opcode::System(System::NOP) => unimplemented!(),
+                _ => panic!("Programmer error: All opcodes with implied addressing mode have been taken care of"),
+            }
+        }
     }
 
-    fn step(&mut self) -> Result<(), InvalidOpcode> {
+    fn execute_const_op(&mut self, op: Opcode, val: u8) -> Result<(), InvalidOpcode> {
+        unimplemented!();
+    }
+
+    fn execute_addr_op(&mut self, op: Opcode, val: u16) -> Result<(), InvalidOpcode> {
+        unimplemented!();
+    }
+
+    pub fn step(&mut self) -> Result<(), InvalidOpcode> {
         let byte = self.loadu8_pc_incr();
-        let op = self.decode_op(byte)?;
-        self.execute_op(op)?;
+        let (op, addr_mode) = self.decode_op(byte)?;
+        let (address, page_bounary_crossed) = addr_mode.address_mem(&self);
+        self.execute_op(op, address)?;
         Ok(())
     }
 
@@ -350,158 +238,160 @@ impl Cpu {
         self.mem.load_u16(ram_ptr)
     }
 
-    fn decode_op(&self, op: u8) -> Result<Opcode, InvalidOpcode> {
+    pub fn decode_op(&mut self, op: u8) -> Result<(Opcode, AddressingMode), InvalidOpcode> {
         match op {
-            INC_ABSX => {self.mem.load_u8(self.regs.pc.get_addr()); panic!()}
-            SBC_ABSX => unimplemented!(),
-            SBC_ABSY => unimplemented!(),
-            INC_ZPX => unimplemented!(),
-            SBC_ZPX => unimplemented!(),
-            SBC_INDY => unimplemented!(),
-            INC_ABS => unimplemented!(),
-            SED => unimplemented!(),
-            CPX_ABS => unimplemented!(),
-            NOP => unimplemented!(),
-            SBC_IMM => unimplemented!(),
-            INX => unimplemented!(),
-            INC_ZP => unimplemented!(),
-            SBC_ZP => unimplemented!(),
-            CPX_ZP => unimplemented!(),
-            SBC_INDX => unimplemented!(),
-            CPX_IMM  => unimplemented!(),
-            CMP_ABSX => unimplemented!(),
-            CMP_ABSY => unimplemented!(),
-            CLD => unimplemented!(),
-            DEC_ZPX => unimplemented!(),
-            CMP_ZPX => unimplemented!(),
-            CMP_INDY => unimplemented!(),
-            BNE => unimplemented!(),
-            DEC_ABS => unimplemented!(),
-            CMP_ABS => unimplemented!(),
-            BCC => unimplemented!(),
-            DEX => unimplemented!(),
-            CMP_IMM => unimplemented!(),
-            INY => unimplemented!(),
-            DEC_ZP => unimplemented!(),
-            CMP_ZP => unimplemented!(),
-            CPY_ZP => unimplemented!(),
-            CMP_INDX => unimplemented!(),
-            CPY_IMM => unimplemented!(),
-            BEQ => unimplemented!(),
-            LDA_ABSX => unimplemented!(),
-            LDY_ABSX => unimplemented!(),
-            TSX => unimplemented!(),
-            LDA_ABSY => unimplemented!(),
-            CLV => unimplemented!(),
-            LDX_ZPY => unimplemented!(),
-            LDA_ZPX => unimplemented!(),
-            LDY_ZPX => unimplemented!(),
-            LDA_INDY => unimplemented!(),
-            BCS => unimplemented!(),
-            LDX_ABS => unimplemented!(),
-            LDA_ABS => unimplemented!(),
-            LDY_ABS => unimplemented!(),
-            TAX => unimplemented!(),
-            LDA_IMM => unimplemented!(),
-            TAY => unimplemented!(),
-            LDX_ZP => unimplemented!(),
-            LDA_ZP => unimplemented!(),
-            LDY_ZP => unimplemented!(),
-            LDX_IMM => unimplemented!(),
-            LDA_INDX => unimplemented!(),
-            LDY_IMM => unimplemented!(),
-            STA_ABSX => unimplemented!(),
-            TXS => unimplemented!(),
-            STA_ABSY => unimplemented!(),
-            TYA => unimplemented!(),
-            STX_ZPY => unimplemented!(),
-            STA_ZPX => unimplemented!(),
-            STY_ZPX => unimplemented!(),
-            STA_INDY => unimplemented!(),
-            BCC => unimplemented!(),
-            STX_ABS => unimplemented!(),
-            STA_ABS => unimplemented!(),
-            STY_ABS => unimplemented!(),
-            TXA => unimplemented!(),
-            DEY => unimplemented!(),
-            STX_ZP => unimplemented!(),
-            STA_ZP => unimplemented!(),
-            STY_ZP => unimplemented!(),
-            STA_INDX => unimplemented!(),
-            ROR_ABSX => unimplemented!(),
-            ADC_ABSX => unimplemented!(),
-            ADC_ABSY => unimplemented!(),
-            SEI => unimplemented!(),
-            ROR_ZPX => unimplemented!(),
-            ADC_ZPX => unimplemented!(),
-            ADC_INDY => unimplemented!(),
+            INC_ABSX => Ok((Opcode::Math(Math::INC), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            SBC_ABSX => Ok((Opcode::Math(Math::SBC), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            SBC_ABSY => Ok((Opcode::Math(Math::SBC), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            SBC_INDY => Ok((Opcode::Math(Math::SBC), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            SBC_INDX => Ok((Opcode::Math(Math::SBC), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            SBC_IMM => Ok((Opcode::Math(Math::SBC), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            SBC_ZPX => Ok((Opcode::Math(Math::SBC), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            SBC_ZP => Ok((Opcode::Math(Math::SBC), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            INC_ZPX => Ok((Opcode::Math(Math::INC), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            INC_ABS => Ok((Opcode::Math(Math::INC), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            INC_ZP => Ok((Opcode::Math(Math::INC), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            CPX_ABS => Ok((Opcode::RegOps(RegOps::CPX), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            CPX_ZP => Ok((Opcode::RegOps(RegOps::CPX), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            CPX_IMM  => Ok((Opcode::RegOps(RegOps::CPX), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            CMP_ABSX => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            CMP_ABSY => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            DEC_ZPX => Ok((Opcode::Math(Math::DEC), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            DEC_ABS => Ok((Opcode::Math(Math::DEC), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            DEC_ZP => Ok((Opcode::Math(Math::DEC), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            CMP_ZPX => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            CMP_INDY => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            CMP_ABS => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            CMP_IMM => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            CMP_ZP => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            CPY_ZP => Ok((Opcode::RegOps(RegOps::CPY), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            CPY_IMM => Ok((Opcode::RegOps(RegOps::CPY), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            CMP_INDX => Ok((Opcode::RegOps(RegOps::CMP), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            LDA_ABSX => Ok((Opcode::Storage(Storage::LDA), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            LDA_ABSY => Ok((Opcode::Storage(Storage::LDA), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            LDA_ZPX => Ok((Opcode::Storage(Storage::LDA), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            LDA_INDY => Ok((Opcode::Storage(Storage::LDA), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            LDA_ABS => Ok((Opcode::Storage(Storage::LDA), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            LDA_IMM => Ok((Opcode::Storage(Storage::LDA), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            LDA_ZP => Ok((Opcode::Storage(Storage::LDA), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            LDA_INDX => Ok((Opcode::Storage(Storage::LDA), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            LDY_ABSX => Ok((Opcode::Storage(Storage::LDY), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            LDY_ZPX => Ok((Opcode::Storage(Storage::LDY), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            LDX_ABS => Ok((Opcode::Storage(Storage::LDX), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            LDY_ABS => Ok((Opcode::Storage(Storage::LDY), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            LDX_ZP => Ok((Opcode::Storage(Storage::LDX), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            LDY_ZP => Ok((Opcode::Storage(Storage::LDY), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            LDX_IMM => Ok((Opcode::Storage(Storage::LDX), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            LDY_IMM => Ok((Opcode::Storage(Storage::LDY), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            STA_ABSX => Ok((Opcode::Storage(Storage::STA), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            STA_ABSY => Ok((Opcode::Storage(Storage::STA), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            STA_ZPX => Ok((Opcode::Storage(Storage::STA), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            STA_INDY => Ok((Opcode::Storage(Storage::STA), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            STA_ABS => Ok((Opcode::Storage(Storage::STA), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            STA_ZP => Ok((Opcode::Storage(Storage::STA), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            STA_INDX => Ok((Opcode::Storage(Storage::STA), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            STX_ABS => Ok((Opcode::Storage(Storage::STX), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            STX_ZP => Ok((Opcode::Storage(Storage::STX), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            STY_ABS => Ok((Opcode::Storage(Storage::STY), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            STY_ZPX => Ok((Opcode::Storage(Storage::STY), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            STY_ZP => Ok((Opcode::Storage(Storage::STY), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            ROR_ABSX => Ok((Opcode::Bitwise(Bitwise::ROR), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            ROR_ZPX => Ok((Opcode::Bitwise(Bitwise::ROR), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            ADC_ABSX => Ok((Opcode::Math(Math::ADC), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            ADC_ABSY => Ok((Opcode::Math(Math::ADC), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            ADC_ZPX => Ok((Opcode::Math(Math::ADC), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            ADC_INDY => Ok((Opcode::Math(Math::ADC), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            ADC_ABS => Ok((Opcode::Math(Math::ADC), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            ADC_IMM => Ok((Opcode::Math(Math::ADC), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            ADC_ZP => Ok((Opcode::Math(Math::ADC), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            ADC_INDX => Ok((Opcode::Math(Math::ADC), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            ROR_ABS => Ok((Opcode::Bitwise(Bitwise::ROR), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            ROR_ZP => Ok((Opcode::Bitwise(Bitwise::ROR), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            LSR_ABSX => Ok((Opcode::Bitwise(Bitwise::LSR), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            EOR_ABSX => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            EOR_ABSY => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            EOR_ZPX => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            EOR_INDY => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            EOR_ABS => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            EOR_IMM => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            EOR_ZP => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            EOR_INDX => Ok((Opcode::Bitwise(Bitwise::EOR), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            LSR_ZPX => Ok((Opcode::Bitwise(Bitwise::LSR), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            LSR_ABS => Ok((Opcode::Bitwise(Bitwise::LSR), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            LSR_ZP => Ok((Opcode::Bitwise(Bitwise::LSR), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            JMP_ABS => Ok((Opcode::Jump(Jump::JMP), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            ROL_ABSX => Ok((Opcode::Bitwise(Bitwise::ROL), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            AND_ABSX => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            AND_ABSY => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            ROL_ZPX => Ok((Opcode::Bitwise(Bitwise::ROL), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            AND_INDY => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            ROL_ABS => Ok((Opcode::Bitwise(Bitwise::ROL), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            AND_ABS => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            BIT_ABS => Ok((Opcode::Bitwise(Bitwise::BIT), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            BIT_ZP => Ok((Opcode::Bitwise(Bitwise::BIT), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            AND_IMM => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            ROL_ZP => Ok((Opcode::Bitwise(Bitwise::ROL), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            AND_ZP => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            AND_INDX => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            ASL_ABSX => Ok((Opcode::Bitwise(Bitwise::ASL), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            ORA_ABSX => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::AbsX(self.loadu16_pc_incr()))),
+            ORA_ABSY => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::AbsY(self.loadu16_pc_incr()))),
+            ORA_ZPX => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            ORA_INDY => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::IndirectIndexedY(self.loadu8_pc_incr()))),
+            ORA_ABS => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            ORA_IMM  => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::Immediate(self.loadu8_pc_incr()))),
+            ORA_ZP => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            ORA_INDX => Ok((Opcode::Bitwise(Bitwise::ORA), AddressingMode::IndexedIndirectX(self.loadu8_pc_incr()))),
+            ASL_ZPX => Ok((Opcode::Bitwise(Bitwise::ASL), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            ASL_ABS => Ok((Opcode::Bitwise(Bitwise::ASL), AddressingMode::Abs(self.loadu16_pc_incr()))),
+            ASL_ZP => Ok((Opcode::Bitwise(Bitwise::ASL), AddressingMode::ZeroPage(self.loadu8_pc_incr()))),
+            LDX_ZPY => Ok((Opcode::Storage(Storage::LDX), AddressingMode::ZeroPageY(self.loadu8_pc_incr()))),
+            STX_ZPY => Ok((Opcode::Storage(Storage::STX), AddressingMode::ZeroPageY(self.loadu8_pc_incr()))),
+            AND_ZPX => Ok((Opcode::Bitwise(Bitwise::AND), AddressingMode::ZeroPageX(self.loadu8_pc_incr()))),
+            ROR_ACC => Ok((Opcode::Bitwise(Bitwise::ROR), AddressingMode::Accumulator)),
+            ASL_ACC => Ok((Opcode::Bitwise(Bitwise::ASL), AddressingMode::Accumulator)),
+            ROL_ACC => Ok((Opcode::Bitwise(Bitwise::ROL), AddressingMode::Accumulator)),
+            LSR_ACC => Ok((Opcode::Bitwise(Bitwise::LSR), AddressingMode::Accumulator)),
+            SED => Ok((Opcode::RegOps(RegOps::SED), AddressingMode::Implied)),
+            CLC => Ok((Opcode::RegOps(RegOps::CLC), AddressingMode::Implied)),
+            SEC => Ok((Opcode::RegOps(RegOps::SEC), AddressingMode::Implied)),
+            CLI => Ok((Opcode::RegOps(RegOps::CLI), AddressingMode::Implied)),
+            SEI => Ok((Opcode::RegOps(RegOps::SEI), AddressingMode::Implied)),
+            CLV => Ok((Opcode::RegOps(RegOps::CLV), AddressingMode::Implied)),
+            CLD => Ok((Opcode::RegOps(RegOps::CLD), AddressingMode::Implied)),
+            NOP => Ok((Opcode::System(System::NOP), AddressingMode::Implied)),
+            BRK => Ok((Opcode::System(System::BRK), AddressingMode::Implied)),
+            TAX => Ok((Opcode::Storage(Storage::TAX), AddressingMode::Implied)),
+            TXA => Ok((Opcode::Storage(Storage::TXA), AddressingMode::Implied)),
+            TAY => Ok((Opcode::Storage(Storage::TAY), AddressingMode::Implied)),
+            TYA => Ok((Opcode::Storage(Storage::TYA), AddressingMode::Implied)),
+            DEX => Ok((Opcode::Math(Math::DEX), AddressingMode::Implied)),
+            INX => Ok((Opcode::Math(Math::INX), AddressingMode::Implied)),
+            DEY => Ok((Opcode::Math(Math::DEY), AddressingMode::Implied)),
+            INY => Ok((Opcode::Math(Math::INY), AddressingMode::Implied)),
+            TSX => Ok((Opcode::Storage(Storage::TSX), AddressingMode::Implied)),
+            TXS => Ok((Opcode::Storage(Storage::TXS), AddressingMode::Implied)),
+            PHA => Ok((Opcode::Storage(Storage::PHA), AddressingMode::Implied)),
+            PLA => Ok((Opcode::Storage(Storage::PLA), AddressingMode::Implied)),
+            PHP => Ok((Opcode::Storage(Storage::PHP), AddressingMode::Implied)),
+            PLP => Ok((Opcode::Storage(Storage::PLP), AddressingMode::Implied)),
+
             BVS => unimplemented!(),
-            ROR_ABS => unimplemented!(),
-            ADC_ABS => unimplemented!(),
-            JMP_IND => unimplemented!(),
-            ROR_ACC => unimplemented!(),
-            ADC_IMM => unimplemented!(),
-            PLA => unimplemented!(),
-            ROR_ZP => unimplemented!(),
-            ADC_ZP => unimplemented!(),
-            ADC_INDX => unimplemented!(),
-            RTS => unimplemented!(),
-            LSR_ABSX => unimplemented!(),
-            EOR_ABSX => unimplemented!(),
-            EOR_ABSY => unimplemented!(),
-            CLI => unimplemented!(),
-            LSR_ZPX => unimplemented!(),
-            EOR_ZPX => unimplemented!(),
-            EOR_INDY => unimplemented!(),
             BVC => unimplemented!(),
-            LSR_ABS => unimplemented!(),
-            EOR_ABS => unimplemented!(),
-            JMP_ABS => unimplemented!(),
-            LSR_ACC => unimplemented!(),
-            EOR_IMM => unimplemented!(),
-            PHA => unimplemented!(),
-            LSR_ZP => unimplemented!(),
-            EOR_ZP => unimplemented!(),
-            EOR_INDX => unimplemented!(),
-            RTI => unimplemented!(),
-            ROL_ABSX => unimplemented!(),
-            AND_ABSX => unimplemented!(),
-            AND_ABSY => unimplemented!(),
-            SEC => unimplemented!(),
-            ROL_ZPX => unimplemented!(),
-            AND_ZP_X => unimplemented!(),
-            AND_INDY => unimplemented!(),
             BMI => unimplemented!(),
-            ROL_ABS => unimplemented!(),
-            AND_ABS => unimplemented!(),
-            BIT_ABS => unimplemented!(),
-            ROL_ACC => unimplemented!(),
-            AND_IMM => unimplemented!(),
-            PLP => unimplemented!(),
-            ROL_ZP => unimplemented!(),
-            AND_ZP => unimplemented!(),
-            BIT_ZP => unimplemented!(),
-            AND_INDX => unimplemented!(),
-            JSR => unimplemented!(),
-            ASL_ABSX => unimplemented!(),
-            ORA_ABSX => unimplemented!(),
-            ORA_ABSY => unimplemented!(),
-            CLC => unimplemented!(),
-            ASL_ZPX => unimplemented!(),
-            ORA_ZPX => unimplemented!(),
-            ORA_INDY => unimplemented!(),
             BPL => unimplemented!(),
-            ASL_ABS => unimplemented!(),
-            ORA_ABS => unimplemented!(),
-            ASL_ACC => unimplemented!(),
-            ORA_IMM  => unimplemented!(),
-            PHP => unimplemented!(),
-            ASL_ZP => unimplemented!(),
-            ORA_ZP => unimplemented!(),
-            ORA_INDX => unimplemented!(),
-            BRK => unimplemented!(),
+            BNE => unimplemented!(),
+            BCC => unimplemented!(),
+            BEQ => unimplemented!(),
+            BCS => unimplemented!(),
+            BCC => unimplemented!(),
+            RTS => unimplemented!(),
+            RTI => unimplemented!(),
+            JSR => unimplemented!(),
+
+            JMP_IND => unimplemented!(),
             _ => Err(InvalidOpcode::DoesntExist("Unsupported op".to_string(), op)),
         }
     }
-
 }
+
