@@ -44,5 +44,5 @@ fn main() {
             rom: Rom::new()
         }
     };
-    cpu.decode_op(0xea);
 }
+

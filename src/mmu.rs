@@ -33,7 +33,27 @@ impl Rom {
 }
 
 impl MemManageUnit {
-    pub fn store_u8(&self) {}
+    pub fn new() -> MemManageUnit {
+        MemManageUnit {
+            ppu: Ppu::new(),
+            apu: Apu(),
+            ram: Ram::new(),
+            rom: Rom::new()
+        }
+    }
+
+    pub fn store_u8(&mut self, address: u16, val: u8) {
+        match address {
+            0x0000...0x1FFF => self.ram.store(address & 0x7FF, val),
+            0x2000...0x3FFF => self.ppu.store((address - 0x2000) % 8, val),
+            0x4016 => unimplemented!("Player1 controller"),
+            0x4016 => unimplemented!("Player1 controller"),
+            0x4000...0x401F => self.apu.store(address - 0x4000, val),
+            0x4020...0xFFFF => unimplemented!("ROM reads/writes"),
+            _ => unimplemented!("Undefined load")
+        }
+    }
+
     pub fn store_u16(&self) {}
 
     pub fn load_u8(&self, address: u16) -> u8 {
