@@ -286,14 +286,27 @@ impl Cpu {
                     },
 
                     // Opcodes without IMP and ACC support
-                    Opcode::BitOp(BitOp::BIT) => unimplemented!(),
-                    Opcode::Math(Math::DEC) => unimplemented!(),
-                    Opcode::Math(Math::INC) => unimplemented!(),
-                    Opcode::Jump(Jump::JMP) => unimplemented!(),
+                    Opcode::BitOp(BitOp::BIT) => {
+                        let tmp = self.mem.load_u8(addr);
+                        Ok(self.bit(tmp))
+                    }
+                    Opcode::Math(Math::DEC) => Ok(self.dec(addr)),
+                    Opcode::Math(Math::INC) => Ok(self.inc(addr)),
+                    Opcode::Jump(Jump::JMP) => Ok(self.regs.pc.set_addr(addr)),
                     Opcode::Jump(Jump::JSR) => unimplemented!(),
-                    Opcode::Store(Store::STA) => unimplemented!(),
-                    Opcode::Store(Store::STX) => unimplemented!(),
-                    Opcode::Store(Store::STY) => unimplemented!(),
+                    Opcode::Store(Store::STA) => {
+                        let tmp = self.regs.acc;
+                        Ok(self.mem.store_u8(addr, tmp))
+                    }
+                    Opcode::Store(Store::STX) => {
+                        let tmp = self.regs.x;
+                        Ok(self.mem.store_u8(addr, tmp))
+                    }
+
+                    Opcode::Store(Store::STY) => {
+                        let tmp = self.regs.y;
+                        Ok(self.mem.store_u8(addr, tmp))
+                    }
                     err => panic!("Got {:?} as an opcode that needs an address", err)
                 }
 
@@ -352,31 +365,102 @@ impl Cpu {
             // These are all opcodes without any operands (implied and accum)
             None => match op {
                 // Implied mode
-                Opcode::Store(Store::TAX) => unimplemented!(),
-                Opcode::Store(Store::TAY) => unimplemented!(),
-                Opcode::Store(Store::TSX) => unimplemented!(),
-                Opcode::Store(Store::TXA) => unimplemented!(),
-                Opcode::Store(Store::TXS) => unimplemented!(),
-                Opcode::Store(Store::TYA) => unimplemented!(),
+                Opcode::Store(Store::TAX) => {
+                    let acc = self.regs.acc;
+                    self.regs.x = acc;
+                    self.set_zero_neg(acc);
+                    Ok(())
+                }
+                Opcode::Store(Store::TAY) => {
+                    let acc = self.regs.acc;
+                    self.regs.y = acc;
+                    self.set_zero_neg(acc);
+                    Ok(())
+                }
+                Opcode::Store(Store::TSX) => {
+                    let sp = self.regs.sp;
+                    self.regs.x = sp;
+                    self.set_zero_neg(sp);
+                    Ok(())
+                }
+                Opcode::Store(Store::TXA) => {
+                    let x = self.regs.x;
+                    self.regs.acc = x;
+                    self.set_zero_neg(x);
+                    Ok(())
+                }
+                Opcode::Store(Store::TXS) => {
+                    let x = self.regs.x;
+                    self.regs.sp = x;
+                    self.set_zero_neg(x);
+                    Ok(())
+                }
+                Opcode::Store(Store::TYA) => {
+                    let y = self.regs.y;
+                    self.regs.acc = y;
+                    self.set_zero_neg(y);
+                    Ok(())
+                }
                 Opcode::Store(Store::PHA) => unimplemented!(),
                 Opcode::Store(Store::PHP) => unimplemented!(),
                 Opcode::Store(Store::PLA) => unimplemented!(),
                 Opcode::Store(Store::PLP) => unimplemented!(),
-                Opcode::Math(Math::DEX) => unimplemented!(),
-                Opcode::Math(Math::DEY) => unimplemented!(),
-                Opcode::Math(Math::INX) => unimplemented!(),
-                Opcode::Math(Math::INY) => unimplemented!(),
+                Opcode::Math(Math::DEX) => {
+                    let x = self.regs.x.wrapping_sub(1);
+                    self.regs.x = x;
+                    self.set_zero_neg(x);
+                    Ok(())
+                }
+                Opcode::Math(Math::DEY) => {
+                    let y = self.regs.y.wrapping_sub(1);
+                    self.regs.y = y;
+                    self.set_zero_neg(y);
+                    Ok(())
+                }
+                Opcode::Math(Math::INX) => {
+                    let x = self.regs.x.wrapping_add(1);
+                    self.regs.x = x;
+                    self.set_zero_neg(x);
+                    Ok(())
+                }
+                Opcode::Math(Math::INY) => {
+                    let y = self.regs.y.wrapping_add(1);
+                    self.regs.y = y;
+                    self.set_zero_neg(y);
+                    Ok(())
+                }
                 Opcode::Jump(Jump::RTI) => unimplemented!(),
                 Opcode::Jump(Jump::RTS) => unimplemented!(),
-                Opcode::RegOps(RegOps::CLC) => unimplemented!(),
-                Opcode::RegOps(RegOps::CLD) => unimplemented!(),
-                Opcode::RegOps(RegOps::CLI) => unimplemented!(),
-                Opcode::RegOps(RegOps::CLV) => unimplemented!(),
-                Opcode::RegOps(RegOps::SEC) => unimplemented!(),
-                Opcode::RegOps(RegOps::SED) => unimplemented!(),
-                Opcode::RegOps(RegOps::SEI) => unimplemented!(),
+                Opcode::RegOps(RegOps::CLC) => {
+                    self.set_flag(CARRY_FLG, false);
+                    Ok(())
+                }
+                Opcode::RegOps(RegOps::CLD) => {
+                    self.set_flag(DEC_FLG, false);
+                    Ok(())
+                }
+                Opcode::RegOps(RegOps::CLI) => {
+                    self.set_flag(ITR_FLG, false);
+                    Ok(())
+                }
+                Opcode::RegOps(RegOps::CLV) => {
+                    self.set_flag(O_F_FLG, false);
+                    Ok(())
+                }
+                Opcode::RegOps(RegOps::SEC) => {
+                    self.set_flag(CARRY_FLG, true);
+                    Ok(())
+                }
+                Opcode::RegOps(RegOps::SED) => {
+                    self.set_flag(DEC_FLG, true);
+                    Ok(())
+                }
+                Opcode::RegOps(RegOps::SEI) => {
+                    self.set_flag(ITR_FLG, true);
+                    Ok(())
+                }
                 Opcode::System(System::BRK) => unimplemented!(),
-                Opcode::System(System::NOP) => unimplemented!(),
+                Opcode::System(System::NOP) => Ok(()),
 
                 // ACC mode
                 Opcode::BitOp(BitOp::ROR) => Ok(self.ror_acc()),
@@ -538,15 +622,33 @@ impl Cpu {
         self.set_zero_neg(tmp as u8);
     }
 
-    fn set_zero_neg(&mut self, val: u8) {
-        self.set_flag(NEG_FLG, val >> 7 == 1);
-        self.set_flag(ZERO_FLG, val == 0);
-    }
-
     fn generic_branch(&mut self, val: i8, flag_val: bool) {
         if flag_val {
             self.regs.pc.add_signed(val);
         }
+    }
+    fn bit(&mut self, val: u8) {
+        let acc = self.regs.acc;
+        self.set_flag(ZERO_FLG, (val & acc) == 0);
+        self.set_flag(O_F_FLG, (val & 0x40) != 0);
+        self.set_flag(NEG_FLG, (val & 0x80) != 0);
+    }
+
+    fn dec(&mut self, addr: u16) {
+        let val: u8 = self.mem.load_u8(addr).wrapping_sub(1);
+        self.set_zero_neg(val);
+        self.mem.store_u8(addr, val);
+    }
+
+    fn inc(&mut self, addr: u16) {
+        let val: u8 = self.mem.load_u8(addr).wrapping_add(1);
+        self.set_zero_neg(val);
+        self.mem.store_u8(addr, val);
+    }
+
+    fn set_zero_neg(&mut self, val: u8) {
+        self.set_flag(NEG_FLG, val >> 7 == 1);
+        self.set_flag(ZERO_FLG, val == 0);
     }
 
     fn set_flag(&mut self, flag: u8, val: bool) {
