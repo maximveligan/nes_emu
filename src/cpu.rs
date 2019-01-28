@@ -224,13 +224,22 @@ impl Cpu {
                     // Operandless mirrors (those using ACC as arg)
                     Opcode::BitOp(BitOp::ROR) => Ok(self.ror_addr(addr)),
                     Opcode::BitOp(BitOp::ASL) => Ok(self.asl_addr(addr)),
-                    Opcode::BitOp(BitOp::ROL) => unimplemented!(),
-                    Opcode::BitOp(BitOp::LSR) => unimplemented!(),
+                    Opcode::BitOp(BitOp::ROL) => Ok(self.rol_addr(addr)),
+                    Opcode::BitOp(BitOp::LSR) => Ok(self.lsr_addr(addr)),
 
                     // Immediate mirrors
-                    Opcode::RegOps(RegOps::CPX) => unimplemented!(),
-                    Opcode::RegOps(RegOps::CMP) => unimplemented!(),
-                    Opcode::RegOps(RegOps::CPY) => unimplemented!(),
+                    Opcode::RegOps(RegOps::CPX) => {
+                        let tmp = self.mem.load_u8(addr);
+                        Ok(self.cpx(tmp))
+                    }
+                    Opcode::RegOps(RegOps::CMP) => {
+                        let tmp = self.mem.load_u8(addr);
+                        Ok(self.cmp(tmp))
+                    }
+                    Opcode::RegOps(RegOps::CPY) => {
+                        let tmp = self.mem.load_u8(addr);
+                        Ok(self.cpy(tmp))
+                    }
                     Opcode::Math(Math::SBC) => {
                         let tmp = self.mem.load_u8(addr);
                         Ok(self.sbc(tmp))
@@ -278,9 +287,9 @@ impl Cpu {
 
                 // These are all the immediate opcodes
                 AddrDataType::Constant(c) => match op {
-                    Opcode::RegOps(RegOps::CPX) => unimplemented!(),
-                    Opcode::RegOps(RegOps::CMP) => unimplemented!(),
-                    Opcode::RegOps(RegOps::CPY) => unimplemented!(),
+                    Opcode::RegOps(RegOps::CPX) => Ok(self.cpx(c)),
+                    Opcode::RegOps(RegOps::CMP) => Ok(self.cmp(c)),
+                    Opcode::RegOps(RegOps::CPY) => Ok(self.cpy(c)),
                     Opcode::Math(Math::SBC) => Ok(self.sbc(c)),
                     Opcode::Math(Math::ADC) => Ok(self.adc(c)),
                     Opcode::Store(Store::LDA) => Ok(self.lda(c)),
@@ -336,8 +345,8 @@ impl Cpu {
                 // ACC mode
                 Opcode::BitOp(BitOp::ROR) => Ok(self.ror_acc()),
                 Opcode::BitOp(BitOp::ASL) => Ok(self.asl_acc()),
-                Opcode::BitOp(BitOp::ROL) => unimplemented!(),
-                Opcode::BitOp(BitOp::LSR) => unimplemented!(),
+                Opcode::BitOp(BitOp::ROL) => Ok(self.rol_acc()),
+                Opcode::BitOp(BitOp::LSR) => Ok(self.lsr_acc()),
                 other => panic!("Programmer error: All opcodes with implied or accumulator addressing mode have been taken care of: got {:?}", other),
             }
         }
@@ -415,6 +424,25 @@ impl Cpu {
         (val & 0b01) != 0)
     }
 
+    fn rol_acc(&mut self) {
+        let (tmp, n_flag) = Cpu::get_rol(self.get_flag(CARRY_FLG), self.regs.acc);
+        self.set_flag(CARRY_FLG, n_flag);
+        self.set_zero_neg(tmp);
+        self.regs.acc = tmp;
+    }
+
+    fn rol_addr(&mut self, addr: u16) {
+        let (tmp, n_flag) = Cpu::get_rol(self.get_flag(CARRY_FLG), self.mem.load_u8(addr));
+        self.set_flag(CARRY_FLG, n_flag);
+        self.set_zero_neg(tmp);
+        self.mem.store_u8(addr, tmp);
+    }
+
+    fn get_rol(carry_flag: bool, val: u8) -> (u8, bool) {
+        ((val << 1) | ((carry_flag as u8)),
+        (val & 0x80) != 0)
+    }
+
     fn asl_acc(&mut self) {
         let acc = self.regs.acc;
         self.set_flag(CARRY_FLG, (acc >> 7) != 0);
@@ -429,6 +457,40 @@ impl Cpu {
         let tmp = val << 1;
         self.set_zero_neg(tmp);
         self.mem.store_u8(addr, val);
+    }
+
+    fn lsr_acc(&mut self) {
+        let acc = self.regs.acc;
+        self.set_flag(CARRY_FLG, (acc & 0b01) != 0);
+        let tmp = acc >> 1;
+        self.set_zero_neg(tmp);
+        self.regs.acc = tmp;
+    }
+
+    fn lsr_addr(&mut self, addr: u16) {
+        let val = self.mem.load_u8(addr);
+        self.set_flag(CARRY_FLG, (val & 0b01) != 0);
+        let tmp = val >> 1;
+        self.set_zero_neg(tmp);
+        self.mem.store_u8(addr, val);
+    }
+
+    fn cpx(&mut self, val: u8) {
+        let tmp = self.regs.x as i16 - val as i16;
+        self.set_flag(CARRY_FLG, tmp >= 0);
+        self.set_zero_neg(tmp as u8);
+    }
+
+    fn cpy(&mut self, val: u8) {
+        let tmp = self.regs.y as i16 - val as i16;
+        self.set_flag(CARRY_FLG, tmp >= 0);
+        self.set_zero_neg(tmp as u8);
+    }
+
+    fn cmp(&mut self, val: u8) {
+        let tmp = self.regs.acc as i16 - val as i16;
+        self.set_flag(CARRY_FLG, tmp >= 0);
+        self.set_zero_neg(tmp as u8);
     }
 
     fn set_zero_neg(&mut self, val: u8) {
