@@ -1,6 +1,15 @@
 use ppu::Ppu;
 use apu::Apu;
 
+const WRAM_START: u16 = 0x0000;
+const WRAM_END: u16 = 0x1FFF;
+const PPU_START: u16 = 0x2000;
+const PPU_END: u16 = 0x3FFF;
+const APU_START: u16 = 0x4000;
+const APU_END: u16 = 0x401F;
+const ROM_START: u16 = 0x4020;
+const ROM_END: u16 = 0xFFFF;
+
 pub struct MemManageUnit {
     pub ppu: Ppu,
     pub apu: Apu,
@@ -44,12 +53,12 @@ impl MemManageUnit {
 
     pub fn store_u8(&mut self, address: u16, val: u8) {
         match address {
-            0x0000...0x1FFF => self.ram.store(address & 0x7FF, val),
-            0x2000...0x3FFF => self.ppu.store((address - 0x2000) % 8, val),
+            WRAM_START...WRAM_END => self.ram.store(address & 0x7FF, val),
+            PPU_START...PPU_END => self.ppu.store((address - 0x2000) % 8, val),
             0x4016 => unimplemented!("Player1 controller"),
             0x4016 => unimplemented!("Player1 controller"),
-            0x4000...0x401F => self.apu.store(address - 0x4000, val),
-            0x4020...0xFFFF => unimplemented!("ROM reads/writes"),
+            APU_START...APU_END => self.apu.store(address - 0x4000, val),
+            ROM_START...ROM_END => unimplemented!("ROM reads/writes"),
             _ => unimplemented!("Undefined load"),
         }
     }
