@@ -225,7 +225,7 @@ impl Cpu {
         match addr_mode {
             Some(mode) => match mode {
                 AddrDataType::Address(addr) => match op {
-                    // Operandless mirrors (those using ACC as arg)
+                    // Operandless mirrors (those using the accumulator addressing mode)
                     Opcode::BitOp(BitOp::ROR) => Ok(self.ror_addr(addr)),
                     Opcode::BitOp(BitOp::ASL) => Ok(self.asl_addr(addr)),
                     Opcode::BitOp(BitOp::ROL) => Ok(self.rol_addr(addr)),
