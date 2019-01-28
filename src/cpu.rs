@@ -19,8 +19,12 @@ impl ProgramCounter {
         ProgramCounter { 0: val }
     }
 
-    fn add(&mut self, offset: u16) {
+    fn add_unsigned(&mut self, offset: u16) {
         self.0 += offset;
+    }
+
+    fn add_signed(&mut self, offset: i8) {
+        self.0 = (self.0 as i32 + offset as i32) as u16;
     }
 
     fn set_addr(&mut self, addr: u16) {
@@ -301,14 +305,38 @@ impl Cpu {
                     err => panic!("No other instructions support immediate addressing mode. Found {:?}", err)
                 },
                 AddrDataType::Signed(i) => match op {
-                    Opcode::Branch(Branch::BCC) => unimplemented!(),
-                    Opcode::Branch(Branch::BCS) => unimplemented!(),
-                    Opcode::Branch(Branch::BEQ) => unimplemented!(),
-                    Opcode::Branch(Branch::BMI) => unimplemented!(),
-                    Opcode::Branch(Branch::BNE) => unimplemented!(),
-                    Opcode::Branch(Branch::BPL) => unimplemented!(),
-                    Opcode::Branch(Branch::BVC) => unimplemented!(),
-                    Opcode::Branch(Branch::BVS) => unimplemented!(),
+                    Opcode::Branch(Branch::BCC) => {
+                        let flag = !self.get_flag(CARRY_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
+                    Opcode::Branch(Branch::BCS) => {
+                        let flag = self.get_flag(CARRY_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
+                    Opcode::Branch(Branch::BNE) => {
+                        let flag = !self.get_flag(ZERO_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
+                    Opcode::Branch(Branch::BEQ) => {
+                        let flag = self.get_flag(ZERO_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
+                    Opcode::Branch(Branch::BPL) => {
+                        let flag = !self.get_flag(NEG_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
+                    Opcode::Branch(Branch::BMI) => {
+                        let flag = self.get_flag(NEG_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
+                    Opcode::Branch(Branch::BVC) => {
+                        let flag = !self.get_flag(O_F_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
+                    Opcode::Branch(Branch::BVS) => {
+                        let flag = self.get_flag(O_F_FLG);
+                        Ok(self.generic_branch(i, flag))
+                    }
                     err => panic!("Nothing else uses signed {:?}", err),
                 }
             }
@@ -498,6 +526,12 @@ impl Cpu {
         self.set_flag(ZERO_FLG, val == 0);
     }
 
+    fn generic_branch(&mut self, val: i8, flag_val: bool) {
+        if flag_val {
+            self.regs.pc.add_signed(val);
+        }
+    }
+
     fn set_flag(&mut self, flag: u8, val: bool) {
         if val {
             self.regs.flags |= flag;
@@ -521,13 +555,13 @@ impl Cpu {
 
     fn loadu8_pc_incr(&mut self) -> u8 {
         let ram_ptr = self.regs.pc.get_addr();
-        self.regs.pc.add(1);
+        self.regs.pc.add_unsigned(1);
         self.mem.load_u8(ram_ptr)
     }
 
     fn loadu16_pc_incr(&mut self) -> u16 {
         let ram_ptr = self.regs.pc.get_addr();
-        self.regs.pc.add(2);
+        self.regs.pc.add_unsigned(2);
         self.mem.load_u16(ram_ptr)
     }
 
