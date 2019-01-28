@@ -1,8 +1,8 @@
-mod cpu;
-mod mmu;
 mod apu;
-mod ppu;
+mod cpu;
 mod cpu_const;
+mod mmu;
+mod ppu;
 
 use cpu::Cpu;
 use cpu::Registers;
@@ -37,12 +37,11 @@ fn main() {
                     ppuaddr: 0,
                     ppudata: 0,
                     oamdma: 0,
-                }
+                },
             },
             apu: Apu(),
             ram: Ram::new(),
-            rom: Rom::new()
-        }
+            rom: Rom::new(),
+        },
     };
 }
-

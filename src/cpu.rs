@@ -190,13 +190,21 @@ impl AddrMode {
                 (Some(AddrDataType::Address(v + (cpu.regs.y as u16))), true)
             } //TODO: Implement logic for bound check
             AddrMode::Indirect(v) => unimplemented!("No page boundary cross"),
-            AddrMode::IndexIndirX(v) => {
-                (Some(AddrDataType::Address(cpu.mem.load_u16(v.wrapping_add(cpu.regs.x) as u16))), false)
+            AddrMode::IndexIndirX(v) => (
+                Some(AddrDataType::Address(
+                    cpu.mem.load_u16(v.wrapping_add(cpu.regs.x) as u16),
+                )),
+                false,
+            ),
+            AddrMode::IndirIndexY(v) => (
+                Some(AddrDataType::Address(
+                    cpu.mem.load_u16(v as u16).wrapping_add(cpu.regs.y as u16),
+                )),
+                true,
+            ),
+            AddrMode::Relative(v) => {
+                (Some(AddrDataType::Signed(v as i8)), false)
             }
-            AddrMode::IndirIndexY(v) => {
-                (Some(AddrDataType::Address(cpu.mem.load_u16(v as u16).wrapping_add(cpu.regs.y as u16))), true)
-            }
-            AddrMode::Relative(v) => (Some(AddrDataType::Signed(v as i8)), false),
         }
     }
 }
@@ -402,7 +410,10 @@ impl Cpu {
         let acc = self.regs.acc;
         let tmp = acc as u16 + val as u16 + self.get_flag(CARRY_FLG) as u16;
         self.set_flag(CARRY_FLG, tmp > 0xFF);
-        self.set_flag(O_F_FLG, ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0);
+        self.set_flag(
+            O_F_FLG,
+            ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0,
+        );
         let tmp = tmp as u8;
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -410,9 +421,13 @@ impl Cpu {
 
     fn sbc(&mut self, val: u8) {
         let acc = self.regs.acc;
-        let tmp = acc as i16 - val as i16 - (1 - self.get_flag(CARRY_FLG) as i16);
+        let tmp =
+            acc as i16 - val as i16 - (1 - self.get_flag(CARRY_FLG) as i16);
         self.set_flag(CARRY_FLG, tmp >= 0);
-        self.set_flag(O_F_FLG, ((acc as i16 ^ tmp) & (val as i16 ^ tmp) & 0x80) != 0);
+        self.set_flag(
+            O_F_FLG,
+            ((acc as i16 ^ tmp) & (val as i16 ^ tmp) & 0x80) != 0,
+        );
         let tmp = tmp as u8;
         self.set_zero_neg(tmp);
         self.regs.acc = tmp as u8;
@@ -434,41 +449,43 @@ impl Cpu {
     }
 
     fn ror_acc(&mut self) {
-        let (tmp, n_flag) = Cpu::get_ror(self.get_flag(CARRY_FLG), self.regs.acc);
+        let (tmp, n_flag) =
+            Cpu::get_ror(self.get_flag(CARRY_FLG), self.regs.acc);
         self.set_flag(CARRY_FLG, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
     }
 
     fn ror_addr(&mut self, addr: u16) {
-        let (tmp, n_flag) = Cpu::get_ror(self.get_flag(CARRY_FLG), self.mem.load_u8(addr));
+        let (tmp, n_flag) =
+            Cpu::get_ror(self.get_flag(CARRY_FLG), self.mem.load_u8(addr));
         self.set_flag(CARRY_FLG, n_flag);
         self.set_zero_neg(tmp);
         self.mem.store_u8(addr, tmp);
     }
 
     fn get_ror(carry_flag: bool, val: u8) -> (u8, bool) {
-        ((val >> 1) | ((carry_flag as u8) << 7),
-        (val & 0b01) != 0)
+        ((val >> 1) | ((carry_flag as u8) << 7), (val & 0b01) != 0)
     }
 
     fn rol_acc(&mut self) {
-        let (tmp, n_flag) = Cpu::get_rol(self.get_flag(CARRY_FLG), self.regs.acc);
+        let (tmp, n_flag) =
+            Cpu::get_rol(self.get_flag(CARRY_FLG), self.regs.acc);
         self.set_flag(CARRY_FLG, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
     }
 
     fn rol_addr(&mut self, addr: u16) {
-        let (tmp, n_flag) = Cpu::get_rol(self.get_flag(CARRY_FLG), self.mem.load_u8(addr));
+        let (tmp, n_flag) =
+            Cpu::get_rol(self.get_flag(CARRY_FLG), self.mem.load_u8(addr));
         self.set_flag(CARRY_FLG, n_flag);
         self.set_zero_neg(tmp);
         self.mem.store_u8(addr, tmp);
     }
 
     fn get_rol(carry_flag: bool, val: u8) -> (u8, bool) {
-        ((val << 1) | ((carry_flag as u8)),
-        (val & 0x80) != 0)
+        ((val << 1) | (carry_flag as u8), (val & 0x80) != 0)
     }
 
     fn asl_acc(&mut self) {
@@ -535,8 +552,7 @@ impl Cpu {
     fn set_flag(&mut self, flag: u8, val: bool) {
         if val {
             self.regs.flags |= flag;
-        }
-        else {
+        } else {
             self.regs.flags &= !flag;
         }
     }

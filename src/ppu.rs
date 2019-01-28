@@ -1,5 +1,5 @@
 pub struct Ppu {
-    pub regs: PRegisters
+    pub regs: PRegisters,
 }
 
 impl Ppu {
@@ -15,7 +15,7 @@ impl Ppu {
                 ppuaddr: 0,
                 ppudata: 0,
                 oamdma: 0,
-            }
+            },
         }
     }
 
@@ -36,5 +36,5 @@ pub struct PRegisters {
     pub ppuscroll: u8,
     pub ppuaddr: u8,
     pub ppudata: u8,
-    pub oamdma: u8
+    pub oamdma: u8,
 }

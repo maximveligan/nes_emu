@@ -5,7 +5,7 @@ pub struct MemManageUnit {
     pub ppu: Ppu,
     pub apu: Apu,
     pub ram: Ram,
-    pub rom: Rom
+    pub rom: Rom,
 }
 
 pub struct Ram([u8; 0xFFF]);
@@ -38,7 +38,7 @@ impl MemManageUnit {
             ppu: Ppu::new(),
             apu: Apu(),
             ram: Ram::new(),
-            rom: Rom::new()
+            rom: Rom::new(),
         }
     }
 
@@ -50,7 +50,7 @@ impl MemManageUnit {
             0x4016 => unimplemented!("Player1 controller"),
             0x4000...0x401F => self.apu.store(address - 0x4000, val),
             0x4020...0xFFFF => unimplemented!("ROM reads/writes"),
-            _ => unimplemented!("Undefined load")
+            _ => unimplemented!("Undefined load"),
         }
     }
 
@@ -64,7 +64,7 @@ impl MemManageUnit {
             0x4016 => unimplemented!("Player1 controller"),
             0x4000...0x401F => self.apu.load(address - 0x4000),
             0x4020...0xFFFF => unimplemented!("ROM reads/writes"),
-            _ => unimplemented!("Undefined load")
+            _ => unimplemented!("Undefined load"),
         }
     }
 
