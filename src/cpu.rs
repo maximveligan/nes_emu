@@ -152,7 +152,7 @@ pub enum AddrMode {
     Abs(u16),
     AbsX(u16),
     AbsY(u16),
-    Indirect(u16),
+    JmpIndir(u16),
     IndexIndirX(u8),
     IndirIndexY(u8),
     Relative(i8),
@@ -171,9 +171,7 @@ impl AddrMode {
             AddrMode::Immediate(v) => (Some(AddrDT::Constant(v)), false),
             AddrMode::Implied => (None, false),
             AddrMode::Accum => (None, false),
-            AddrMode::ZeroPg(v) => {
-                (Some(AddrDT::Address(v as u16)), false)
-            }
+            AddrMode::ZeroPg(v) => (Some(AddrDT::Address(v as u16)), false),
             AddrMode::ZeroPgX(v) => (
                 Some(AddrDT::Address(v.wrapping_add(cpu.regs.x) as u16)),
                 false,
@@ -191,8 +189,16 @@ impl AddrMode {
                 (Some(AddrDT::Address(v + (cpu.regs.y as u16))),
                 (v & 0xFF) + cpu.regs.y as u16 > 0xFF)
             }
-            //TODO: Implement logic for bound check
-            AddrMode::Indirect(v) => unimplemented!("No page boundary cross"),
+            AddrMode::JmpIndir(v) => {
+                let low = cpu.mem.load_u8(v);
+                let high: u8 = if v & 0xFF  == 0xFF {
+                    cpu.mem.load_u8(v - 0xFF)
+                } else {
+                    cpu.mem.load_u8(v + 1)
+                };
+                (Some(AddrDT::Address((high as u16) << 8 | (low as u16))),
+                 false)
+            }
             AddrMode::IndexIndirX(v) => (
                 Some(AddrDT::Address(
                     cpu.mem.load_u16(v.wrapping_add(cpu.regs.x) as u16),
@@ -232,11 +238,7 @@ impl Cpu {
         self.cycle_count += 1;
     }
 
-    fn execute_op(
-        &mut self,
-        op: Opcode,
-        addr_mode: Option<AddrDT>,
-    ) {
+    fn execute_op(&mut self, op: Opcode, addr_mode: Option<AddrDT>) {
         match addr_mode {
             Some(mode) => match mode {
                 AddrDT::Address(addr) => match op {
@@ -312,7 +314,6 @@ impl Cpu {
                         let tmp = self.regs.x;
                         self.mem.store_u8(addr, tmp);
                     }
-
                     Opcode::Store(Store::STY) => {
                         let tmp = self.regs.y;
                         self.mem.store_u8(addr, tmp);
@@ -392,6 +393,7 @@ impl Cpu {
                     self.push(acc);
                 }
                 Opcode::Store(Store::PHP) => {
+                    self.set_flag(BRK_F, true);
                     let flags = self.regs.flags;
                     self.push(flags);
                 }
@@ -1189,8 +1191,10 @@ impl Cpu {
                 Opcode::Jump(Jump::JSR),
                 AddrMode::Abs(self.loadu16_pc_incr()),
             )),
-
-            JMP_IND => unimplemented!(),
+            JMP_IND => Ok((
+                Opcode::Jump(Jump::JMP),
+                AddrMode::JmpIndir(self.loadu16_pc_incr()),
+            )),
             _ => Err(InvalidOpcode::DoesntExist(
                 "Unsupported op".to_string(),
                 op,
