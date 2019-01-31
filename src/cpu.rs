@@ -159,51 +159,54 @@ pub enum AddrMode {
 }
 
 #[derive(Debug)]
-enum AddrDataType {
+enum AddrDT {
     Address(u16),
     Constant(u8),
     Signed(i8),
 }
 
 impl AddrMode {
-    fn address_mem(&self, cpu: &Cpu) -> (Option<AddrDataType>, bool) {
+    fn address_mem(&self, cpu: &Cpu) -> (Option<AddrDT>, bool) {
         match *self {
-            AddrMode::Immediate(v) => (Some(AddrDataType::Constant(v)), false),
+            AddrMode::Immediate(v) => (Some(AddrDT::Constant(v)), false),
             AddrMode::Implied => (None, false),
             AddrMode::Accum => (None, false),
             AddrMode::ZeroPg(v) => {
-                (Some(AddrDataType::Address(v as u16)), false)
+                (Some(AddrDT::Address(v as u16)), false)
             }
             AddrMode::ZeroPgX(v) => (
-                Some(AddrDataType::Address(v.wrapping_add(cpu.regs.x) as u16)),
+                Some(AddrDT::Address(v.wrapping_add(cpu.regs.x) as u16)),
                 false,
             ),
             AddrMode::ZeroPgY(v) => (
-                Some(AddrDataType::Address(v.wrapping_add(cpu.regs.y) as u16)),
+                Some(AddrDT::Address(v.wrapping_add(cpu.regs.y) as u16)),
                 false,
             ),
-            AddrMode::Abs(v) => (Some(AddrDataType::Address(v)), false),
+            AddrMode::Abs(v) => (Some(AddrDT::Address(v)), false),
             AddrMode::AbsX(v) => {
-                (Some(AddrDataType::Address(v + (cpu.regs.x as u16))), true)
-            } //TODO: Implement logic for bound check
+                (Some(AddrDT::Address(v + (cpu.regs.x as u16))),
+                (v & 0xFF) + cpu.regs.x as u16 > 0xFF)
+            }
             AddrMode::AbsY(v) => {
-                (Some(AddrDataType::Address(v + (cpu.regs.y as u16))), true)
-            } //TODO: Implement logic for bound check
+                (Some(AddrDT::Address(v + (cpu.regs.y as u16))),
+                (v & 0xFF) + cpu.regs.y as u16 > 0xFF)
+            }
+            //TODO: Implement logic for bound check
             AddrMode::Indirect(v) => unimplemented!("No page boundary cross"),
             AddrMode::IndexIndirX(v) => (
-                Some(AddrDataType::Address(
+                Some(AddrDT::Address(
                     cpu.mem.load_u16(v.wrapping_add(cpu.regs.x) as u16),
                 )),
                 false,
             ),
-            AddrMode::IndirIndexY(v) => (
-                Some(AddrDataType::Address(
-                    cpu.mem.load_u16(v as u16).wrapping_add(cpu.regs.y as u16),
+            AddrMode::IndirIndexY(v) => {
+                let tmp = cpu.mem.load_u16(v as u16);
+                (Some(AddrDT::Address(tmp.wrapping_add(cpu.regs.y as u16),
                 )),
-                true,
-            ),
+                (tmp & 0xFF) + cpu.regs.y as u16 > 0xFF)
+            }
             AddrMode::Relative(v) => {
-                (Some(AddrDataType::Signed(v as i8)), false)
+                (Some(AddrDT::Signed(v as i8)), false)
             }
         }
     }
@@ -225,140 +228,129 @@ impl Cpu {
         }
     }
 
+    fn incr_cc(&mut self) {
+        self.cycle_count += 1;
+    }
+
     fn execute_op(
         &mut self,
         op: Opcode,
-        addr_mode: Option<AddrDataType>,
-    ) -> Result<(), InvalidOpcode> {
+        addr_mode: Option<AddrDT>,
+    ) {
         match addr_mode {
             Some(mode) => match mode {
-                AddrDataType::Address(addr) => match op {
-                    // Operandless mirrors (those using the accumulator addressing mode)
-                    Opcode::BitOp(BitOp::ROR) => Ok(self.ror_addr(addr)),
-                    Opcode::BitOp(BitOp::ASL) => Ok(self.asl_addr(addr)),
-                    Opcode::BitOp(BitOp::ROL) => Ok(self.rol_addr(addr)),
-                    Opcode::BitOp(BitOp::LSR) => Ok(self.lsr_addr(addr)),
+                AddrDT::Address(addr) => match op {
+                    // Operandless mirrors (those using the acc addr mode)
+                    Opcode::BitOp(BitOp::ROR) => self.ror_addr(addr),
+                    Opcode::BitOp(BitOp::ASL) => self.asl_addr(addr),
+                    Opcode::BitOp(BitOp::ROL) => self.rol_addr(addr),
+                    Opcode::BitOp(BitOp::LSR) => self.lsr_addr(addr),
 
                     // Immediate mirrors
                     Opcode::RegOps(RegOps::CPX) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.cpx(tmp))
+                        self.cpx(tmp);
                     }
                     Opcode::RegOps(RegOps::CMP) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.cmp(tmp))
+                        self.cmp(tmp);
                     }
                     Opcode::RegOps(RegOps::CPY) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.cpy(tmp))
+                        self.cpy(tmp);
                     }
                     Opcode::Math(Math::SBC) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.sbc(tmp))
+                        self.sbc(tmp);
                     }
                     Opcode::Math(Math::ADC) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.adc(tmp))
+                        self.adc(tmp);
                     }
                     Opcode::Store(Store::LDA) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.lda(tmp))
+                        self.lda(tmp);
                     }
                     Opcode::Store(Store::LDX) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.ldx(tmp))
+                        self.ldx(tmp);
                     }
                     Opcode::Store(Store::LDY) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.ldy(tmp))
+                        self.ldy(tmp);
                     }
                     Opcode::BitOp(BitOp::EOR) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.eor(tmp))
+                        self.eor(tmp);
                     }
                     Opcode::BitOp(BitOp::AND) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.and(tmp))
+                        self.and(tmp);
                     },
                     Opcode::BitOp(BitOp::ORA) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.ora(tmp))
+                        self.ora(tmp);
                     },
 
                     // Opcodes without IMP and ACC support
                     Opcode::BitOp(BitOp::BIT) => {
                         let tmp = self.mem.load_u8(addr);
-                        Ok(self.bit(tmp))
+                        self.bit(tmp);
                     }
-                    Opcode::Math(Math::DEC) => Ok(self.dec(addr)),
-                    Opcode::Math(Math::INC) => Ok(self.inc(addr)),
-                    Opcode::Jump(Jump::JMP) => Ok(self.regs.pc.set_addr(addr)),
-                    Opcode::Jump(Jump::JSR) => unimplemented!(),
+                    Opcode::Math(Math::DEC) => self.dec(addr),
+                    Opcode::Math(Math::INC) => self.inc(addr),
+                    Opcode::Jump(Jump::JMP) => self.regs.pc.set_addr(addr),
+                    Opcode::Jump(Jump::JSR) => {
+                        self.regs.pc.add_signed(-1);
+                        self.push_pc();
+                    }
                     Opcode::Store(Store::STA) => {
                         let tmp = self.regs.acc;
-                        Ok(self.mem.store_u8(addr, tmp))
+                        self.mem.store_u8(addr, tmp);
                     }
                     Opcode::Store(Store::STX) => {
                         let tmp = self.regs.x;
-                        Ok(self.mem.store_u8(addr, tmp))
+                        self.mem.store_u8(addr, tmp);
                     }
 
                     Opcode::Store(Store::STY) => {
                         let tmp = self.regs.y;
-                        Ok(self.mem.store_u8(addr, tmp))
+                        self.mem.store_u8(addr, tmp);
                     }
-                    err => panic!("Got {:?} as an opcode that needs an address", err)
+                    err => panic!(
+                        "Got {:?} as an opcode that needs an address", err)
                 }
 
                 // These are all the immediate opcodes
-                AddrDataType::Constant(c) => match op {
-                    Opcode::RegOps(RegOps::CPX) => Ok(self.cpx(c)),
-                    Opcode::RegOps(RegOps::CMP) => Ok(self.cmp(c)),
-                    Opcode::RegOps(RegOps::CPY) => Ok(self.cpy(c)),
-                    Opcode::Math(Math::SBC) => Ok(self.sbc(c)),
-                    Opcode::Math(Math::ADC) => Ok(self.adc(c)),
-                    Opcode::Store(Store::LDA) => Ok(self.lda(c)),
-                    Opcode::Store(Store::LDX) => Ok(self.ldx(c)),
-                    Opcode::Store(Store::LDY) => Ok(self.ldy(c)),
-                    Opcode::BitOp(BitOp::EOR) => Ok(self.eor(c)),
-                    Opcode::BitOp(BitOp::AND) => Ok(self.and(c)),
-                    Opcode::BitOp(BitOp::ORA) => Ok(self.ora(c)),
-                    err => panic!("No other instructions support immediate addressing mode. Found {:?}", err)
+                AddrDT::Constant(c) => match op {
+                    Opcode::RegOps(RegOps::CPX) => self.cpx(c),
+                    Opcode::RegOps(RegOps::CMP) => self.cmp(c),
+                    Opcode::RegOps(RegOps::CPY) => self.cpy(c),
+                    Opcode::Math(Math::SBC) => self.sbc(c),
+                    Opcode::Math(Math::ADC) => self.adc(c),
+                    Opcode::Store(Store::LDA) => self.lda(c),
+                    Opcode::Store(Store::LDX) => self.ldx(c),
+                    Opcode::Store(Store::LDY) => self.ldy(c),
+                    Opcode::BitOp(BitOp::EOR) => self.eor(c),
+                    Opcode::BitOp(BitOp::AND) => self.and(c),
+                    Opcode::BitOp(BitOp::ORA) => self.ora(c),
+                    err => panic!(
+                        "No other instructions support immediate addressing
+                         mode. Found {:?}", err)
                 },
-                AddrDataType::Signed(i) => match op {
-                    Opcode::Branch(Branch::BCC) => {
-                        let flag = !self.get_flag(CARRY_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    Opcode::Branch(Branch::BCS) => {
-                        let flag = self.get_flag(CARRY_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    Opcode::Branch(Branch::BNE) => {
-                        let flag = !self.get_flag(ZERO_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    Opcode::Branch(Branch::BEQ) => {
-                        let flag = self.get_flag(ZERO_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    Opcode::Branch(Branch::BPL) => {
-                        let flag = !self.get_flag(NEG_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    Opcode::Branch(Branch::BMI) => {
-                        let flag = self.get_flag(NEG_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    Opcode::Branch(Branch::BVC) => {
-                        let flag = !self.get_flag(O_F_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    Opcode::Branch(Branch::BVS) => {
-                        let flag = self.get_flag(O_F_FLG);
-                        Ok(self.generic_branch(i, flag))
-                    }
-                    err => panic!("Nothing else uses signed {:?}", err),
+                AddrDT::Signed(i) => {
+                    let flag = match op {
+                        Opcode::Branch(Branch::BCC) => !self.get_flag(CARRY),
+                        Opcode::Branch(Branch::BCS) => self.get_flag(CARRY),
+                        Opcode::Branch(Branch::BNE) => !self.get_flag(ZERO),
+                        Opcode::Branch(Branch::BEQ) => self.get_flag(ZERO),
+                        Opcode::Branch(Branch::BPL) => !self.get_flag(NEG),
+                        Opcode::Branch(Branch::BMI) => self.get_flag(NEG),
+                        Opcode::Branch(Branch::BVC) => !self.get_flag(O_F),
+                        Opcode::Branch(Branch::BVS) => self.get_flag(O_F),
+                        err => panic!("Nothing else uses signed {:?}", err),
+                    };
+                    self.generic_branch(i, flag);
                 }
             }
 
@@ -369,105 +361,93 @@ impl Cpu {
                     let acc = self.regs.acc;
                     self.regs.x = acc;
                     self.set_zero_neg(acc);
-                    Ok(())
                 }
                 Opcode::Store(Store::TAY) => {
                     let acc = self.regs.acc;
                     self.regs.y = acc;
                     self.set_zero_neg(acc);
-                    Ok(())
                 }
                 Opcode::Store(Store::TSX) => {
                     let sp = self.regs.sp;
                     self.regs.x = sp;
                     self.set_zero_neg(sp);
-                    Ok(())
                 }
                 Opcode::Store(Store::TXA) => {
                     let x = self.regs.x;
                     self.regs.acc = x;
                     self.set_zero_neg(x);
-                    Ok(())
                 }
                 Opcode::Store(Store::TXS) => {
                     let x = self.regs.x;
                     self.regs.sp = x;
                     self.set_zero_neg(x);
-                    Ok(())
                 }
                 Opcode::Store(Store::TYA) => {
                     let y = self.regs.y;
                     self.regs.acc = y;
                     self.set_zero_neg(y);
-                    Ok(())
                 }
-                Opcode::Store(Store::PHA) => unimplemented!(),
-                Opcode::Store(Store::PHP) => unimplemented!(),
-                Opcode::Store(Store::PLA) => unimplemented!(),
-                Opcode::Store(Store::PLP) => unimplemented!(),
+                Opcode::Store(Store::PHA) => {
+                    let acc = self.regs.acc;
+                    self.push(acc);
+                }
+                Opcode::Store(Store::PHP) => {
+                    let flags = self.regs.flags;
+                    self.push(flags);
+                }
+                Opcode::Store(Store::PLA) => {
+                    let acc = self.pop();
+                    self.regs.acc = acc;
+                    self.set_zero_neg(acc);
+                }
+                Opcode::Store(Store::PLP) => {
+                    self.regs.flags = self.pop();
+                }
                 Opcode::Math(Math::DEX) => {
                     let x = self.regs.x.wrapping_sub(1);
                     self.regs.x = x;
                     self.set_zero_neg(x);
-                    Ok(())
                 }
                 Opcode::Math(Math::DEY) => {
                     let y = self.regs.y.wrapping_sub(1);
                     self.regs.y = y;
                     self.set_zero_neg(y);
-                    Ok(())
                 }
                 Opcode::Math(Math::INX) => {
                     let x = self.regs.x.wrapping_add(1);
                     self.regs.x = x;
                     self.set_zero_neg(x);
-                    Ok(())
                 }
                 Opcode::Math(Math::INY) => {
                     let y = self.regs.y.wrapping_add(1);
                     self.regs.y = y;
                     self.set_zero_neg(y);
-                    Ok(())
                 }
-                Opcode::Jump(Jump::RTI) => unimplemented!(),
-                Opcode::Jump(Jump::RTS) => unimplemented!(),
-                Opcode::RegOps(RegOps::CLC) => {
-                    self.set_flag(CARRY_FLG, false);
-                    Ok(())
+                Opcode::Jump(Jump::RTI) => {
+                    self.regs.flags = self.pop();
+                    self.pull_pc();
                 }
-                Opcode::RegOps(RegOps::CLD) => {
-                    self.set_flag(DEC_FLG, false);
-                    Ok(())
+                Opcode::Jump(Jump::RTS) => {
+                    self.pull_pc();
+                    self.regs.pc.add_unsigned(1);
                 }
-                Opcode::RegOps(RegOps::CLI) => {
-                    self.set_flag(ITR_FLG, false);
-                    Ok(())
-                }
-                Opcode::RegOps(RegOps::CLV) => {
-                    self.set_flag(O_F_FLG, false);
-                    Ok(())
-                }
-                Opcode::RegOps(RegOps::SEC) => {
-                    self.set_flag(CARRY_FLG, true);
-                    Ok(())
-                }
-                Opcode::RegOps(RegOps::SED) => {
-                    self.set_flag(DEC_FLG, true);
-                    Ok(())
-                }
-                Opcode::RegOps(RegOps::SEI) => {
-                    self.set_flag(ITR_FLG, true);
-                    Ok(())
-                }
+                Opcode::RegOps(RegOps::CLC) => self.set_flag(CARRY, false),
+                Opcode::RegOps(RegOps::CLD) => self.set_flag(DEC, false),
+                Opcode::RegOps(RegOps::CLI) => self.set_flag(ITR, false),
+                Opcode::RegOps(RegOps::CLV) => self.set_flag(O_F, false),
+                Opcode::RegOps(RegOps::SEC) => self.set_flag(CARRY, true),
+                Opcode::RegOps(RegOps::SED) => self.set_flag(DEC, true),
+                Opcode::RegOps(RegOps::SEI) => self.set_flag(ITR, true),
                 Opcode::System(System::BRK) => unimplemented!(),
-                Opcode::System(System::NOP) => Ok(()),
 
                 // ACC mode
-                Opcode::BitOp(BitOp::ROR) => Ok(self.ror_acc()),
-                Opcode::BitOp(BitOp::ASL) => Ok(self.asl_acc()),
-                Opcode::BitOp(BitOp::ROL) => Ok(self.rol_acc()),
-                Opcode::BitOp(BitOp::LSR) => Ok(self.lsr_acc()),
-                other => panic!("Programmer error: All opcodes with implied or accumulator addressing mode have been taken care of: got {:?}", other),
+                Opcode::BitOp(BitOp::ROR) => self.ror_acc(),
+                Opcode::BitOp(BitOp::ASL) => self.asl_acc(),
+                Opcode::BitOp(BitOp::ROL) => self.rol_acc(),
+                Opcode::BitOp(BitOp::LSR) => self.lsr_acc(),
+                err => panic!(
+                    "Programmer error: All opcodes with implied or accumulator
+                     addressing mode have been taken care of: got {:?}", err),
             }
         }
     }
@@ -492,10 +472,10 @@ impl Cpu {
 
     fn adc(&mut self, val: u8) {
         let acc = self.regs.acc;
-        let tmp = acc as u16 + val as u16 + self.get_flag(CARRY_FLG) as u16;
-        self.set_flag(CARRY_FLG, tmp > 0xFF);
+        let tmp = acc as u16 + val as u16 + self.get_flag(CARRY) as u16;
+        self.set_flag(CARRY, tmp > 0xFF);
         self.set_flag(
-            O_F_FLG,
+            O_F,
             ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0,
         );
         let tmp = tmp as u8;
@@ -506,10 +486,10 @@ impl Cpu {
     fn sbc(&mut self, val: u8) {
         let acc = self.regs.acc;
         let tmp =
-            acc as i16 - val as i16 - (1 - self.get_flag(CARRY_FLG) as i16);
-        self.set_flag(CARRY_FLG, tmp >= 0);
+            acc as i16 - val as i16 - (1 - self.get_flag(CARRY) as i16);
+        self.set_flag(CARRY, tmp >= 0);
         self.set_flag(
-            O_F_FLG,
+            O_F,
             ((acc as i16 ^ tmp) & (val as i16 ^ tmp) & 0x80) != 0,
         );
         let tmp = tmp as u8;
@@ -534,16 +514,16 @@ impl Cpu {
 
     fn ror_acc(&mut self) {
         let (tmp, n_flag) =
-            Cpu::get_ror(self.get_flag(CARRY_FLG), self.regs.acc);
-        self.set_flag(CARRY_FLG, n_flag);
+            Cpu::get_ror(self.get_flag(CARRY), self.regs.acc);
+        self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
     }
 
     fn ror_addr(&mut self, addr: u16) {
         let (tmp, n_flag) =
-            Cpu::get_ror(self.get_flag(CARRY_FLG), self.mem.load_u8(addr));
-        self.set_flag(CARRY_FLG, n_flag);
+            Cpu::get_ror(self.get_flag(CARRY), self.mem.load_u8(addr));
+        self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
         self.mem.store_u8(addr, tmp);
     }
@@ -554,16 +534,16 @@ impl Cpu {
 
     fn rol_acc(&mut self) {
         let (tmp, n_flag) =
-            Cpu::get_rol(self.get_flag(CARRY_FLG), self.regs.acc);
-        self.set_flag(CARRY_FLG, n_flag);
+            Cpu::get_rol(self.get_flag(CARRY), self.regs.acc);
+        self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
     }
 
     fn rol_addr(&mut self, addr: u16) {
         let (tmp, n_flag) =
-            Cpu::get_rol(self.get_flag(CARRY_FLG), self.mem.load_u8(addr));
-        self.set_flag(CARRY_FLG, n_flag);
+            Cpu::get_rol(self.get_flag(CARRY), self.mem.load_u8(addr));
+        self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
         self.mem.store_u8(addr, tmp);
     }
@@ -574,7 +554,7 @@ impl Cpu {
 
     fn asl_acc(&mut self) {
         let acc = self.regs.acc;
-        self.set_flag(CARRY_FLG, (acc >> 7) != 0);
+        self.set_flag(CARRY, (acc >> 7) != 0);
         let tmp = acc << 1;
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -582,7 +562,7 @@ impl Cpu {
 
     fn asl_addr(&mut self, addr: u16) {
         let val = self.mem.load_u8(addr);
-        self.set_flag(CARRY_FLG, (val >> 7) != 0);
+        self.set_flag(CARRY, (val >> 7) != 0);
         let tmp = val << 1;
         self.set_zero_neg(tmp);
         self.mem.store_u8(addr, val);
@@ -590,7 +570,7 @@ impl Cpu {
 
     fn lsr_acc(&mut self) {
         let acc = self.regs.acc;
-        self.set_flag(CARRY_FLG, (acc & 0b01) != 0);
+        self.set_flag(CARRY, (acc & 0b01) != 0);
         let tmp = acc >> 1;
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -598,7 +578,7 @@ impl Cpu {
 
     fn lsr_addr(&mut self, addr: u16) {
         let val = self.mem.load_u8(addr);
-        self.set_flag(CARRY_FLG, (val & 0b01) != 0);
+        self.set_flag(CARRY, (val & 0b01) != 0);
         let tmp = val >> 1;
         self.set_zero_neg(tmp);
         self.mem.store_u8(addr, val);
@@ -606,19 +586,19 @@ impl Cpu {
 
     fn cpx(&mut self, val: u8) {
         let tmp = self.regs.x as i16 - val as i16;
-        self.set_flag(CARRY_FLG, tmp >= 0);
+        self.set_flag(CARRY, tmp >= 0);
         self.set_zero_neg(tmp as u8);
     }
 
     fn cpy(&mut self, val: u8) {
         let tmp = self.regs.y as i16 - val as i16;
-        self.set_flag(CARRY_FLG, tmp >= 0);
+        self.set_flag(CARRY, tmp >= 0);
         self.set_zero_neg(tmp as u8);
     }
 
     fn cmp(&mut self, val: u8) {
         let tmp = self.regs.acc as i16 - val as i16;
-        self.set_flag(CARRY_FLG, tmp >= 0);
+        self.set_flag(CARRY, tmp >= 0);
         self.set_zero_neg(tmp as u8);
     }
 
@@ -629,9 +609,9 @@ impl Cpu {
     }
     fn bit(&mut self, val: u8) {
         let acc = self.regs.acc;
-        self.set_flag(ZERO_FLG, (val & acc) == 0);
-        self.set_flag(O_F_FLG, (val & 0x40) != 0);
-        self.set_flag(NEG_FLG, (val & 0x80) != 0);
+        self.set_flag(ZERO, (val & acc) == 0);
+        self.set_flag(O_F, (val & 0x40) != 0);
+        self.set_flag(NEG, (val & 0x80) != 0);
     }
 
     fn dec(&mut self, addr: u16) {
@@ -646,9 +626,32 @@ impl Cpu {
         self.mem.store_u8(addr, val);
     }
 
+    fn push(&mut self, val: u8) {
+        self.mem.store_u8(self.regs.sp as u16 | 0x100, val);
+        self.regs.sp -= 1;
+    }
+
+    fn pop(&mut self) -> u8 {
+        self.regs.sp += 1;
+        self.mem.load_u8(self.regs.sp as u16 | 0x100)
+    }
+
+    fn pull_pc(&mut self) {
+        let low = self.pop();
+        let high = self.pop();
+        self.regs.pc.set_addr(((high as u16) << 8) | low as u16);
+    }
+
+    fn push_pc(&mut self) {
+        let high = (self.regs.pc.get_addr() >> 8);
+        let low = self.regs.pc.get_addr();
+        self.push(high as u8);
+        self.push(low as u8);
+    }
+
     fn set_zero_neg(&mut self, val: u8) {
-        self.set_flag(NEG_FLG, val >> 7 == 1);
-        self.set_flag(ZERO_FLG, val == 0);
+        self.set_flag(NEG, val >> 7 == 1);
+        self.set_flag(ZERO, val == 0);
     }
 
     fn set_flag(&mut self, flag: u8, val: bool) {
@@ -667,7 +670,7 @@ impl Cpu {
         let byte = self.loadu8_pc_incr();
         let (op, addr_mode) = self.decode_op(byte)?;
         let (address, page_bounary_crossed) = addr_mode.address_mem(&self);
-        self.execute_op(op, address)?;
+        self.execute_op(op, address);
         Ok(())
     }
 

@@ -160,13 +160,13 @@ pub static CYCLES: [u8; 256] = [
     2, 7, 4, 4, 7, 7,
 ];
 
-pub const CARRY_FLG: u8 = 0b00000001;
-pub const ZERO_FLG: u8 = 0b00000010;
-pub const ITR_FLG: u8 = 0b00000100;
-pub const DEC_FLG: u8 = 0b00001000;
-pub const BRK_FLG: u8 = 0b00010000;
-pub const O_F_FLG: u8 = 0b01000000;
-pub const NEG_FLG: u8 = 0b10000000;
+pub const CARRY: u8 = 0b00000001;
+pub const ZERO: u8 = 0b00000010;
+pub const ITR: u8 = 0b00000100;
+pub const DEC: u8 = 0b00001000;
+pub const BRK_F: u8 = 0b00010000;
+pub const O_F: u8 = 0b01000000;
+pub const NEG: u8 = 0b10000000;
 
 pub const NMI_VEC: u16 = 0xFFFA;
 pub const RESET_VEC: u16 = 0xFFFC;
