@@ -42,14 +42,14 @@ pub struct Cpu {
 }
 
 #[derive(Debug)]
-pub enum Opcode {
+pub enum Op {
     Store(Store),
     Math(Math),
-    BitOp(BitOp),
+    Bit(Bit),
     Branch(Branch),
     Jump(Jump),
-    RegOps(RegOps),
-    System(System),
+    Reg(Reg),
+    Sys(Sys),
 }
 
 #[derive(Debug)]
@@ -85,7 +85,7 @@ pub enum Math {
 }
 
 #[derive(Debug)]
-pub enum BitOp {
+pub enum Bit {
     AND,
     ASL,
     BIT,
@@ -117,7 +117,7 @@ pub enum Jump {
 }
 
 #[derive(Debug)]
-pub enum RegOps {
+pub enum Reg {
     CLC,
     CLD,
     CLI,
@@ -131,102 +131,102 @@ pub enum RegOps {
 }
 
 #[derive(Debug)]
-pub enum System {
+pub enum Sys {
     BRK,
     NOP,
 }
 
 #[derive(Debug)]
-pub enum InvalidOpcode {
+pub enum InvalidOp {
     DoesntExist(String, u8),
 }
 
 #[derive(Debug)]
 pub enum AddrMode {
-    Immediate(u8),
-    Implied,
+    Imm(u8),
+    Impl,
     Accum,
-    ZeroPg(u8),
-    ZeroPgX(u8),
-    ZeroPgY(u8),
+    ZP(u8),
+    ZPX(u8),
+    ZPY(u8),
     Abs(u16),
     AbsX(u16),
     AbsY(u16),
     JmpIndir(u16),
     IndexIndirX(u8),
     IndirIndexY(u8),
-    Relative(i8),
+    Rel(i8),
 }
 
 #[derive(Debug)]
 enum AddrDT {
-    Address(u16),
-    Constant(u8),
+    Addr(u16),
+    Const(u8),
     Signed(i8),
 }
 
 impl AddrMode {
-    fn address_mem(&self, cpu: &Cpu) -> (Option<AddrDT>, bool) {
+    fn address_mem(&self, cpu: &Cpu) -> Option<(AddrDT, bool)> {
         match *self {
-            AddrMode::Immediate(v) => (Some(AddrDT::Constant(v)), false),
-            AddrMode::Implied => (None, false),
-            AddrMode::Accum => (None, false),
-            AddrMode::ZeroPg(v) => (Some(AddrDT::Address(v as u16)), false),
-            AddrMode::ZeroPgX(v) => (
-                Some(AddrDT::Address(v.wrapping_add(cpu.regs.x) as u16)),
-                false,
-            ),
-            AddrMode::ZeroPgY(v) => (
-                Some(AddrDT::Address(v.wrapping_add(cpu.regs.y) as u16)),
-                false,
-            ),
-            AddrMode::Abs(v) => (Some(AddrDT::Address(v)), false),
-            AddrMode::AbsX(v) => {
-                (Some(AddrDT::Address(v + (cpu.regs.x as u16))),
-                (v & 0xFF) + cpu.regs.x as u16 > 0xFF)
+            AddrMode::Imm(v) => Some((AddrDT::Const(v), false)),
+            AddrMode::Impl => None,
+            AddrMode::Accum => None,
+            AddrMode::ZP(v) => Some((AddrDT::Addr(v as u16), false)),
+            AddrMode::ZPX(v) => {
+                Some((AddrDT::Addr(v.wrapping_add(cpu.regs.x) as u16), false))
             }
-            AddrMode::AbsY(v) => {
-                (Some(AddrDT::Address(v + (cpu.regs.y as u16))),
-                (v & 0xFF) + cpu.regs.y as u16 > 0xFF)
+            AddrMode::ZPY(v) => {
+                Some((AddrDT::Addr(v.wrapping_add(cpu.regs.y) as u16), false))
             }
+            AddrMode::Abs(v) => Some((AddrDT::Addr(v), false)),
+            AddrMode::AbsX(v) => Some((
+                AddrDT::Addr(v + (cpu.regs.x as u16)),
+                check_pb(v, v + cpu.regs.x as u16),
+            )),
+            AddrMode::AbsY(v) => Some((
+                AddrDT::Addr(v + (cpu.regs.y as u16)),
+                check_pb(v, v + cpu.regs.y as u16),
+            )),
             AddrMode::JmpIndir(v) => {
                 let low = cpu.mem.load_u8(v);
-                let high: u8 = if v & 0xFF  == 0xFF {
+                let high: u8 = if v & 0xFF == 0xFF {
                     cpu.mem.load_u8(v - 0xFF)
                 } else {
                     cpu.mem.load_u8(v + 1)
                 };
-                (Some(AddrDT::Address((high as u16) << 8 | (low as u16))),
-                 false)
+                Some((AddrDT::Addr((high as u16) << 8 | (low as u16)), false))
             }
-            AddrMode::IndexIndirX(v) => (
-                Some(AddrDT::Address(
+            AddrMode::IndexIndirX(v) => Some((
+                AddrDT::Addr(
                     cpu.mem.load_u16(v.wrapping_add(cpu.regs.x) as u16),
-                )),
+                ),
                 false,
-            ),
+            )),
             AddrMode::IndirIndexY(v) => {
                 let tmp = cpu.mem.load_u16(v as u16);
-                (Some(AddrDT::Address(tmp.wrapping_add(cpu.regs.y as u16),
-                )),
-                (tmp & 0xFF) + cpu.regs.y as u16 > 0xFF)
+                Some((
+                    AddrDT::Addr(tmp.wrapping_add(cpu.regs.y as u16)),
+                    check_pb(tmp, tmp + cpu.regs.y as u16),
+                ))
             }
-            AddrMode::Relative(v) => {
-                (Some(AddrDT::Signed(v as i8)), false)
-            }
+            AddrMode::Rel(v) => Some((AddrDT::Signed(v as i8), false)),
         }
     }
 }
 
+fn check_pb(base: u16, base_offset: u16) -> bool {
+    (base & 0xFF00) != (base_offset & 0xFF00)
+}
+
 impl Cpu {
-    fn new() -> Cpu {
+    pub fn new() -> Cpu {
         Cpu {
             cycle_count: 0,
             regs: Registers {
                 acc: 0,
                 x: 1,
                 y: 2,
-                pc: ProgramCounter::new(0),
+                pc: ProgramCounter::new(RESET_VEC),
                 sp: 0,
                 flags: 0,
             },
@@ -238,218 +238,234 @@ impl Cpu {
         self.cycle_count += 1;
     }
 
-    fn execute_op(&mut self, op: Opcode, addr_mode: Option<AddrDT>) {
+    fn execute_op(&mut self, op: Op, addr_mode: Option<(AddrDT, bool)>) {
         match addr_mode {
-            Some(mode) => match mode {
-                AddrDT::Address(addr) => match op {
-                    // Operandless mirrors (those using the acc addr mode)
-                    Opcode::BitOp(BitOp::ROR) => self.ror_addr(addr),
-                    Opcode::BitOp(BitOp::ASL) => self.asl_addr(addr),
-                    Opcode::BitOp(BitOp::ROL) => self.rol_addr(addr),
-                    Opcode::BitOp(BitOp::LSR) => self.lsr_addr(addr),
-
-                    // Immediate mirrors
-                    Opcode::RegOps(RegOps::CPX) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.cpx(tmp);
-                    }
-                    Opcode::RegOps(RegOps::CMP) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.cmp(tmp);
-                    }
-                    Opcode::RegOps(RegOps::CPY) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.cpy(tmp);
-                    }
-                    Opcode::Math(Math::SBC) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.sbc(tmp);
-                    }
-                    Opcode::Math(Math::ADC) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.adc(tmp);
-                    }
-                    Opcode::Store(Store::LDA) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.lda(tmp);
-                    }
-                    Opcode::Store(Store::LDX) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.ldx(tmp);
-                    }
-                    Opcode::Store(Store::LDY) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.ldy(tmp);
-                    }
-                    Opcode::BitOp(BitOp::EOR) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.eor(tmp);
-                    }
-                    Opcode::BitOp(BitOp::AND) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.and(tmp);
-                    },
-                    Opcode::BitOp(BitOp::ORA) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.ora(tmp);
-                    },
-
-                    // Opcodes without IMP and ACC support
-                    Opcode::BitOp(BitOp::BIT) => {
-                        let tmp = self.mem.load_u8(addr);
-                        self.bit(tmp);
-                    }
-                    Opcode::Math(Math::DEC) => self.dec(addr),
-                    Opcode::Math(Math::INC) => self.inc(addr),
-                    Opcode::Jump(Jump::JMP) => self.regs.pc.set_addr(addr),
-                    Opcode::Jump(Jump::JSR) => {
-                        self.regs.pc.add_signed(-1);
-                        self.push_pc();
-                    }
-                    Opcode::Store(Store::STA) => {
-                        let tmp = self.regs.acc;
-                        self.mem.store_u8(addr, tmp);
-                    }
-                    Opcode::Store(Store::STX) => {
-                        let tmp = self.regs.x;
-                        self.mem.store_u8(addr, tmp);
-                    }
-                    Opcode::Store(Store::STY) => {
-                        let tmp = self.regs.y;
-                        self.mem.store_u8(addr, tmp);
-                    }
-                    err => panic!(
-                        "Got {:?} as an opcode that needs an address", err)
+            Some((mode, pb_crossed)) => {
+                if pb_crossed {
+                    self.incr_cc();
                 }
+                match mode {
+                    AddrDT::Addr(addr) => match op {
+                        // Operandless mirrors (those using the acc addr mode)
+                        Op::Bit(Bit::ROR) => self.ror_addr(addr),
+                        Op::Bit(Bit::ASL) => self.asl_addr(addr),
+                        Op::Bit(Bit::ROL) => self.rol_addr(addr),
+                        Op::Bit(Bit::LSR) => self.lsr_addr(addr),
 
-                // These are all the immediate opcodes
-                AddrDT::Constant(c) => match op {
-                    Opcode::RegOps(RegOps::CPX) => self.cpx(c),
-                    Opcode::RegOps(RegOps::CMP) => self.cmp(c),
-                    Opcode::RegOps(RegOps::CPY) => self.cpy(c),
-                    Opcode::Math(Math::SBC) => self.sbc(c),
-                    Opcode::Math(Math::ADC) => self.adc(c),
-                    Opcode::Store(Store::LDA) => self.lda(c),
-                    Opcode::Store(Store::LDX) => self.ldx(c),
-                    Opcode::Store(Store::LDY) => self.ldy(c),
-                    Opcode::BitOp(BitOp::EOR) => self.eor(c),
-                    Opcode::BitOp(BitOp::AND) => self.and(c),
-                    Opcode::BitOp(BitOp::ORA) => self.ora(c),
-                    err => panic!(
-                        "No other instructions support immediate addressing
-                         mode. Found {:?}", err)
-                },
-                AddrDT::Signed(i) => {
-                    let flag = match op {
-                        Opcode::Branch(Branch::BCC) => !self.get_flag(CARRY),
-                        Opcode::Branch(Branch::BCS) => self.get_flag(CARRY),
-                        Opcode::Branch(Branch::BNE) => !self.get_flag(ZERO),
-                        Opcode::Branch(Branch::BEQ) => self.get_flag(ZERO),
-                        Opcode::Branch(Branch::BPL) => !self.get_flag(NEG),
-                        Opcode::Branch(Branch::BMI) => self.get_flag(NEG),
-                        Opcode::Branch(Branch::BVC) => !self.get_flag(O_F),
-                        Opcode::Branch(Branch::BVS) => self.get_flag(O_F),
-                        err => panic!("Nothing else uses signed {:?}", err),
-                    };
-                    self.generic_branch(i, flag);
+                        // Imm mirrors
+                        Op::Reg(Reg::CPX) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.cpx(tmp);
+                        }
+                        Op::Reg(Reg::CMP) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.cmp(tmp);
+                        }
+                        Op::Reg(Reg::CPY) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.cpy(tmp);
+                        }
+                        Op::Math(Math::SBC) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.sbc(tmp);
+                        }
+                        Op::Math(Math::ADC) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.adc(tmp);
+                        }
+                        Op::Store(Store::LDA) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.lda(tmp);
+                        }
+                        Op::Store(Store::LDX) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.ldx(tmp);
+                        }
+                        Op::Store(Store::LDY) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.ldy(tmp);
+                        }
+                        Op::Bit(Bit::EOR) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.eor(tmp);
+                        }
+                        Op::Bit(Bit::AND) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.and(tmp);
+                        }
+                        Op::Bit(Bit::ORA) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.ora(tmp);
+                        }
+
+                        // Ops without IMP and ACC support
+                        Op::Bit(Bit::BIT) => {
+                            let tmp = self.mem.load_u8(addr);
+                            self.bit(tmp);
+                        }
+                        Op::Math(Math::DEC) => self.dec(addr),
+                        Op::Math(Math::INC) => self.inc(addr),
+                        Op::Jump(Jump::JMP) => self.regs.pc.set_addr(addr),
+                        Op::Jump(Jump::JSR) => {
+                            self.regs.pc.add_signed(-1);
+                            self.push_pc();
+                        }
+                        Op::Store(Store::STA) => {
+                            let tmp = self.regs.acc;
+                            self.mem.store_u8(addr, tmp);
+                        }
+                        Op::Store(Store::STX) => {
+                            let tmp = self.regs.x;
+                            self.mem.store_u8(addr, tmp);
+                        }
+                        Op::Store(Store::STY) => {
+                            let tmp = self.regs.y;
+                            self.mem.store_u8(addr, tmp);
+                        }
+                        err => panic!(
+                            "Got {:?} as an opcode that needs an address",
+                            err
+                        ),
+                    },
+
+                    // These are all the immediate opcodes
+                    AddrDT::Const(c) => {
+                        match op {
+                            Op::Reg(Reg::CPX) => self.cpx(c),
+                            Op::Reg(Reg::CMP) => self.cmp(c),
+                            Op::Reg(Reg::CPY) => self.cpy(c),
+                            Op::Math(Math::SBC) => self.sbc(c),
+                            Op::Math(Math::ADC) => self.adc(c),
+                            Op::Store(Store::LDA) => self.lda(c),
+                            Op::Store(Store::LDX) => self.ldx(c),
+                            Op::Store(Store::LDY) => self.ldy(c),
+                            Op::Bit(Bit::EOR) => self.eor(c),
+                            Op::Bit(Bit::AND) => self.and(c),
+                            Op::Bit(Bit::ORA) => self.ora(c),
+                            err => panic!(
+                            "No other instructions support immediate addressing
+                             mode. Found {:?}", err),
+                        }
+                    }
+                    AddrDT::Signed(i) => {
+                        let flag = match op {
+                            Op::Branch(Branch::BCC) => !self.get_flag(CARRY),
+                            Op::Branch(Branch::BCS) => self.get_flag(CARRY),
+                            Op::Branch(Branch::BNE) => !self.get_flag(ZERO),
+                            Op::Branch(Branch::BEQ) => self.get_flag(ZERO),
+                            Op::Branch(Branch::BPL) => !self.get_flag(NEG),
+                            Op::Branch(Branch::BMI) => self.get_flag(NEG),
+                            Op::Branch(Branch::BVC) => !self.get_flag(O_F),
+                            Op::Branch(Branch::BVS) => self.get_flag(O_F),
+                            e => panic!("Nothing else uses signed {:?}", e),
+                        };
+                        self.generic_branch(i, flag);
+                    }
                 }
             }
-
             // These are all opcodes without any operands (implied and accum)
-            None => match op {
-                // Implied mode
-                Opcode::Store(Store::TAX) => {
-                    let acc = self.regs.acc;
-                    self.regs.x = acc;
-                    self.set_zero_neg(acc);
-                }
-                Opcode::Store(Store::TAY) => {
-                    let acc = self.regs.acc;
-                    self.regs.y = acc;
-                    self.set_zero_neg(acc);
-                }
-                Opcode::Store(Store::TSX) => {
-                    let sp = self.regs.sp;
-                    self.regs.x = sp;
-                    self.set_zero_neg(sp);
-                }
-                Opcode::Store(Store::TXA) => {
-                    let x = self.regs.x;
-                    self.regs.acc = x;
-                    self.set_zero_neg(x);
-                }
-                Opcode::Store(Store::TXS) => {
-                    let x = self.regs.x;
-                    self.regs.sp = x;
-                    self.set_zero_neg(x);
-                }
-                Opcode::Store(Store::TYA) => {
-                    let y = self.regs.y;
-                    self.regs.acc = y;
-                    self.set_zero_neg(y);
-                }
-                Opcode::Store(Store::PHA) => {
-                    let acc = self.regs.acc;
-                    self.push(acc);
-                }
-                Opcode::Store(Store::PHP) => {
-                    self.set_flag(BRK_F, true);
-                    let flags = self.regs.flags;
-                    self.push(flags);
-                }
-                Opcode::Store(Store::PLA) => {
-                    let acc = self.pop();
-                    self.regs.acc = acc;
-                    self.set_zero_neg(acc);
-                }
-                Opcode::Store(Store::PLP) => {
-                    self.regs.flags = self.pop();
-                }
-                Opcode::Math(Math::DEX) => {
-                    let x = self.regs.x.wrapping_sub(1);
-                    self.regs.x = x;
-                    self.set_zero_neg(x);
-                }
-                Opcode::Math(Math::DEY) => {
-                    let y = self.regs.y.wrapping_sub(1);
-                    self.regs.y = y;
-                    self.set_zero_neg(y);
-                }
-                Opcode::Math(Math::INX) => {
-                    let x = self.regs.x.wrapping_add(1);
-                    self.regs.x = x;
-                    self.set_zero_neg(x);
-                }
-                Opcode::Math(Math::INY) => {
-                    let y = self.regs.y.wrapping_add(1);
-                    self.regs.y = y;
-                    self.set_zero_neg(y);
-                }
-                Opcode::Jump(Jump::RTI) => {
-                    self.regs.flags = self.pop();
-                    self.pull_pc();
-                }
-                Opcode::Jump(Jump::RTS) => {
-                    self.pull_pc();
-                    self.regs.pc.add_unsigned(1);
-                }
-                Opcode::RegOps(RegOps::CLC) => self.set_flag(CARRY, false),
-                Opcode::RegOps(RegOps::CLD) => self.set_flag(DEC, false),
-                Opcode::RegOps(RegOps::CLI) => self.set_flag(ITR, false),
-                Opcode::RegOps(RegOps::CLV) => self.set_flag(O_F, false),
-                Opcode::RegOps(RegOps::SEC) => self.set_flag(CARRY, true),
-                Opcode::RegOps(RegOps::SED) => self.set_flag(DEC, true),
-                Opcode::RegOps(RegOps::SEI) => self.set_flag(ITR, true),
-                Opcode::System(System::BRK) => unimplemented!(),
+            None => {
+                match op {
+                    // Impl mode
+                    Op::Store(Store::TAX) => {
+                        let acc = self.regs.acc;
+                        self.regs.x = acc;
+                        self.set_zero_neg(acc);
+                    }
+                    Op::Store(Store::TAY) => {
+                        let acc = self.regs.acc;
+                        self.regs.y = acc;
+                        self.set_zero_neg(acc);
+                    }
+                    Op::Store(Store::TSX) => {
+                        let sp = self.regs.sp;
+                        self.regs.x = sp;
+                        self.set_zero_neg(sp);
+                    }
+                    Op::Store(Store::TXA) => {
+                        let x = self.regs.x;
+                        self.regs.acc = x;
+                        self.set_zero_neg(x);
+                    }
+                    Op::Store(Store::TXS) => {
+                        let x = self.regs.x;
+                        self.regs.sp = x;
+                        self.set_zero_neg(x);
+                    }
+                    Op::Store(Store::TYA) => {
+                        let y = self.regs.y;
+                        self.regs.acc = y;
+                        self.set_zero_neg(y);
+                    }
+                    Op::Store(Store::PHA) => {
+                        let acc = self.regs.acc;
+                        self.push(acc);
+                    }
+                    Op::Store(Store::PHP) => {
+                        self.set_flag(BRK_F, true);
+                        let flags = self.regs.flags;
+                        self.push(flags);
+                    }
+                    Op::Store(Store::PLA) => {
+                        let acc = self.pop();
+                        self.regs.acc = acc;
+                        self.set_zero_neg(acc);
+                    }
+                    Op::Store(Store::PLP) => {
+                        self.regs.flags = self.pop();
+                    }
+                    Op::Math(Math::DEX) => {
+                        let x = self.regs.x.wrapping_sub(1);
+                        self.regs.x = x;
+                        self.set_zero_neg(x);
+                    }
+                    Op::Math(Math::DEY) => {
+                        let y = self.regs.y.wrapping_sub(1);
+                        self.regs.y = y;
+                        self.set_zero_neg(y);
+                    }
+                    Op::Math(Math::INX) => {
+                        let x = self.regs.x.wrapping_add(1);
+                        self.regs.x = x;
+                        self.set_zero_neg(x);
+                    }
+                    Op::Math(Math::INY) => {
+                        let y = self.regs.y.wrapping_add(1);
+                        self.regs.y = y;
+                        self.set_zero_neg(y);
+                    }
+                    Op::Jump(Jump::RTI) => {
+                        self.regs.flags = self.pop();
+                        self.pull_pc();
+                    }
+                    Op::Jump(Jump::RTS) => {
+                        self.pull_pc();
+                        self.regs.pc.add_unsigned(1);
+                    }
+                    Op::Reg(Reg::CLC) => self.set_flag(CARRY, false),
+                    Op::Reg(Reg::CLD) => self.set_flag(DEC, false),
+                    Op::Reg(Reg::CLI) => self.set_flag(ITR, false),
+                    Op::Reg(Reg::CLV) => self.set_flag(O_F, false),
+                    Op::Reg(Reg::SEC) => self.set_flag(CARRY, true),
+                    Op::Reg(Reg::SED) => self.set_flag(DEC, true),
+                    Op::Reg(Reg::SEI) => self.set_flag(ITR, true),
+                    Op::Sys(Sys::BRK) => {
+                        self.push_pc();
+                        let flags = self.regs.flags;
+                        self.push(flags);
+                        self.regs.pc.set_addr(BRK_VEC);
+                        self.set_flag(BRK_F, true);
+                    }
 
-                // ACC mode
-                Opcode::BitOp(BitOp::ROR) => self.ror_acc(),
-                Opcode::BitOp(BitOp::ASL) => self.asl_acc(),
-                Opcode::BitOp(BitOp::ROL) => self.rol_acc(),
-                Opcode::BitOp(BitOp::LSR) => self.lsr_acc(),
-                err => panic!(
+                    // ACC mode
+                    Op::Bit(Bit::ROR) => self.ror_acc(),
+                    Op::Bit(Bit::ASL) => self.asl_acc(),
+                    Op::Bit(Bit::ROL) => self.rol_acc(),
+                    Op::Bit(Bit::LSR) => self.lsr_acc(),
+                    err => panic!(
                     "Programmer error: All opcodes with implied or accumulator
                      addressing mode have been taken care of: got {:?}", err),
+                }
             }
         }
     }
@@ -487,8 +503,7 @@ impl Cpu {
 
     fn sbc(&mut self, val: u8) {
         let acc = self.regs.acc;
-        let tmp =
-            acc as i16 - val as i16 - (1 - self.get_flag(CARRY) as i16);
+        let tmp = acc as i16 - val as i16 - (1 - self.get_flag(CARRY) as i16);
         self.set_flag(CARRY, tmp >= 0);
         self.set_flag(
             O_F,
@@ -515,8 +530,7 @@ impl Cpu {
     }
 
     fn ror_acc(&mut self) {
-        let (tmp, n_flag) =
-            Cpu::get_ror(self.get_flag(CARRY), self.regs.acc);
+        let (tmp, n_flag) = Cpu::get_ror(self.get_flag(CARRY), self.regs.acc);
         self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -535,8 +549,7 @@ impl Cpu {
     }
 
     fn rol_acc(&mut self) {
-        let (tmp, n_flag) =
-            Cpu::get_rol(self.get_flag(CARRY), self.regs.acc);
+        let (tmp, n_flag) = Cpu::get_rol(self.get_flag(CARRY), self.regs.acc);
         self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -606,7 +619,12 @@ impl Cpu {
 
     fn generic_branch(&mut self, val: i8, flag_val: bool) {
         if flag_val {
+            let addr = self.regs.pc.get_addr();
             self.regs.pc.add_signed(val);
+            self.incr_cc();
+            if check_pb(addr, self.regs.pc.get_addr()) {
+                self.incr_cc();
+            }
         }
     }
     fn bit(&mut self, val: u8) {
@@ -645,7 +663,7 @@ impl Cpu {
     }
 
     fn push_pc(&mut self) {
-        let high = (self.regs.pc.get_addr() >> 8);
+        let high = self.regs.pc.get_addr() >> 8;
         let low = self.regs.pc.get_addr();
         self.push(high as u8);
         self.push(low as u8);
@@ -668,537 +686,443 @@ impl Cpu {
         (self.regs.flags & flag) != 0
     }
 
-    pub fn step(&mut self) -> Result<(), InvalidOpcode> {
-        let byte = self.loadu8_pc_incr();
+    pub fn step(&mut self) -> Result<(), InvalidOp> {
+        let byte = self.loadu8_pc_up();
+        self.cycle_count += CYCLES[byte as usize];
         let (op, addr_mode) = self.decode_op(byte)?;
-        let (address, page_bounary_crossed) = addr_mode.address_mem(&self);
-        self.execute_op(op, address);
+        let addr_data = addr_mode.address_mem(&self);
+        self.execute_op(op, addr_data);
         Ok(())
     }
 
-    fn loadu8_pc_incr(&mut self) -> u8 {
+    fn loadu8_pc_up(&mut self) -> u8 {
         let ram_ptr = self.regs.pc.get_addr();
         self.regs.pc.add_unsigned(1);
         self.mem.load_u8(ram_ptr)
     }
 
-    fn loadu16_pc_incr(&mut self) -> u16 {
+    fn loadu16_pc_up(&mut self) -> u16 {
         let ram_ptr = self.regs.pc.get_addr();
         self.regs.pc.add_unsigned(2);
         self.mem.load_u16(ram_ptr)
     }
 
-    pub fn decode_op(
-        &mut self,
-        op: u8,
-    ) -> Result<(Opcode, AddrMode), InvalidOpcode> {
-        self.cycle_count += CYCLES[op as usize];
+    pub fn decode_op(&mut self, op: u8) -> Result<(Op, AddrMode), InvalidOp> {
         match op {
-            INC_ABSX => Ok((
-                Opcode::Math(Math::INC),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            SBC_ABSX => Ok((
-                Opcode::Math(Math::SBC),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            SBC_ABSY => Ok((
-                Opcode::Math(Math::SBC),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
-            )),
+            INC_ABSX => {
+                Ok((Op::Math(Math::INC), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            SBC_ABSX => {
+                Ok((Op::Math(Math::SBC), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            SBC_ABSY => {
+                Ok((Op::Math(Math::SBC), AddrMode::AbsY(self.loadu16_pc_up())))
+            }
             SBC_INDY => Ok((
-                Opcode::Math(Math::SBC),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Math(Math::SBC),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
             SBC_INDX => Ok((
-                Opcode::Math(Math::SBC),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Math(Math::SBC),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
-            SBC_ZPX => Ok((
-                Opcode::Math(Math::SBC),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            SBC_ZP => Ok((
-                Opcode::Math(Math::SBC),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            INC_ZPX => Ok((
-                Opcode::Math(Math::INC),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            INC_ABS => Ok((
-                Opcode::Math(Math::INC),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            INC_ZP => Ok((
-                Opcode::Math(Math::INC),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            CPX_ABS => Ok((
-                Opcode::RegOps(RegOps::CPX),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            CPX_ZP => Ok((
-                Opcode::RegOps(RegOps::CPX),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            CPX_IMM => Ok((
-                Opcode::RegOps(RegOps::CPX),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            SBC_IMM => Ok((
-                Opcode::Math(Math::SBC),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            CMP_IMM => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            CPY_IMM => Ok((
-                Opcode::RegOps(RegOps::CPY),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            LDA_IMM => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            LDX_IMM => Ok((
-                Opcode::Store(Store::LDX),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            LDY_IMM => Ok((
-                Opcode::Store(Store::LDY),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            ADC_IMM => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            EOR_IMM => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            AND_IMM => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            ORA_IMM => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::Immediate(self.loadu8_pc_incr()),
-            )),
-            CMP_ABSX => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            CMP_ABSY => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
-            )),
-            DEC_ZPX => Ok((
-                Opcode::Math(Math::DEC),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            DEC_ABS => Ok((
-                Opcode::Math(Math::DEC),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            DEC_ZP => Ok((
-                Opcode::Math(Math::DEC),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            CMP_ZPX => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
+            SBC_ZPX => {
+                Ok((Op::Math(Math::SBC), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            SBC_ZP => {
+                Ok((Op::Math(Math::SBC), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            INC_ZPX => {
+                Ok((Op::Math(Math::INC), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            INC_ABS => {
+                Ok((Op::Math(Math::INC), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            INC_ZP => {
+                Ok((Op::Math(Math::INC), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            CPX_ABS => {
+                Ok((Op::Reg(Reg::CPX), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            CPX_ZP => {
+                Ok((Op::Reg(Reg::CPX), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            CPX_IMM => {
+                Ok((Op::Reg(Reg::CPX), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            SBC_IMM => {
+                Ok((Op::Math(Math::SBC), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            CMP_IMM => {
+                Ok((Op::Reg(Reg::CMP), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            CPY_IMM => {
+                Ok((Op::Reg(Reg::CPY), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            LDA_IMM => {
+                Ok((Op::Store(Store::LDA), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            LDX_IMM => {
+                Ok((Op::Store(Store::LDX), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            LDY_IMM => {
+                Ok((Op::Store(Store::LDY), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            ADC_IMM => {
+                Ok((Op::Math(Math::ADC), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            EOR_IMM => {
+                Ok((Op::Bit(Bit::EOR), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            AND_IMM => {
+                Ok((Op::Bit(Bit::AND), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            ORA_IMM => {
+                Ok((Op::Bit(Bit::ORA), AddrMode::Imm(self.loadu8_pc_up())))
+            }
+            CMP_ABSX => {
+                Ok((Op::Reg(Reg::CMP), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            CMP_ABSY => {
+                Ok((Op::Reg(Reg::CMP), AddrMode::AbsY(self.loadu16_pc_up())))
+            }
+            DEC_ZPX => {
+                Ok((Op::Math(Math::DEC), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            DEC_ABS => {
+                Ok((Op::Math(Math::DEC), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            DEC_ZP => {
+                Ok((Op::Math(Math::DEC), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            CMP_ZPX => {
+                Ok((Op::Reg(Reg::CMP), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
             CMP_INDY => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Reg(Reg::CMP),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
-            CMP_ABS => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            CMP_ZP => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            CPY_ZP => Ok((
-                Opcode::RegOps(RegOps::CPY),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            CMP_ABS => {
+                Ok((Op::Reg(Reg::CMP), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            CMP_ZP => {
+                Ok((Op::Reg(Reg::CMP), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            CPY_ZP => {
+                Ok((Op::Reg(Reg::CPY), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             CMP_INDX => Ok((
-                Opcode::RegOps(RegOps::CMP),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Reg(Reg::CMP),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
             LDA_ABSX => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
+                Op::Store(Store::LDA),
+                AddrMode::AbsX(self.loadu16_pc_up()),
             )),
             LDA_ABSY => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
+                Op::Store(Store::LDA),
+                AddrMode::AbsY(self.loadu16_pc_up()),
             )),
-            LDA_ZPX => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
+            LDA_ZPX => {
+                Ok((Op::Store(Store::LDA), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
             LDA_INDY => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Store(Store::LDA),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
-            LDA_ABS => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            LDA_ZP => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            LDA_ABS => {
+                Ok((Op::Store(Store::LDA), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            LDA_ZP => {
+                Ok((Op::Store(Store::LDA), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             LDA_INDX => Ok((
-                Opcode::Store(Store::LDA),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Store(Store::LDA),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
             LDY_ABSX => Ok((
-                Opcode::Store(Store::LDY),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
+                Op::Store(Store::LDY),
+                AddrMode::AbsX(self.loadu16_pc_up()),
             )),
-            LDY_ZPX => Ok((
-                Opcode::Store(Store::LDY),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            LDX_ABS => Ok((
-                Opcode::Store(Store::LDX),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            LDY_ABS => Ok((
-                Opcode::Store(Store::LDY),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            LDX_ZP => Ok((
-                Opcode::Store(Store::LDX),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            LDY_ZP => Ok((
-                Opcode::Store(Store::LDY),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            LDY_ZPX => {
+                Ok((Op::Store(Store::LDY), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            LDX_ABS => {
+                Ok((Op::Store(Store::LDX), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            LDY_ABS => {
+                Ok((Op::Store(Store::LDY), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            LDX_ZP => {
+                Ok((Op::Store(Store::LDX), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            LDY_ZP => {
+                Ok((Op::Store(Store::LDY), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             STA_ABSX => Ok((
-                Opcode::Store(Store::STA),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
+                Op::Store(Store::STA),
+                AddrMode::AbsX(self.loadu16_pc_up()),
             )),
             STA_ABSY => Ok((
-                Opcode::Store(Store::STA),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
+                Op::Store(Store::STA),
+                AddrMode::AbsY(self.loadu16_pc_up()),
             )),
-            STA_ZPX => Ok((
-                Opcode::Store(Store::STA),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
+            STA_ZPX => {
+                Ok((Op::Store(Store::STA), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
             STA_INDY => Ok((
-                Opcode::Store(Store::STA),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Store(Store::STA),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
-            STA_ABS => Ok((
-                Opcode::Store(Store::STA),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            STA_ZP => Ok((
-                Opcode::Store(Store::STA),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            STA_ABS => {
+                Ok((Op::Store(Store::STA), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            STA_ZP => {
+                Ok((Op::Store(Store::STA), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             STA_INDX => Ok((
-                Opcode::Store(Store::STA),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Store(Store::STA),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
-            STX_ABS => Ok((
-                Opcode::Store(Store::STX),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            STX_ZP => Ok((
-                Opcode::Store(Store::STX),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            STY_ABS => Ok((
-                Opcode::Store(Store::STY),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            STY_ZPX => Ok((
-                Opcode::Store(Store::STY),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            STY_ZP => Ok((
-                Opcode::Store(Store::STY),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            ROR_ABSX => Ok((
-                Opcode::BitOp(BitOp::ROR),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            ROR_ZPX => Ok((
-                Opcode::BitOp(BitOp::ROR),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            ADC_ABSX => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            ADC_ABSY => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
-            )),
-            ADC_ZPX => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
+            STX_ABS => {
+                Ok((Op::Store(Store::STX), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            STX_ZP => {
+                Ok((Op::Store(Store::STX), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            STY_ABS => {
+                Ok((Op::Store(Store::STY), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            STY_ZPX => {
+                Ok((Op::Store(Store::STY), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            STY_ZP => {
+                Ok((Op::Store(Store::STY), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            ROR_ABSX => {
+                Ok((Op::Bit(Bit::ROR), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            ROR_ZPX => {
+                Ok((Op::Bit(Bit::ROR), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            ADC_ABSX => {
+                Ok((Op::Math(Math::ADC), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            ADC_ABSY => {
+                Ok((Op::Math(Math::ADC), AddrMode::AbsY(self.loadu16_pc_up())))
+            }
+            ADC_ZPX => {
+                Ok((Op::Math(Math::ADC), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
             ADC_INDY => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Math(Math::ADC),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
-            ADC_ABS => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            ADC_ZP => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            ADC_ABS => {
+                Ok((Op::Math(Math::ADC), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            ADC_ZP => {
+                Ok((Op::Math(Math::ADC), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             ADC_INDX => Ok((
-                Opcode::Math(Math::ADC),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Math(Math::ADC),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
-            ROR_ABS => Ok((
-                Opcode::BitOp(BitOp::ROR),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            ROR_ZP => Ok((
-                Opcode::BitOp(BitOp::ROR),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            LSR_ABSX => Ok((
-                Opcode::BitOp(BitOp::LSR),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            EOR_ABSX => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            EOR_ABSY => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
-            )),
-            EOR_ZPX => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
+            ROR_ABS => {
+                Ok((Op::Bit(Bit::ROR), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            ROR_ZP => {
+                Ok((Op::Bit(Bit::ROR), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            LSR_ABSX => {
+                Ok((Op::Bit(Bit::LSR), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            EOR_ABSX => {
+                Ok((Op::Bit(Bit::EOR), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            EOR_ABSY => {
+                Ok((Op::Bit(Bit::EOR), AddrMode::AbsY(self.loadu16_pc_up())))
+            }
+            EOR_ZPX => {
+                Ok((Op::Bit(Bit::EOR), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
             EOR_INDY => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Bit(Bit::EOR),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
-            EOR_ABS => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            EOR_ZP => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            EOR_ABS => {
+                Ok((Op::Bit(Bit::EOR), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            EOR_ZP => {
+                Ok((Op::Bit(Bit::EOR), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             EOR_INDX => Ok((
-                Opcode::BitOp(BitOp::EOR),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Bit(Bit::EOR),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
-            LSR_ZPX => Ok((
-                Opcode::BitOp(BitOp::LSR),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            LSR_ABS => Ok((
-                Opcode::BitOp(BitOp::LSR),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            LSR_ZP => Ok((
-                Opcode::BitOp(BitOp::LSR),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            JMP_ABS => Ok((
-                Opcode::Jump(Jump::JMP),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            ROL_ABSX => Ok((
-                Opcode::BitOp(BitOp::ROL),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            AND_ABSX => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            AND_ABSY => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
-            )),
-            ROL_ZPX => Ok((
-                Opcode::BitOp(BitOp::ROL),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
+            LSR_ZPX => {
+                Ok((Op::Bit(Bit::LSR), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            LSR_ABS => {
+                Ok((Op::Bit(Bit::LSR), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            LSR_ZP => {
+                Ok((Op::Bit(Bit::LSR), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            JMP_ABS => {
+                Ok((Op::Jump(Jump::JMP), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            ROL_ABSX => {
+                Ok((Op::Bit(Bit::ROL), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            AND_ABSX => {
+                Ok((Op::Bit(Bit::AND), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            AND_ABSY => {
+                Ok((Op::Bit(Bit::AND), AddrMode::AbsY(self.loadu16_pc_up())))
+            }
+            ROL_ZPX => {
+                Ok((Op::Bit(Bit::ROL), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
             AND_INDY => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Bit(Bit::AND),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
-            ROL_ABS => Ok((
-                Opcode::BitOp(BitOp::ROL),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            AND_ABS => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            BIT_ABS => Ok((
-                Opcode::BitOp(BitOp::BIT),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            BIT_ZP => Ok((
-                Opcode::BitOp(BitOp::BIT),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            ROL_ZP => Ok((
-                Opcode::BitOp(BitOp::ROL),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            AND_ZP => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            ROL_ABS => {
+                Ok((Op::Bit(Bit::ROL), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            AND_ABS => {
+                Ok((Op::Bit(Bit::AND), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            BIT_ABS => {
+                Ok((Op::Bit(Bit::BIT), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            BIT_ZP => {
+                Ok((Op::Bit(Bit::BIT), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            ROL_ZP => {
+                Ok((Op::Bit(Bit::ROL), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            AND_ZP => {
+                Ok((Op::Bit(Bit::AND), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             AND_INDX => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Bit(Bit::AND),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
-            ASL_ABSX => Ok((
-                Opcode::BitOp(BitOp::ASL),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            ORA_ABSX => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::AbsX(self.loadu16_pc_incr()),
-            )),
-            ORA_ABSY => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::AbsY(self.loadu16_pc_incr()),
-            )),
-            ORA_ZPX => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
+            ASL_ABSX => {
+                Ok((Op::Bit(Bit::ASL), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            ORA_ABSX => {
+                Ok((Op::Bit(Bit::ORA), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
+            ORA_ABSY => {
+                Ok((Op::Bit(Bit::ORA), AddrMode::AbsY(self.loadu16_pc_up())))
+            }
+            ORA_ZPX => {
+                Ok((Op::Bit(Bit::ORA), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
             ORA_INDY => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::IndirIndexY(self.loadu8_pc_incr()),
+                Op::Bit(Bit::ORA),
+                AddrMode::IndirIndexY(self.loadu8_pc_up()),
             )),
-            ORA_ABS => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            ORA_ZP => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
+            ORA_ABS => {
+                Ok((Op::Bit(Bit::ORA), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            ORA_ZP => {
+                Ok((Op::Bit(Bit::ORA), AddrMode::ZP(self.loadu8_pc_up())))
+            }
             ORA_INDX => Ok((
-                Opcode::BitOp(BitOp::ORA),
-                AddrMode::IndexIndirX(self.loadu8_pc_incr()),
+                Op::Bit(Bit::ORA),
+                AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
-            ASL_ZPX => Ok((
-                Opcode::BitOp(BitOp::ASL),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            ASL_ABS => Ok((
-                Opcode::BitOp(BitOp::ASL),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
-            ASL_ZP => Ok((
-                Opcode::BitOp(BitOp::ASL),
-                AddrMode::ZeroPg(self.loadu8_pc_incr()),
-            )),
-            LDX_ZPY => Ok((
-                Opcode::Store(Store::LDX),
-                AddrMode::ZeroPgY(self.loadu8_pc_incr()),
-            )),
-            STX_ZPY => Ok((
-                Opcode::Store(Store::STX),
-                AddrMode::ZeroPgY(self.loadu8_pc_incr()),
-            )),
-            AND_ZPX => Ok((
-                Opcode::BitOp(BitOp::AND),
-                AddrMode::ZeroPgX(self.loadu8_pc_incr()),
-            )),
-            ROR_ACC => Ok((Opcode::BitOp(BitOp::ROR), AddrMode::Accum)),
-            ASL_ACC => Ok((Opcode::BitOp(BitOp::ASL), AddrMode::Accum)),
-            ROL_ACC => Ok((Opcode::BitOp(BitOp::ROL), AddrMode::Accum)),
-            LSR_ACC => Ok((Opcode::BitOp(BitOp::LSR), AddrMode::Accum)),
-            RTS => Ok((Opcode::Jump(Jump::RTS), AddrMode::Implied)),
-            RTI => Ok((Opcode::Jump(Jump::RTI), AddrMode::Implied)),
-            SED => Ok((Opcode::RegOps(RegOps::SED), AddrMode::Implied)),
-            CLC => Ok((Opcode::RegOps(RegOps::CLC), AddrMode::Implied)),
-            SEC => Ok((Opcode::RegOps(RegOps::SEC), AddrMode::Implied)),
-            CLI => Ok((Opcode::RegOps(RegOps::CLI), AddrMode::Implied)),
-            SEI => Ok((Opcode::RegOps(RegOps::SEI), AddrMode::Implied)),
-            CLV => Ok((Opcode::RegOps(RegOps::CLV), AddrMode::Implied)),
-            CLD => Ok((Opcode::RegOps(RegOps::CLD), AddrMode::Implied)),
-            NOP => Ok((Opcode::System(System::NOP), AddrMode::Implied)),
-            BRK => Ok((Opcode::System(System::BRK), AddrMode::Implied)),
-            TAX => Ok((Opcode::Store(Store::TAX), AddrMode::Implied)),
-            TXA => Ok((Opcode::Store(Store::TXA), AddrMode::Implied)),
-            TAY => Ok((Opcode::Store(Store::TAY), AddrMode::Implied)),
-            TYA => Ok((Opcode::Store(Store::TYA), AddrMode::Implied)),
-            DEX => Ok((Opcode::Math(Math::DEX), AddrMode::Implied)),
-            INX => Ok((Opcode::Math(Math::INX), AddrMode::Implied)),
-            DEY => Ok((Opcode::Math(Math::DEY), AddrMode::Implied)),
-            INY => Ok((Opcode::Math(Math::INY), AddrMode::Implied)),
-            TSX => Ok((Opcode::Store(Store::TSX), AddrMode::Implied)),
-            TXS => Ok((Opcode::Store(Store::TXS), AddrMode::Implied)),
-            PHA => Ok((Opcode::Store(Store::PHA), AddrMode::Implied)),
-            PLA => Ok((Opcode::Store(Store::PLA), AddrMode::Implied)),
-            PHP => Ok((Opcode::Store(Store::PHP), AddrMode::Implied)),
-            PLP => Ok((Opcode::Store(Store::PLP), AddrMode::Implied)),
+            ASL_ZPX => {
+                Ok((Op::Bit(Bit::ASL), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            ASL_ABS => {
+                Ok((Op::Bit(Bit::ASL), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            ASL_ZP => {
+                Ok((Op::Bit(Bit::ASL), AddrMode::ZP(self.loadu8_pc_up())))
+            }
+            LDX_ZPY => {
+                Ok((Op::Store(Store::LDX), AddrMode::ZPY(self.loadu8_pc_up())))
+            }
+            STX_ZPY => {
+                Ok((Op::Store(Store::STX), AddrMode::ZPY(self.loadu8_pc_up())))
+            }
+            AND_ZPX => {
+                Ok((Op::Bit(Bit::AND), AddrMode::ZPX(self.loadu8_pc_up())))
+            }
+            ROR_ACC => Ok((Op::Bit(Bit::ROR), AddrMode::Accum)),
+            ASL_ACC => Ok((Op::Bit(Bit::ASL), AddrMode::Accum)),
+            ROL_ACC => Ok((Op::Bit(Bit::ROL), AddrMode::Accum)),
+            LSR_ACC => Ok((Op::Bit(Bit::LSR), AddrMode::Accum)),
+            RTS => Ok((Op::Jump(Jump::RTS), AddrMode::Impl)),
+            RTI => Ok((Op::Jump(Jump::RTI), AddrMode::Impl)),
+            SED => Ok((Op::Reg(Reg::SED), AddrMode::Impl)),
+            CLC => Ok((Op::Reg(Reg::CLC), AddrMode::Impl)),
+            SEC => Ok((Op::Reg(Reg::SEC), AddrMode::Impl)),
+            CLI => Ok((Op::Reg(Reg::CLI), AddrMode::Impl)),
+            SEI => Ok((Op::Reg(Reg::SEI), AddrMode::Impl)),
+            CLV => Ok((Op::Reg(Reg::CLV), AddrMode::Impl)),
+            CLD => Ok((Op::Reg(Reg::CLD), AddrMode::Impl)),
+            NOP => Ok((Op::Sys(Sys::NOP), AddrMode::Impl)),
+            BRK => Ok((Op::Sys(Sys::BRK), AddrMode::Impl)),
+            TAX => Ok((Op::Store(Store::TAX), AddrMode::Impl)),
+            TXA => Ok((Op::Store(Store::TXA), AddrMode::Impl)),
+            TAY => Ok((Op::Store(Store::TAY), AddrMode::Impl)),
+            TYA => Ok((Op::Store(Store::TYA), AddrMode::Impl)),
+            DEX => Ok((Op::Math(Math::DEX), AddrMode::Impl)),
+            INX => Ok((Op::Math(Math::INX), AddrMode::Impl)),
+            DEY => Ok((Op::Math(Math::DEY), AddrMode::Impl)),
+            INY => Ok((Op::Math(Math::INY), AddrMode::Impl)),
+            TSX => Ok((Op::Store(Store::TSX), AddrMode::Impl)),
+            TXS => Ok((Op::Store(Store::TXS), AddrMode::Impl)),
+            PHA => Ok((Op::Store(Store::PHA), AddrMode::Impl)),
+            PLA => Ok((Op::Store(Store::PLA), AddrMode::Impl)),
+            PHP => Ok((Op::Store(Store::PHP), AddrMode::Impl)),
+            PLP => Ok((Op::Store(Store::PLP), AddrMode::Impl)),
             BVS => Ok((
-                Opcode::Branch(Branch::BVS),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BVS),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
             BVC => Ok((
-                Opcode::Branch(Branch::BVC),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BVC),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
             BMI => Ok((
-                Opcode::Branch(Branch::BMI),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BMI),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
             BPL => Ok((
-                Opcode::Branch(Branch::BPL),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BPL),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
             BNE => Ok((
-                Opcode::Branch(Branch::BNE),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BNE),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
             BEQ => Ok((
-                Opcode::Branch(Branch::BEQ),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BEQ),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
             BCS => Ok((
-                Opcode::Branch(Branch::BCS),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BCS),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
             BCC => Ok((
-                Opcode::Branch(Branch::BCC),
-                AddrMode::Relative(self.loadu8_pc_incr() as i8),
+                Op::Branch(Branch::BCC),
+                AddrMode::Rel(self.loadu8_pc_up() as i8),
             )),
-            JSR => Ok((
-                Opcode::Jump(Jump::JSR),
-                AddrMode::Abs(self.loadu16_pc_incr()),
-            )),
+            JSR => {
+                Ok((Op::Jump(Jump::JSR), AddrMode::Abs(self.loadu16_pc_up())))
+            }
             JMP_IND => Ok((
-                Opcode::Jump(Jump::JMP),
-                AddrMode::JmpIndir(self.loadu16_pc_incr()),
+                Op::Jump(Jump::JMP),
+                AddrMode::JmpIndir(self.loadu16_pc_up()),
             )),
-            _ => Err(InvalidOpcode::DoesntExist(
-                "Unsupported op".to_string(),
-                op,
-            )),
+            _ => Err(InvalidOp::DoesntExist("Unsupported op".to_string(), op)),
         }
     }
 }
