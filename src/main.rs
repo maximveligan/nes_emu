@@ -1,8 +1,12 @@
+#[macro_use]
+extern crate nom;
+
 mod apu;
 mod cpu;
 mod cpu_const;
 mod mmu;
 mod ppu;
+mod rom;
 
 use cpu::Cpu;
 

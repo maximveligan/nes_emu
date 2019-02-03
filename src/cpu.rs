@@ -220,18 +220,20 @@ fn check_pb(base: u16, base_offset: u16) -> bool {
 
 impl Cpu {
     pub fn new() -> Cpu {
-        Cpu {
+        let mut cpu = Cpu {
             cycle_count: 0,
             regs: Registers {
                 acc: 0,
-                x: 1,
-                y: 2,
+                x: 0,
+                y: 0,
                 pc: ProgramCounter::new(RESET_VEC),
-                sp: 0,
+                sp: 0xFD,
                 flags: 0,
             },
             mem: MemManageUnit::new(),
-        }
+        };
+        cpu.set_flag(0b00100000, true);
+        cpu
     }
 
     fn incr_cc(&mut self) {
