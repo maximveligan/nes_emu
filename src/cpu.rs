@@ -227,7 +227,7 @@ impl Cpu {
                 acc: 0,
                 x: 0,
                 y: 0,
-                pc: ProgramCounter::new(RESET_VEC),
+                pc: ProgramCounter::new(0),
                 sp: 0xFD,
                 flags: 0,
             },
@@ -248,88 +248,55 @@ impl Cpu {
                     self.incr_cc();
                 }
                 match mode {
-                    AddrDT::Addr(addr) => match op {
-                        // Operandless mirrors (those using the acc addr mode)
-                        Op::Bit(Bit::ROR) => self.ror_addr(addr),
-                        Op::Bit(Bit::ASL) => self.asl_addr(addr),
-                        Op::Bit(Bit::ROL) => self.rol_addr(addr),
-                        Op::Bit(Bit::LSR) => self.lsr_addr(addr),
+                    AddrDT::Addr(addr) => {
+                        let tmp = self.mem.load_u8(addr);
+                        match op {
+                            // Operandless mirrors (those using the acc addr)
+                            Op::Bit(Bit::ROR) => self.ror_addr(addr),
+                            Op::Bit(Bit::ASL) => self.asl_addr(addr),
+                            Op::Bit(Bit::ROL) => self.rol_addr(addr),
+                            Op::Bit(Bit::LSR) => self.lsr_addr(addr),
 
-                        // Imm mirrors
-                        Op::Reg(Reg::CPX) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.cpx(tmp);
-                        }
-                        Op::Reg(Reg::CMP) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.cmp(tmp);
-                        }
-                        Op::Reg(Reg::CPY) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.cpy(tmp);
-                        }
-                        Op::Math(Math::SBC) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.sbc(tmp);
-                        }
-                        Op::Math(Math::ADC) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.adc(tmp);
-                        }
-                        Op::Store(Store::LDA) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.lda(tmp);
-                        }
-                        Op::Store(Store::LDX) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.ldx(tmp);
-                        }
-                        Op::Store(Store::LDY) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.ldy(tmp);
-                        }
-                        Op::Bit(Bit::EOR) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.eor(tmp);
-                        }
-                        Op::Bit(Bit::AND) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.and(tmp);
-                        }
-                        Op::Bit(Bit::ORA) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.ora(tmp);
-                        }
+                            // Imm mirrors
+                            Op::Reg(Reg::CPX) => self.cpx(tmp),
+                            Op::Reg(Reg::CMP) => self.cmp(tmp),
+                            Op::Reg(Reg::CPY) => self.cpy(tmp),
+                            Op::Math(Math::SBC) => self.sbc(tmp),
+                            Op::Math(Math::ADC) => self.adc(tmp),
+                            Op::Store(Store::LDA) => self.lda(tmp),
+                            Op::Store(Store::LDX) => self.ldx(tmp),
+                            Op::Store(Store::LDY) => self.ldy(tmp),
+                            Op::Bit(Bit::EOR) => self.eor(tmp),
+                            Op::Bit(Bit::AND) => self.and(tmp),
+                            Op::Bit(Bit::ORA) => self.ora(tmp),
 
-                        // Ops without IMP and ACC support
-                        Op::Bit(Bit::BIT) => {
-                            let tmp = self.mem.load_u8(addr);
-                            self.bit(tmp);
+                            // Ops without IMP and ACC support
+                            Op::Bit(Bit::BIT) => self.bit(tmp),
+                            Op::Math(Math::DEC) => self.dec(addr),
+                            Op::Math(Math::INC) => self.inc(addr),
+                            Op::Jump(Jump::JMP) => self.regs.pc.set_addr(addr),
+                            Op::Jump(Jump::JSR) => {
+                                self.regs.pc.add_signed(-1);
+                                self.push_pc();
+                            }
+                            Op::Store(Store::STA) => {
+                                let tmp = self.regs.acc;
+                                self.mem.store_u8(addr, tmp);
+                            }
+                            Op::Store(Store::STX) => {
+                                let tmp = self.regs.x;
+                                self.mem.store_u8(addr, tmp);
+                            }
+                            Op::Store(Store::STY) => {
+                                let tmp = self.regs.y;
+                                self.mem.store_u8(addr, tmp);
+                            }
+                            err => panic!(
+                                "Got {:?} as an opcode that needs an address",
+                                err
+                            ),
                         }
-                        Op::Math(Math::DEC) => self.dec(addr),
-                        Op::Math(Math::INC) => self.inc(addr),
-                        Op::Jump(Jump::JMP) => self.regs.pc.set_addr(addr),
-                        Op::Jump(Jump::JSR) => {
-                            self.regs.pc.add_signed(-1);
-                            self.push_pc();
-                        }
-                        Op::Store(Store::STA) => {
-                            let tmp = self.regs.acc;
-                            self.mem.store_u8(addr, tmp);
-                        }
-                        Op::Store(Store::STX) => {
-                            let tmp = self.regs.x;
-                            self.mem.store_u8(addr, tmp);
-                        }
-                        Op::Store(Store::STY) => {
-                            let tmp = self.regs.y;
-                            self.mem.store_u8(addr, tmp);
-                        }
-                        err => panic!(
-                            "Got {:?} as an opcode that needs an address",
-                            err
-                        ),
-                    },
+                    }
 
                     // These are all the immediate opcodes
                     AddrDT::Const(c) => {
