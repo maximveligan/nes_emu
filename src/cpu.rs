@@ -2,6 +2,7 @@ use cpu_const::*;
 use mmu::MemManageUnit;
 use std::ops::Add;
 
+#[derive(Debug)]
 pub struct Registers {
     pub acc: u8,
     pub x: u8,
@@ -692,6 +693,8 @@ impl Cpu {
         let byte = self.loadu8_pc_up();
         self.cycle_count += CYCLES[byte as usize];
         let (op, addr_mode) = self.decode_op(byte)?;
+        println!("{:?}, {:?}", op, addr_mode);
+        println!("{:?}", self.regs);
         let addr_data = addr_mode.address_mem(&self);
         self.execute_op(op, addr_data);
         Ok(())

@@ -6,7 +6,7 @@ const PRG_RAM_PAGE_SIZE: usize = 8192;
 const CHR_ROM_PAGE_SIZE: usize = 8192;
 const TRAINER_LEN: usize = 512;
 
-fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
+pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
     do_parse!(src,
         tag!(b"NES\x1A") >>
         prg_pgs: be_u8 >>
@@ -55,7 +55,8 @@ fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
 }
 
 // Almost no roms use flag10 or flag9, as such pulled as u8
-struct Header {
+#[derive(Debug)]
+pub struct Header {
     rom_type: RomType,
     mapper: u8,
     screen: ScreenMode,
@@ -66,20 +67,23 @@ struct Header {
     flag10: u8,
 }
 
-struct Rom {
-    prg_rom: Vec<u8>,
-    chr_rom: Vec<u8>,
+#[derive(Debug)]
+pub struct Rom {
+    pub prg_rom: Vec<u8>,
+    pub chr_rom: Vec<u8>,
     prg_ram_size: usize,
-    header: Header,
+    pub header: Header,
 }
 
-enum ScreenMode {
+#[derive(Debug)]
+pub enum ScreenMode {
     FourScreen,
     Vertical,
     Horizontal
 }
 
-enum RomType {
+#[derive(Debug)]
+pub enum RomType {
     INes,
     Nes2,
 }
