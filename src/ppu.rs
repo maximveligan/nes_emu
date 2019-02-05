@@ -1,6 +1,16 @@
+const SCREEN_WIDTH: usize = 256;
+const SCREEN_HEIGHT: usize = 240;
+const VRAM_SIZE: usize = 0x4000;
+
 pub struct Ppu {
     pub regs: PRegisters,
+    vram: Vram,
+
+    // multiply by 3 to account for r g b
+    screen_buff: [[u8; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
 }
+
+struct Vram([u8; VRAM_SIZE]);
 
 impl Ppu {
     pub fn new() -> Ppu {
@@ -16,6 +26,8 @@ impl Ppu {
                 ppudata: 0,
                 oamdma: 0,
             },
+            vram: Vram([0; 0x4000]),
+            screen_buff: [[0; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
         }
     }
 

@@ -10,6 +10,7 @@ mod ppu;
 mod rom;
 
 use cpu::Cpu;
+use rom::RomType;
 use rom::parse_rom;
 use std::fs::File;
 use std::env;
@@ -49,6 +50,14 @@ fn main() {
             return;
         }
     };
+
+    match rom.header.rom_type {
+        RomType::Nes2 => {
+            println!("Unsupported rom type NES2.0!");
+            return;
+        }
+        _ => (),
+    }
 
     let mapper = Mapper::from_rom(rom);
     let mut cpu = Cpu::new(mapper);

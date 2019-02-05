@@ -58,7 +58,7 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
 
 // Almost no roms use flag10 or flag9, as such pulled as u8
 pub struct Header {
-    rom_type: RomType,
+    pub rom_type: RomType,
     pub mapper: u8,
     screen: ScreenMode,
     pub save_ram: bool,
