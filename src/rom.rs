@@ -7,50 +7,51 @@ const CHR_ROM_PAGE_SIZE: usize = 8192;
 const TRAINER_LEN: usize = 512;
 
 pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
-    do_parse!(src,
-        tag!(b"NES\x1A") >>
-        prg_pgs: be_u8 >>
-        chr_pgs: be_u8 >>
-        flag6: be_u8 >>
-        flag7: be_u8 >>
-        prg_ram_pgs: be_u8 >>
-        flag9: be_u8 >>
-        flag10: be_u8 >>
-        take!(5) >> 
-        cond!((flag6 & 0b100) == 1, take!(TRAINER_LEN)) >>
-        prg_rom: take!(prg_pgs as usize * PRG_ROM_PAGE_SIZE) >>
-        chr_rom: take!(chr_pgs as usize * CHR_ROM_PAGE_SIZE) >>
-        ( Rom {
-            header: Header {
-                mapper: flag7 & 0xF0 | ((flag6 & 0xF0) >> 4),
-                screen: if flag6 & 0b1000 == 1 {
-                    ScreenMode::FourScreen
-                } else {
-                    if flag6 & 0b01 == 1 {
-                        ScreenMode::Vertical
+    do_parse!(
+        src,
+        tag!(b"NES\x1A")
+            >> prg_pgs: be_u8
+            >> chr_pgs: be_u8
+            >> flag6: be_u8
+            >> flag7: be_u8
+            >> prg_ram_pgs: be_u8
+            >> flag9: be_u8
+            >> flag10: be_u8
+            >> take!(5)
+            >> cond!((flag6 & 0b100) == 1, take!(TRAINER_LEN))
+            >> prg_rom: take!(prg_pgs as usize * PRG_ROM_PAGE_SIZE)
+            >> chr_rom: take!(chr_pgs as usize * CHR_ROM_PAGE_SIZE)
+            >> (Rom {
+                header: Header {
+                    mapper: flag7 & 0xF0 | ((flag6 & 0xF0) >> 4),
+                    screen: if flag6 & 0b1000 == 1 {
+                        ScreenMode::FourScreen
                     } else {
-                        ScreenMode::Horizontal
-                    }
+                        if flag6 & 0b01 == 1 {
+                            ScreenMode::Vertical
+                        } else {
+                            ScreenMode::Horizontal
+                        }
+                    },
+                    save_ram: flag6 & 0b10 == 1,
+                    vs_unisystem: flag7 & 0b01 == 1,
+                    playchoice10: flag7 & 0b10 == 1,
+                    flag9: flag9,
+                    flag10: flag10,
+                    rom_type: if flag7 & 0b1100 == 0b1000 {
+                        RomType::Nes2
+                    } else {
+                        RomType::INes
+                    },
                 },
-                save_ram: flag6 & 0b10 == 1,
-                vs_unisystem: flag7 & 0b01 == 1,
-                playchoice10: flag7 & 0b10 == 1,
-                flag9: flag9,
-                flag10: flag10,
-                rom_type: if flag7 & 0b1100 == 0b1000 {
-                    RomType::Nes2
+                prg_rom: prg_rom.into(),
+                chr_rom: chr_rom.into(),
+                prg_ram_size: if prg_ram_pgs == 0 {
+                    PRG_RAM_PAGE_SIZE
                 } else {
-                    RomType::INes
-                }
-            },
-            prg_rom: prg_rom.into(),
-            chr_rom: chr_rom.into(),
-            prg_ram_size: if prg_ram_pgs == 0 {
-                PRG_RAM_PAGE_SIZE
-            } else {
-                PRG_RAM_PAGE_SIZE * prg_ram_pgs as usize
-            }
-        } )
+                    PRG_RAM_PAGE_SIZE * prg_ram_pgs as usize
+                },
+            })
     )
 }
 
@@ -58,9 +59,9 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
 #[derive(Debug)]
 pub struct Header {
     rom_type: RomType,
-    mapper: u8,
+    pub mapper: u8,
     screen: ScreenMode,
-    save_ram: bool,
+    pub save_ram: bool,
     vs_unisystem: bool,
     playchoice10: bool,
     flag9: u8,
@@ -79,7 +80,7 @@ pub struct Rom {
 pub enum ScreenMode {
     FourScreen,
     Vertical,
-    Horizontal
+    Horizontal,
 }
 
 #[derive(Debug)]

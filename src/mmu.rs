@@ -1,5 +1,6 @@
 use ppu::Ppu;
 use apu::Apu;
+use mapper::Mapper;
 
 const WRAM_START: u16 = 0x0000;
 const WRAM_END: u16 = 0x1FFF;
@@ -14,7 +15,7 @@ pub struct MemManageUnit {
     pub ppu: Ppu,
     pub apu: Apu,
     pub ram: Ram,
-    pub rom: Rom,
+    pub mapper: Mapper,
 }
 
 pub struct Ram([u8; 0xFFF]);
@@ -33,21 +34,13 @@ impl Ram {
     }
 }
 
-pub struct Rom([u8; 0xFFF]);
-
-impl Rom {
-    pub fn new() -> Rom {
-        Rom { 0: [0; 0xFFF] }
-    }
-}
-
 impl MemManageUnit {
-    pub fn new() -> MemManageUnit {
+    pub fn new(mapper: Mapper) -> MemManageUnit {
         MemManageUnit {
             ppu: Ppu::new(),
             apu: Apu(),
             ram: Ram::new(),
-            rom: Rom::new(),
+            mapper: mapper,
         }
     }
 
@@ -58,20 +51,23 @@ impl MemManageUnit {
             0x4016 => unimplemented!("Player1 controller"),
             0x4017 => unimplemented!("Player2 controller"),
             APU_START...APU_END => self.apu.store(address - 0x4000, val),
-            ROM_START...ROM_END => unimplemented!("ROM reads/writes"),
-            _ => unimplemented!("Undefined load"),
+            ROM_START...ROM_END => println!(
+                "Warning! Attempt to write to rom at address {:X}",
+                address
+            ),
+            _ => panic!("Undefined load"),
         }
     }
 
     pub fn load_u8(&self, address: u16) -> u8 {
         match address {
-            0x0000...0x1FFF => self.ram.load(address & 0x7FF),
-            0x2000...0x3FFF => self.ppu.load((address - 0x2000) % 8),
+            WRAM_START...WRAM_END => self.ram.load(address & 0x7FF),
+            PPU_START...PPU_END => self.ppu.load((address - 0x2000) % 8),
             0x4016 => unimplemented!("Player1 controller"),
             0x4016 => unimplemented!("Player1 controller"),
-            0x4000...0x401F => self.apu.load(address - 0x4000),
-            0x4020...0xFFFF => unimplemented!("ROM reads/writes"),
-            _ => unimplemented!("Undefined load"),
+            APU_START...APU_END => self.apu.load(address - 0x4000),
+            ROM_START...ROM_END => self.mapper.load(address),
+            _ => panic!("Undefined load"),
         }
     }
 

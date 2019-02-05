@@ -1,6 +1,7 @@
 use cpu_const::*;
 use mmu::MemManageUnit;
 use std::ops::Add;
+use mapper::Mapper;
 
 #[derive(Debug)]
 pub struct Registers {
@@ -220,7 +221,7 @@ fn check_pb(base: u16, base_offset: u16) -> bool {
 }
 
 impl Cpu {
-    pub fn new() -> Cpu {
+    pub fn new(mapper: Mapper) -> Cpu {
         let mut cpu = Cpu {
             cycle_count: 0,
             regs: Registers {
@@ -231,7 +232,7 @@ impl Cpu {
                 sp: 0xFD,
                 flags: 0,
             },
-            mem: MemManageUnit::new(),
+            mem: MemManageUnit::new(mapper),
         };
         cpu.set_flag(0b00100000, true);
         cpu
