@@ -14,7 +14,6 @@ use rom::parse_rom;
 use std::fs::File;
 use std::env;
 use std::io::Read;
-use nom::IResult;
 use mapper::Mapper;
 
 fn main() {
@@ -51,7 +50,7 @@ fn main() {
         }
     };
 
-    let mut mapper = Mapper::from_rom(rom);
+    let mapper = Mapper::from_rom(rom);
     let mut cpu = Cpu::new(mapper);
     loop {
         match cpu.step() {

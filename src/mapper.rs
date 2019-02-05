@@ -2,8 +2,7 @@ use rom::Rom;
 
 const UNMIRRORED_MASK: usize = 0x7FFF;
 const MIRRORED_MASK: usize = 0x3FFF;
-const NROM_PRG_ROM_START1: u16 = 0x8000;
-const NROM_PRG_ROM_START2: u16 = 0xC000;
+const NROM_PRG_ROM_START: u16 = 0x8000;
 
 const SIXTEEN_KB: usize = 16384;
 
@@ -11,7 +10,7 @@ pub enum Mapper {
     Nrom(Nrom),
 }
 
-struct Nrom {
+pub struct Nrom {
     mirrored: bool,
     rom: Rom,
 }
@@ -25,7 +24,7 @@ impl Nrom {
     }
 
     fn load(&self, address: u16) -> u8 {
-        if address < NROM_PRG_ROM_START1 {
+        if address < NROM_PRG_ROM_START {
             0
         } else if self.mirrored {
             self.rom.prg_rom[address as usize & MIRRORED_MASK]
@@ -35,7 +34,10 @@ impl Nrom {
     }
 
     fn store(&mut self, address: u16, val: u8) {
-        println!("Warning! Cannot store to NROM! {:X}", address);
+        println!(
+            "Warning! Cannot store to NROM! Addr {:X} Val {}",
+            address, val
+        );
     }
 }
 
@@ -53,9 +55,9 @@ impl Mapper {
         }
     }
 
-    pub fn store(&self, addres: u16, val: u8) {
+    pub fn store(&mut self, address: u16, val: u8) {
         match *self {
-            Mapper::Nrom(ref rom) => unimplemented!(),
+            Mapper::Nrom(ref mut nrom) => nrom.store(address, val),
         }
     }
 }

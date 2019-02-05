@@ -145,6 +145,8 @@ pub const ASL_ZP: u8 = 0x06;
 pub const ORA_ZP: u8 = 0x05;
 pub const ORA_INDX: u8 = 0x01;
 pub const BRK: u8 = 0x00;
+pub const DMA_ADDR: u16 = 0x4014;
+pub const OAM_DATA: u16 = 0x2004;
 
 pub static CYCLES: [u8; 256] = [
     7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6, 2, 5, 2, 8, 4, 4, 6, 6, 2,

@@ -1,7 +1,6 @@
 use cpu_const::*;
 use std::fmt;
 use mmu::MemManageUnit;
-use std::ops::Add;
 use mapper::Mapper;
 
 pub struct Registers {
@@ -268,6 +267,26 @@ impl Cpu {
         self.cycle_count += 1;
     }
 
+    fn write_dma(&mut self, high_nyb: u8) {
+        // TODO: NES adds 1 cycle if CPU is on an odd CPU cycle, add logic in
+        // CPU to track if currently cycle is even or odd
+        self.incr_cc();
+        let page_num = (high_nyb as u16) << 8;
+        for address in page_num..page_num + 0xFF {
+            let tmp = self.mem.load_u8(address);
+            self.store_u8(OAM_DATA, tmp);
+            self.cycle_count += 2;
+        }
+    }
+
+    fn store_u8(&mut self, addr: u16, val: u8) {
+        if addr == DMA_ADDR {
+            self.write_dma(val);
+        } else {
+            self.mem.store_u8(addr, val);
+        }
+    }
+
     fn execute_op(&mut self, op: Op, addr_mode: Option<(AddrDT, bool)>) {
         match addr_mode {
             Some((mode, pb_crossed)) => {
@@ -308,15 +327,15 @@ impl Cpu {
                             }
                             Op::Store(Store::STA) => {
                                 let tmp = self.regs.acc;
-                                self.mem.store_u8(addr, tmp);
+                                self.store_u8(addr, tmp);
                             }
                             Op::Store(Store::STX) => {
                                 let tmp = self.regs.x;
-                                self.mem.store_u8(addr, tmp);
+                                self.store_u8(addr, tmp);
                             }
                             Op::Store(Store::STY) => {
                                 let tmp = self.regs.y;
-                                self.mem.store_u8(addr, tmp);
+                                self.store_u8(addr, tmp);
                             }
                             err => panic!(
                                 "Got {:?} as an opcode that needs an address",
@@ -538,7 +557,7 @@ impl Cpu {
             Cpu::get_ror(self.get_flag(CARRY), self.mem.load_u8(addr));
         self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
-        self.mem.store_u8(addr, tmp);
+        self.store_u8(addr, tmp);
     }
 
     fn get_ror(carry_flag: bool, val: u8) -> (u8, bool) {
@@ -557,7 +576,7 @@ impl Cpu {
             Cpu::get_rol(self.get_flag(CARRY), self.mem.load_u8(addr));
         self.set_flag(CARRY, n_flag);
         self.set_zero_neg(tmp);
-        self.mem.store_u8(addr, tmp);
+        self.store_u8(addr, tmp);
     }
 
     fn get_rol(carry_flag: bool, val: u8) -> (u8, bool) {
@@ -577,7 +596,7 @@ impl Cpu {
         self.set_flag(CARRY, (val >> 7) != 0);
         let tmp = val << 1;
         self.set_zero_neg(tmp);
-        self.mem.store_u8(addr, val);
+        self.store_u8(addr, val);
     }
 
     fn lsr_acc(&mut self) {
@@ -593,7 +612,7 @@ impl Cpu {
         self.set_flag(CARRY, (val & 0b01) != 0);
         let tmp = val >> 1;
         self.set_zero_neg(tmp);
-        self.mem.store_u8(addr, val);
+        self.store_u8(addr, val);
     }
 
     fn cpx(&mut self, val: u8) {
@@ -634,17 +653,18 @@ impl Cpu {
     fn dec(&mut self, addr: u16) {
         let val: u8 = self.mem.load_u8(addr).wrapping_sub(1);
         self.set_zero_neg(val);
-        self.mem.store_u8(addr, val);
+        self.store_u8(addr, val);
     }
 
     fn inc(&mut self, addr: u16) {
         let val: u8 = self.mem.load_u8(addr).wrapping_add(1);
         self.set_zero_neg(val);
-        self.mem.store_u8(addr, val);
+        self.store_u8(addr, val);
     }
 
     fn push(&mut self, val: u8) {
-        self.mem.store_u8(self.regs.sp as u16 | 0x100, val);
+        let addr = self.regs.sp as u16 | 0x100;
+        self.store_u8(addr, val);
         self.regs.sp -= 1;
     }
 

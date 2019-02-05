@@ -96,7 +96,6 @@ pub struct Rom {
 
 impl fmt::Debug for Rom {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut rom_str = "".to_string();
         write!(
             f,
             "{:?}\
