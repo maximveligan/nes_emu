@@ -47,7 +47,7 @@ impl MemManageUnit {
     pub fn store_u8(&mut self, address: u16, val: u8) {
         match address {
             WRAM_START...WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START...PPU_END => self.ppu.store((address - 0x2000) % 8, val),
+            PPU_START...PPU_END => self.ppu.store((address - 0x2000) & 7, val),
             0x4016 => unimplemented!("Player1 controller"),
             0x4017 => unimplemented!("Player2 controller"),
             APU_START...APU_END => self.apu.store(address - 0x4000, val),
@@ -62,7 +62,7 @@ impl MemManageUnit {
     pub fn load_u8(&self, address: u16) -> u8 {
         match address {
             WRAM_START...WRAM_END => self.ram.load(address & 0x7FF),
-            PPU_START...PPU_END => self.ppu.load((address - 0x2000) % 8),
+            PPU_START...PPU_END => self.ppu.load((address - 0x2000) & 7),
             0x4016 => unimplemented!("Player1 controller"),
             0x4016 => unimplemented!("Player1 controller"),
             APU_START...APU_END => self.apu.load(address - 0x4000),

@@ -41,9 +41,7 @@ fn main() {
     let rom = match raw_rom {
         Ok(out) => match out {
             (_, rest) => {
-                println!("{:?}", rest.header);
-                println!("{}", rest.prg_rom.len());
-                println!("{}", rest.chr_rom.len());
+                println!("{:?}", rest);
                 rest
             }
         },
@@ -55,8 +53,11 @@ fn main() {
 
     let mut mapper = Mapper::from_rom(rom);
     let mut cpu = Cpu::new(mapper);
-    match cpu.step() {
-        Ok(()) => println!("success"),
-        Err(e) => println!("{:?}", e),
+    loop {
+        match cpu.step() {
+            Ok(()) => println!(""),
+            Err(e) => println!("{:?}", e),
+        }
+        cpu.cycle_count = 0;
     }
 }

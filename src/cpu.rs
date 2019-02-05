@@ -1,9 +1,9 @@
 use cpu_const::*;
+use std::fmt;
 use mmu::MemManageUnit;
 use std::ops::Add;
 use mapper::Mapper;
 
-#[derive(Debug)]
 pub struct Registers {
     pub acc: u8,
     pub x: u8,
@@ -13,7 +13,26 @@ pub struct Registers {
     pub flags: u8,
 }
 
-#[derive(Debug, PartialEq)]
+impl fmt::Debug for Registers {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Registers\n{:?}\nAcc: 0x{:X}, Dec {}\nX: 0x{:X}, Dec {}\n\
+             Y: 0x{:X}, Dec {}\nSP: 0x{:X}, Dec {}\nStatus: 0b{:b}",
+            self.pc,
+            self.acc,
+            self.acc,
+            self.x,
+            self.x,
+            self.y,
+            self.y,
+            self.sp,
+            self.sp,
+            self.flags
+        )
+    }
+}
+
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
@@ -34,6 +53,12 @@ impl ProgramCounter {
     }
     fn get_addr(&self) -> u16 {
         self.0
+    }
+}
+
+impl fmt::Debug for ProgramCounter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "PC: 0x{:X}, Dec {}", self.0, self.0)
     }
 }
 
@@ -235,6 +260,7 @@ impl Cpu {
             mem: MemManageUnit::new(mapper),
         };
         cpu.set_flag(0b00100000, true);
+        cpu.regs.pc.set_addr(cpu.mem.load_u16(RESET_VEC));
         cpu
     }
 

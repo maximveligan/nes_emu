@@ -1,5 +1,6 @@
 use nom::be_u8;
 use nom::IResult;
+use std::fmt;
 
 const PRG_ROM_PAGE_SIZE: usize = 16384;
 const PRG_RAM_PAGE_SIZE: usize = 8192;
@@ -56,7 +57,6 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
 }
 
 // Almost no roms use flag10 or flag9, as such pulled as u8
-#[derive(Debug)]
 pub struct Header {
     rom_type: RomType,
     pub mapper: u8,
@@ -68,12 +68,47 @@ pub struct Header {
     flag10: u8,
 }
 
-#[derive(Debug)]
+impl fmt::Debug for Header {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Header:\n\
+             Type-{:?}, Mapper-{}, ScreenMode-{:?}, SRAM-{}\n\
+             VS Unisystem-{}, Playchoice10-{}, flag9-{}, flag10-{}\n",
+            self.rom_type,
+            self.mapper,
+            self.screen,
+            self.save_ram,
+            self.vs_unisystem,
+            self.playchoice10,
+            self.flag9,
+            self.flag10
+        )
+    }
+}
+
 pub struct Rom {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
     prg_ram_size: usize,
     pub header: Header,
+}
+
+impl fmt::Debug for Rom {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut rom_str = "".to_string();
+        write!(
+            f,
+            "{:?}\
+             Prg Rom Size (kb) {}\n\
+             Chr Rom Size (kb) {}\n\
+             Prg Ram Size (kb) {}",
+            self.header,
+            self.prg_rom.len() / 1024,
+            self.chr_rom.len() / 1024,
+            self.prg_ram_size / 1024
+        )
+    }
 }
 
 #[derive(Debug)]
