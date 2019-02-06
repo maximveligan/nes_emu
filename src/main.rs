@@ -66,6 +66,5 @@ fn main() {
             Ok(()) => println!(""),
             Err(e) => println!("{:?}", e),
         }
-        cpu.cycle_count = 0;
     }
 }

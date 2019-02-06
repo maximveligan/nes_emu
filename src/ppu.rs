@@ -2,12 +2,26 @@ const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 const VRAM_SIZE: usize = 0x4000;
 
+const PAT_TAB_0: usize = 0x0000;
+const PAT_TAB_1: usize = 0x1000;
+const NAMETABLE_0: usize = 0x2000;
+const NAMETABLE_1: usize = 0x2400;
+const NAMETABLE_2: usize = 0x2800;
+const NAMETABLE_3: usize = 0x2C00;
+const NAME_TAB_MIRROR: usize = 0x3000;
+const PALETTE_RAM_I: usize = 0x3F00;
+const PALETTE_MIRROR: usize = 0x3F20;
+
+const SPRITE_NUM: usize = 64;
+const SPRITE_ATTR: usize = 4;
+
 pub struct Ppu {
     pub regs: PRegisters,
     vram: Vram,
 
     // multiply by 3 to account for r g b
     screen_buff: [[u8; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
+    oam: [[u8; SPRITE_ATTR]; SPRITE_NUM],
 }
 
 struct Vram([u8; VRAM_SIZE]);
@@ -28,6 +42,7 @@ impl Ppu {
             },
             vram: Vram([0; 0x4000]),
             screen_buff: [[0; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
+            oam: [[0; SPRITE_ATTR]; SPRITE_NUM],
         }
     }
 

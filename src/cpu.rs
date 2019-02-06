@@ -3,6 +3,7 @@ use std::fmt;
 use mmu::MemManageUnit;
 use mapper::Mapper;
 
+#[derive(Clone)]
 pub struct Registers {
     pub acc: u8,
     pub x: u8,
@@ -16,22 +17,19 @@ impl fmt::Debug for Registers {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Registers\n{:?}\nAcc: 0x{:X}, Dec {}\nX: 0x{:X}, Dec {}\n\
-             Y: 0x{:X}, Dec {}\nSP: 0x{:X}, Dec {}\nStatus: 0b{:b}",
+            "{:?} A:{:X} X:{:X} Y: {:X} Flags:{:X} SP:{:X}",
+            //"{:?} A:{:X} X:{:X} Y: {:X} Flags:{:#010b} SP:{:X}",
             self.pc,
             self.acc,
-            self.acc,
-            self.x,
             self.x,
             self.y,
-            self.y,
-            self.sp,
-            self.sp,
-            self.flags
+            self.flags,
+            self.sp
         )
     }
 }
 
+#[derive(Clone)]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
@@ -57,14 +55,14 @@ impl ProgramCounter {
 
 impl fmt::Debug for ProgramCounter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PC: 0x{:X}, Dec {}", self.0, self.0)
+        write!(f, "PC: {:X}", self.0)
     }
 }
 
 pub struct Cpu {
     pub regs: Registers,
     pub mem: MemManageUnit,
-    pub cycle_count: u8,
+    pub cycle_count: usize,
 }
 
 #[derive(Debug)]
@@ -167,7 +165,6 @@ pub enum InvalidOp {
     DoesntExist(String, u8),
 }
 
-#[derive(Debug)]
 pub enum AddrMode {
     Imm(u8),
     Impl,
@@ -184,11 +181,40 @@ pub enum AddrMode {
     Rel(i8),
 }
 
-#[derive(Debug)]
+impl fmt::Debug for AddrMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AddrMode::Imm(c) => write!(f, "Imm {:X}", c),
+            AddrMode::Impl => write!(f, "Impl"),
+            AddrMode::Accum => write!(f, "Accum"),
+            AddrMode::ZP(c) => write!(f, "ZP {:X}", c),
+            AddrMode::ZPX(c) => write!(f, "ZPX {:X}", c),
+            AddrMode::ZPY(c) => write!(f, "ZPY {:X}", c),
+            AddrMode::Abs(c) => write!(f, "Abs {:X}", c),
+            AddrMode::AbsX(c) => write!(f, "AbsX {:X}", c),
+            AddrMode::AbsY(c) => write!(f, "AbsY {:X}", c),
+            AddrMode::JmpIndir(c) => write!(f, "JmpIndir {:X}", c),
+            AddrMode::IndexIndirX(c) => write!(f, "IndexIndirX {:X}", c),
+            AddrMode::IndirIndexY(c) => write!(f, "IndirIndexY {:X}", c),
+            AddrMode::Rel(c) =>  write!(f, "Rel {:X}", c),
+        }
+    }
+}
+
 enum AddrDT {
     Addr(u16),
     Const(u8),
     Signed(i8),
+}
+
+impl fmt::Debug for AddrDT {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AddrDT::Addr(c) => write!(f, "${:X}", c),
+            AddrDT::Const(c) => write!(f, "#{:X}", c),
+            AddrDT::Signed(i) => write!(f, "Signed {:X}", *i as u8),
+        }
+    }
 }
 
 impl AddrMode {
@@ -228,11 +254,12 @@ impl AddrMode {
                 ),
                 false,
             )),
+            //TODO: Bug here exists, check log, instruction at cycle 8824 PC D95B
             AddrMode::IndirIndexY(v) => {
                 let tmp = cpu.mem.load_u16(v as u16);
                 Some((
                     AddrDT::Addr(tmp.wrapping_add(cpu.regs.y as u16)),
-                    check_pb(tmp, tmp + cpu.regs.y as u16),
+                    check_pb(tmp, tmp.wrapping_add(cpu.regs.y as u16)),
                 ))
             }
             AddrMode::Rel(v) => Some((AddrDT::Signed(v as i8), false)),
@@ -247,19 +274,20 @@ fn check_pb(base: u16, base_offset: u16) -> bool {
 impl Cpu {
     pub fn new(mapper: Mapper) -> Cpu {
         let mut cpu = Cpu {
-            cycle_count: 0,
+            cycle_count: 7,
             regs: Registers {
                 acc: 0,
                 x: 0,
                 y: 0,
                 pc: ProgramCounter::new(0),
                 sp: 0xFD,
-                flags: 0,
+                flags: 0b00100100
             },
             mem: MemManageUnit::new(mapper),
         };
         cpu.set_flag(0b00100000, true);
-        cpu.regs.pc.set_addr(cpu.mem.load_u16(RESET_VEC));
+        //cpu.regs.pc.set_addr(cpu.mem.load_u16(RESET_VEC));
+        cpu.regs.pc.set_addr(0xC000);
         cpu
     }
 
@@ -324,6 +352,7 @@ impl Cpu {
                             Op::Jump(Jump::JSR) => {
                                 self.regs.pc.add_signed(-1);
                                 self.push_pc();
+                                self.regs.pc.set_addr(addr);
                             }
                             Op::Store(Store::STA) => {
                                 let tmp = self.regs.acc;
@@ -406,7 +435,6 @@ impl Cpu {
                     Op::Store(Store::TXS) => {
                         let x = self.regs.x;
                         self.regs.sp = x;
-                        self.set_zero_neg(x);
                     }
                     Op::Store(Store::TYA) => {
                         let y = self.regs.y;
@@ -418,9 +446,8 @@ impl Cpu {
                         self.push(acc);
                     }
                     Op::Store(Store::PHP) => {
-                        self.set_flag(BRK_F, true);
                         let flags = self.regs.flags;
-                        self.push(flags);
+                        self.push(flags | BRK_F);
                     }
                     Op::Store(Store::PLA) => {
                         let acc = self.pop();
@@ -428,7 +455,8 @@ impl Cpu {
                         self.set_zero_neg(acc);
                     }
                     Op::Store(Store::PLP) => {
-                        self.regs.flags = self.pop();
+                        //TODO Double check if a hard set to false is correct here
+                        self.pull_status();
                     }
                     Op::Math(Math::DEX) => {
                         let x = self.regs.x.wrapping_sub(1);
@@ -451,7 +479,7 @@ impl Cpu {
                         self.set_zero_neg(y);
                     }
                     Op::Jump(Jump::RTI) => {
-                        self.regs.flags = self.pop();
+                        self.pull_status();
                         self.pull_pc();
                     }
                     Op::Jump(Jump::RTS) => {
@@ -472,6 +500,7 @@ impl Cpu {
                         self.regs.pc.set_addr(BRK_VEC);
                         self.set_flag(BRK_F, true);
                     }
+                    Op::Sys(Sys::NOP) => (),
 
                     // ACC mode
                     Op::Bit(Bit::ROR) => self.ror_acc(),
@@ -518,16 +547,7 @@ impl Cpu {
     }
 
     fn sbc(&mut self, val: u8) {
-        let acc = self.regs.acc;
-        let tmp = acc as i16 - val as i16 - (1 - self.get_flag(CARRY) as i16);
-        self.set_flag(CARRY, tmp >= 0);
-        self.set_flag(
-            O_F,
-            ((acc as i16 ^ tmp) & (val as i16 ^ tmp) & 0x80) != 0,
-        );
-        let tmp = tmp as u8;
-        self.set_zero_neg(tmp);
-        self.regs.acc = tmp as u8;
+        self.adc(val ^ 0xFF);
     }
 
     fn lda(&mut self, val: u8) {
@@ -596,7 +616,7 @@ impl Cpu {
         self.set_flag(CARRY, (val >> 7) != 0);
         let tmp = val << 1;
         self.set_zero_neg(tmp);
-        self.store_u8(addr, val);
+        self.store_u8(addr, tmp);
     }
 
     fn lsr_acc(&mut self) {
@@ -612,7 +632,7 @@ impl Cpu {
         self.set_flag(CARRY, (val & 0b01) != 0);
         let tmp = val >> 1;
         self.set_zero_neg(tmp);
-        self.store_u8(addr, val);
+        self.store_u8(addr, tmp);
     }
 
     fn cpx(&mut self, val: u8) {
@@ -679,6 +699,12 @@ impl Cpu {
         self.regs.pc.set_addr(((high as u16) << 8) | low as u16);
     }
 
+    fn pull_status(&mut self) {
+        self.regs.flags = self.pop();
+        self.set_flag(0b0010_0000, true);
+        self.set_flag(BRK_F, false);
+    }
+
     fn push_pc(&mut self) {
         let high = self.regs.pc.get_addr() >> 8;
         let low = self.regs.pc.get_addr();
@@ -704,12 +730,13 @@ impl Cpu {
     }
 
     pub fn step(&mut self) -> Result<(), InvalidOp> {
+        let regs = self.regs.clone();
         let byte = self.loadu8_pc_up();
-        self.cycle_count += CYCLES[byte as usize];
+        let cycle = self.cycle_count;
+        self.cycle_count += CYCLES[byte as usize] as usize;
         let (op, addr_mode) = self.decode_op(byte)?;
-        println!("{:?}, {:?}", op, addr_mode);
-        println!("{:?}", self.regs);
         let addr_data = addr_mode.address_mem(&self);
+        println!("{:?}, {:?},\t{:?}, CYC: {}", op, addr_data, regs, cycle);
         self.execute_op(op, addr_data);
         Ok(())
     }
@@ -737,6 +764,10 @@ impl Cpu {
             SBC_ABSY => {
                 Ok((Op::Math(Math::SBC), AddrMode::AbsY(self.loadu16_pc_up())))
             }
+            SBC_ABS => {
+                Ok((Op::Math(Math::SBC), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+
             SBC_INDY => Ok((
                 Op::Math(Math::SBC),
                 AddrMode::IndirIndexY(self.loadu8_pc_up()),
@@ -834,6 +865,9 @@ impl Cpu {
                 Op::Reg(Reg::CMP),
                 AddrMode::IndexIndirX(self.loadu8_pc_up()),
             )),
+            CPY_ABS => {
+                Ok((Op::Reg(Reg::CPY), AddrMode::Abs(self.loadu16_pc_up())))
+            }
             LDA_ABSX => Ok((
                 Op::Store(Store::LDA),
                 AddrMode::AbsX(self.loadu16_pc_up()),

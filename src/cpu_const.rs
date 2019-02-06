@@ -1,5 +1,6 @@
 pub const INC_ABSX: u8 = 0xFE;
 pub const SBC_ABSX: u8 = 0xFD;
+pub const SBC_ABS: u8 = 0xED;
 pub const SBC_ABSY: u8 = 0xF9;
 pub const INC_ZPX: u8 = 0xF6;
 pub const SBC_ZPX: u8 = 0xF5;
@@ -24,6 +25,7 @@ pub const CMP_INDY: u8 = 0xD1;
 pub const BNE: u8 = 0xD0;
 pub const DEC_ABS: u8 = 0xCE;
 pub const CMP_ABS: u8 = 0xCD;
+pub const CPY_ABS: u8 = 0xCC;
 pub const DEX: u8 = 0xCA;
 pub const CMP_IMM: u8 = 0xC9;
 pub const INY: u8 = 0xC8;
@@ -163,12 +165,12 @@ pub static CYCLES: [u8; 256] = [
 ];
 
 pub const CARRY: u8 = 0b0000_0001;
-pub const ZERO: u8 = 0b0000_0010;
-pub const ITR: u8 = 0b0000_0100;
-pub const DEC: u8 = 0b0000_1000;
+pub const ZERO: u8 =  0b0000_0010;
+pub const ITR: u8 =   0b0000_0100;
+pub const DEC: u8 =   0b0000_1000;
 pub const BRK_F: u8 = 0b0001_0000;
-pub const O_F: u8 = 0b0100_0000;
-pub const NEG: u8 = 0b1000_0000;
+pub const O_F: u8 =   0b0100_0000;
+pub const NEG: u8 =   0b1000_0000;
 
 pub const NMI_VEC: u16 = 0xFFFA;
 pub const RESET_VEC: u16 = 0xFFFC;
