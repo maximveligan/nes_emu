@@ -41,7 +41,6 @@ fn main() {
     let rom = match raw_rom {
         Ok(out) => match out {
             (_, rest) => {
-                println!("{:?}", rest);
                 rest
             }
         },
@@ -63,7 +62,7 @@ fn main() {
     let mut cpu = Cpu::new(mapper);
     loop {
         match cpu.step() {
-            Ok(()) => println!(""),
+            Ok(()) => (),
             Err(e) => println!("{:?}", e),
         }
     }

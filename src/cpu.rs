@@ -17,7 +17,7 @@ impl fmt::Debug for Registers {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} A:{:X} X:{:X} Y: {:X} Flags:{:X} SP:{:X}",
+            "{:?} A:{:02X} X:{:02X} Y:{:02X} Flags:{:02X} SP:{:02X}",
             //"{:?} A:{:X} X:{:X} Y: {:X} Flags:{:#010b} SP:{:X}",
             self.pc,
             self.acc,
@@ -55,7 +55,7 @@ impl ProgramCounter {
 
 impl fmt::Debug for ProgramCounter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PC: {:X}", self.0)
+        write!(f, "PC:{:04X}", self.0)
     }
 }
 
@@ -235,10 +235,10 @@ impl AddrMode {
                 AddrDT::Addr(v + (cpu.regs.x as u16)),
                 check_pb(v, v + cpu.regs.x as u16),
             )),
-            AddrMode::AbsY(v) => Some((
-                AddrDT::Addr(v + (cpu.regs.y as u16)),
-                check_pb(v, v + cpu.regs.y as u16),
-            )),
+            AddrMode::AbsY(v) => {
+                let tmp = v.wrapping_add(cpu.regs.y as u16);
+                Some((AddrDT::Addr(tmp), check_pb(v, tmp)))
+            }
             AddrMode::JmpIndir(v) => {
                 let low = cpu.mem.load_u8(v);
                 let high: u8 = if v & 0xFF == 0xFF {
@@ -248,18 +248,29 @@ impl AddrMode {
                 };
                 Some((AddrDT::Addr((high as u16) << 8 | (low as u16)), false))
             }
-            AddrMode::IndexIndirX(v) => Some((
-                AddrDT::Addr(
-                    cpu.mem.load_u16(v.wrapping_add(cpu.regs.x) as u16),
-                ),
-                false,
-            )),
-            //TODO: Bug here exists, check log, instruction at cycle 8824 PC D95B
+            AddrMode::IndexIndirX(v) => {
+                let base_address = v.wrapping_add(cpu.regs.x) as u16;
+                let tmp = if base_address == 0xFF {
+                    (cpu.mem.load_u8(0) as u16) << 8 | (cpu.mem.load_u8(base_address) as u16)
+                } else { cpu.mem.load_u16(base_address) };
+
+                //println!("Load @ {:X} = {:X} = {:X}", base_address, tmp, cpu.mem.load_u8(tmp));
+                //println!("Index Indir X {:X}", tmp);
+                Some((AddrDT::Addr(tmp), false))
+            }
+
             AddrMode::IndirIndexY(v) => {
-                let tmp = cpu.mem.load_u16(v as u16);
+                let tmp = if v == 0xFF {
+                    (cpu.mem.load_u8(0) as u16) << 8 | (cpu.mem.load_u8(0xFF) as u16)
+                } else {
+                    cpu.mem.load_u16(v as u16)
+                };
+
+                let addr = tmp.wrapping_add(cpu.regs.y as u16);
+                //println!("Indir Index Y {}", addr);
                 Some((
-                    AddrDT::Addr(tmp.wrapping_add(cpu.regs.y as u16)),
-                    check_pb(tmp, tmp.wrapping_add(cpu.regs.y as u16)),
+                    AddrDT::Addr(addr),
+                    check_pb(tmp, addr),
                 ))
             }
             AddrMode::Rel(v) => Some((AddrDT::Signed(v as i8), false)),
@@ -308,6 +319,7 @@ impl Cpu {
     }
 
     fn store_u8(&mut self, addr: u16, val: u8) {
+        //println!("Address {:X}, Old val {:X}, New val {:X}", addr, self.mem.load_u8(addr), val);
         if addr == DMA_ADDR {
             self.write_dma(val);
         } else {
@@ -455,7 +467,6 @@ impl Cpu {
                         self.set_zero_neg(acc);
                     }
                     Op::Store(Store::PLP) => {
-                        //TODO Double check if a hard set to false is correct here
                         self.pull_status();
                     }
                     Op::Math(Math::DEX) => {
@@ -736,7 +747,7 @@ impl Cpu {
         self.cycle_count += CYCLES[byte as usize] as usize;
         let (op, addr_mode) = self.decode_op(byte)?;
         let addr_data = addr_mode.address_mem(&self);
-        println!("{:?}, {:?},\t{:?}, CYC: {}", op, addr_data, regs, cycle);
+        //println!("{:?} {:?} CYC:{}", op, regs, cycle);
         self.execute_op(op, addr_data);
         Ok(())
     }
@@ -842,6 +853,9 @@ impl Cpu {
             DEC_ABS => {
                 Ok((Op::Math(Math::DEC), AddrMode::Abs(self.loadu16_pc_up())))
             }
+            DEC_ABSX => {
+                Ok((Op::Math(Math::DEC), AddrMode::AbsX(self.loadu16_pc_up())))
+            }
             DEC_ZP => {
                 Ok((Op::Math(Math::DEC), AddrMode::ZP(self.loadu8_pc_up())))
             }
@@ -902,6 +916,9 @@ impl Cpu {
             }
             LDX_ABS => {
                 Ok((Op::Store(Store::LDX), AddrMode::Abs(self.loadu16_pc_up())))
+            }
+            LDX_ABSY => {
+                Ok((Op::Store(Store::LDX), AddrMode::AbsY(self.loadu16_pc_up())))
             }
             LDY_ABS => {
                 Ok((Op::Store(Store::LDY), AddrMode::Abs(self.loadu16_pc_up())))
@@ -1120,7 +1137,22 @@ impl Cpu {
             SEI => Ok((Op::Reg(Reg::SEI), AddrMode::Impl)),
             CLV => Ok((Op::Reg(Reg::CLV), AddrMode::Impl)),
             CLD => Ok((Op::Reg(Reg::CLD), AddrMode::Impl)),
-            NOP => Ok((Op::Sys(Sys::NOP), AddrMode::Impl)),
+            NOP | 0x3A | 0x5A | 0x1a |
+            0x7A | 0xDA | 0xFA => Ok((Op::Sys(Sys::NOP), AddrMode::Impl)),
+
+            // DOP: Double NOP
+            0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89 |
+            0xC2 | 0xD4 | 0xE2 | 0xF4 | 0x04 => {
+                self.regs.pc.add_signed(1);
+                Ok((Op::Sys(Sys::NOP), AddrMode::Impl))
+            }
+
+            // TOP: Triple NOP
+            0x0C | 0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
+                self.regs.pc.add_signed(2);
+                Ok((Op::Sys(Sys::NOP), AddrMode::Impl))
+            }
+
             BRK => Ok((Op::Sys(Sys::BRK), AddrMode::Impl)),
             TAX => Ok((Op::Store(Store::TAX), AddrMode::Impl)),
             TXA => Ok((Op::Store(Store::TXA), AddrMode::Impl)),
