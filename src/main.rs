@@ -46,9 +46,7 @@ fn main() {
 
     let rom = match raw_rom {
         Ok(out) => match out {
-            (_, rest) => {
-                rest
-            }
+            (_, rest) => rest,
         },
         Err(err) => {
             println!("Parsing failed due to {}", err);
@@ -65,7 +63,12 @@ fn main() {
     }
 
     let mut mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
-    let mut cpu = Cpu::new(Mmu::new(Apu::new(), Ram::new(), Ppu::new(mapper.clone()), mapper));
+    let mut cpu = Cpu::new(Mmu::new(
+        Apu::new(),
+        Ram::new(),
+        Ppu::new(mapper.clone()),
+        mapper,
+    ));
     loop {
         match cpu.step() {
             Ok(()) => (),

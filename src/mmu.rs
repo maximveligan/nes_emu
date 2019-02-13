@@ -37,7 +37,12 @@ impl Ram {
 }
 
 impl Mmu {
-    pub fn new(apu: Apu, ram: Ram, ppu: Ppu, mapper: Rc<RefCell<Mapper>>) -> Mmu {
+    pub fn new(
+        apu: Apu,
+        ram: Ram,
+        ppu: Ppu,
+        mapper: Rc<RefCell<Mapper>>,
+    ) -> Mmu {
         Mmu {
             ppu: ppu,
             apu: apu,
@@ -65,7 +70,7 @@ impl Mmu {
         }
     }
 
-    pub fn load_u8(&self, address: u16) -> u8 {
+    pub fn ld8(&self, address: u16) -> u8 {
         match address {
             WRAM_START...WRAM_END => self.ram.load(address & 0x7FF),
             PPU_START...PPU_END => self.ppu.load((address - 0x2000) & 7),
@@ -80,9 +85,9 @@ impl Mmu {
         }
     }
 
-    pub fn load_u16(&self, address: u16) -> u16 {
-        let l_byte = self.load_u8(address);
-        let r_byte = self.load_u8(address + 1);
+    pub fn ld16(&self, address: u16) -> u16 {
+        let l_byte = self.ld8(address);
+        let r_byte = self.ld8(address + 1);
         (r_byte as u16) << 8 | (l_byte as u16)
     }
 }
