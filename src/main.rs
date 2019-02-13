@@ -10,12 +10,18 @@ mod ppu;
 mod rom;
 
 use cpu::Cpu;
+use apu::Apu;
+use ppu::Ppu;
 use rom::RomType;
 use rom::parse_rom;
 use std::fs::File;
 use std::env;
 use std::io::Read;
 use mapper::Mapper;
+use mmu::Mmu;
+use mmu::Ram;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn main() {
     let mut raw_bytes = Vec::new();
@@ -58,8 +64,8 @@ fn main() {
         _ => (),
     }
 
-    let mapper = Mapper::from_rom(rom);
-    let mut cpu = Cpu::new(mapper);
+    let mut mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
+    let mut cpu = Cpu::new(Mmu::new(Apu::new(), Ram::new(), Ppu::new(mapper.clone()), mapper));
     loop {
         match cpu.step() {
             Ok(()) => (),

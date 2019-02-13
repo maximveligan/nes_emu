@@ -1,6 +1,8 @@
 use ppu::Ppu;
 use apu::Apu;
 use mapper::Mapper;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const WRAM_START: u16 = 0x0000;
 const WRAM_END: u16 = 0x1FFF;
@@ -11,11 +13,11 @@ const APU_END: u16 = 0x401F;
 const ROM_START: u16 = 0x4020;
 const ROM_END: u16 = 0xFFFF;
 
-pub struct MemManageUnit {
+pub struct Mmu {
     pub ppu: Ppu,
     pub apu: Apu,
     pub ram: Ram,
-    pub mapper: Mapper,
+    pub mapper: Rc<RefCell<Mapper>>,
 }
 
 pub struct Ram([u8; 0xFFF]);
@@ -34,17 +36,17 @@ impl Ram {
     }
 }
 
-impl MemManageUnit {
-    pub fn new(mapper: Mapper) -> MemManageUnit {
-        MemManageUnit {
-            ppu: Ppu::new(),
-            apu: Apu(),
-            ram: Ram::new(),
+impl Mmu {
+    pub fn new(apu: Apu, ram: Ram, ppu: Ppu, mapper: Rc<RefCell<Mapper>>) -> Mmu {
+        Mmu {
+            ppu: ppu,
+            apu: apu,
+            ram: ram,
             mapper: mapper,
         }
     }
 
-    pub fn store_u8(&mut self, address: u16, val: u8) {
+    pub fn store(&mut self, address: u16, val: u8) {
         match address {
             WRAM_START...WRAM_END => self.ram.store(address & 0x7FF, val),
             PPU_START...PPU_END => self.ppu.store((address - 0x2000) & 7, val),
@@ -56,7 +58,8 @@ impl MemManageUnit {
                     "Warning! Attempt to write to rom at address {:X}",
                     address
                 );
-                self.mapper.store(address, val);
+                let mut mapper = self.mapper.borrow_mut();
+                mapper.store_prg(address, val);
             }
             _ => panic!("Undefined load"),
         }
@@ -69,7 +72,10 @@ impl MemManageUnit {
             0x4016 => unimplemented!("Player1 controller"),
             0x4017 => unimplemented!("Player2 controller"),
             APU_START...APU_END => self.apu.load(address - 0x4000),
-            ROM_START...ROM_END => self.mapper.load(address),
+            ROM_START...ROM_END => {
+                let mapper = self.mapper.borrow();
+                mapper.load_prg(address)
+            }
             _ => panic!("Undefined load"),
         }
     }

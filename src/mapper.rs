@@ -23,7 +23,7 @@ impl Nrom {
         }
     }
 
-    fn load(&self, address: u16) -> u8 {
+    fn load_prg(&self, address: u16) -> u8 {
         if address < NROM_PRG_ROM_START {
             0
         } else if self.mirrored {
@@ -33,9 +33,20 @@ impl Nrom {
         }
     }
 
-    fn store(&mut self, address: u16, val: u8) {
+    fn store_prg(&mut self, address: u16, val: u8) {
         println!(
-            "Warning! Cannot store to NROM! Addr {:X} Val {}",
+            "Warning! Cannot store to NROM prg rom! Addr {:X} Val {}",
+            address, val
+        );
+    }
+
+    fn load_chr(&self, address: u16) -> u8 {
+        self.rom.chr_rom[address as usize]
+    }
+
+    fn store_chr(&mut self, address: u16, val: u8) {
+        println!(
+            "Warning! Cannot store to NROM chr rom! Addr {:X} Val {}",
             address, val
         );
     }
@@ -49,15 +60,27 @@ impl Mapper {
         }
     }
 
-    pub fn load(&self, address: u16) -> u8 {
+    pub fn load_prg(&self, address: u16) -> u8 {
         match *self {
-            Mapper::Nrom(ref nrom) => nrom.load(address),
+            Mapper::Nrom(ref nrom) => nrom.load_prg(address),
         }
     }
 
-    pub fn store(&mut self, address: u16, val: u8) {
+    pub fn load_chr(&self, address: u16) -> u8 {
         match *self {
-            Mapper::Nrom(ref mut nrom) => nrom.store(address, val),
+            Mapper::Nrom(ref nrom) => nrom.load_chr(address),
+        }
+    }
+
+    pub fn store_prg(&mut self, address: u16, val: u8) {
+        match *self {
+            Mapper::Nrom(ref mut nrom) => nrom.store_prg(address, val),
+        }
+    }
+
+    pub fn store_chr(&mut self, address: u16, val: u8) {
+        match *self {
+            Mapper::Nrom(ref mut nrom) => nrom.store_chr(address, val),
         }
     }
 }
