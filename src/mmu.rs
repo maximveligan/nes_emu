@@ -73,13 +73,13 @@ impl Mmu {
     pub fn ld8(&self, address: u16) -> u8 {
         match address {
             WRAM_START...WRAM_END => self.ram.load(address & 0x7FF),
-            PPU_START...PPU_END => self.ppu.load((address - 0x2000) & 7),
+            PPU_START...PPU_END => self.ppu.ld((address - 0x2000) & 7),
             0x4016 => unimplemented!("Player1 controller"),
             0x4017 => unimplemented!("Player2 controller"),
             APU_START...APU_END => self.apu.load(address - 0x4000),
             ROM_START...ROM_END => {
                 let mapper = self.mapper.borrow();
-                mapper.load_prg(address)
+                mapper.ld_prg(address)
             }
             _ => panic!("Undefined load"),
         }

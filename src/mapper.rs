@@ -23,7 +23,7 @@ impl Nrom {
         }
     }
 
-    fn load_prg(&self, address: u16) -> u8 {
+    fn ld_prg(&self, address: u16) -> u8 {
         if address < NROM_PRG_ROM_START {
             0
         } else if self.mirrored {
@@ -40,7 +40,7 @@ impl Nrom {
         );
     }
 
-    fn load_chr(&self, address: u16) -> u8 {
+    fn ld_chr(&self, address: u16) -> u8 {
         self.rom.chr_rom[address as usize]
     }
 
@@ -60,15 +60,15 @@ impl Mapper {
         }
     }
 
-    pub fn load_prg(&self, address: u16) -> u8 {
+    pub fn ld_prg(&self, address: u16) -> u8 {
         match *self {
-            Mapper::Nrom(ref nrom) => nrom.load_prg(address),
+            Mapper::Nrom(ref nrom) => nrom.ld_prg(address),
         }
     }
 
-    pub fn load_chr(&self, address: u16) -> u8 {
+    pub fn ld_chr(&self, address: u16) -> u8 {
         match *self {
-            Mapper::Nrom(ref nrom) => nrom.load_chr(address),
+            Mapper::Nrom(ref nrom) => nrom.ld_chr(address),
         }
     }
 

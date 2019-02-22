@@ -1,20 +1,30 @@
 use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
+use rom::ScreenMode;
 
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
-const VRAM_SIZE: usize = 0x4000;
+const VRAM_SIZE: usize = 0x800;
+const PALETTE_SIZE: usize = 0x20;
 
-const PAT_TAB_START: u16 = 0x0000;
-const PAT_TAB_END: u16 = 0x1FFF;
-const NAMETABLE_0: u16 = 0x2000;
-const NAMETABLE_1: u16 = 0x2400;
-const NAMETABLE_2: u16 = 0x2800;
-const NAMETABLE_3: u16 = 0x2C00;
-const NAME_TAB_MIRROR: u16 = 0x3000;
-const PALETTE_RAM_I: usize = 0x3F00;
-const PALETTE_MIRROR: usize = 0x3F20;
+const PT_START: u16 = 0x0000;
+const PT_END: u16 = 0x1FFF;
+
+const NT_0: u16 = 0x2000;
+const NT_0_END: u16 = 0x23FF;
+const NT_1: u16 = 0x2400;
+const NT_1_END: u16 = 0x27FF;
+const NT_2: u16 = 0x2800;
+const NT_2_END: u16 = 0x2BFF;
+const NT_3: u16 = 0x2C00;
+const NT_3_END: u16 = 0x2FFF;
+
+const NT_MIRROR: u16 = 0x3000;
+const NT_MIRROR_END: u16 = 0x3EFF;
+const PALETTE_RAM_I: u16 = 0x3F00;
+const PALETTE_MIRROR: u16 = 0x3F20;
+const PALETTE_MIRROR_END: u16 = 0x3FFF;
 
 static PALETTE: [u8; 192] = [
     0x80, 0x80, 0x80, 0x00, 0x3D, 0xA6, 0x00, 0x12, 0xB0, 0x44, 0x00, 0x96,
@@ -45,11 +55,13 @@ pub struct Ppu {
     // multiply by 3 to account for r g b
     screen_buff: [[u8; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
     oam: [[u8; SPRITE_ATTR]; SPRITE_NUM],
+    cc: u16,
 }
 
 struct Vram {
     vram: [u8; VRAM_SIZE],
     mapper: Rc<RefCell<Mapper>>,
+    palette: [u8; PALETTE_SIZE],
 }
 
 impl Vram {
@@ -57,28 +69,57 @@ impl Vram {
         Vram {
             vram: [0; VRAM_SIZE],
             mapper: mapper,
+            palette: [0; PALETTE_SIZE],
         }
     }
 
-    fn load_u8(&self, addr: u16) -> u8 {
+    fn ld8(&self, addr: u16, screen: ScreenMode) -> u8 {
         match addr {
-            PAT_TAB_START...PAT_TAB_END => {
-                let mut mapper = self.mapper.borrow_mut();
-                mapper.load_chr(addr)
+            PT_START...PT_END => self.mapper.borrow_mut().ld_chr(addr),
+            NT_0...NT_3_END => self.vram[self.nt_mirror(addr & 0xFFF, screen)],
+            NT_MIRROR... NT_MIRROR_END => panic!(
+                "Shouldn't load from here, programmer error"),
+            PALETTE_RAM_I...PALETTE_MIRROR_END => {
+                self.palette[(addr & 0x1F) as usize]
             }
-            //        NAMETABLE_0
-            //        NAMETABLE_1
-            //        NAMETABLE_2
-            //        NAMETABLE_3
-            //        NAME_TAB_MIRROR
-            //        PALETTE_RAM_I
-            //        PALETTE_MIRROR
             _ => panic!(),
         }
     }
 
-    fn store(addr: u16, val: u8) {}
+    fn store(&mut self, addr: u16, val: u8, screen: ScreenMode) {
+        match addr {
+            PT_START...PT_END => println!("Warning! Can't store to chr rom"),
+            NT_0...NT_MIRROR_END => {
+                self.vram[self.nt_mirror(addr & 0xFFF, screen)] = val;
+            }
+            PALETTE_RAM_I...PALETTE_MIRROR_END => {
+                self.palette[(addr & 0x1F) as usize] = val;
+            }
+            _ => panic!(),
+        }
+    }
+
+    // Helper function that resolves the nametable mirroring and returns an
+    // index usable for VRAM array indexing
+    fn nt_mirror(&self, addr: u16, screen: ScreenMode) -> usize {
+        match screen {
+            ScreenMode::FourScreen => unimplemented!(
+                "Four Screen mode not supported yet"),
+            ScreenMode::Horizontal => match addr {
+                NT_0...NT_0_END => addr as usize,
+                NT_1...NT_2_END => (addr - 0x400) as usize,
+                NT_3...NT_3_END => (addr - 0x800) as usize,
+                _ => panic!("Horizontal: addr outside of nt passed"),
+            }
+            ScreenMode::Vertical => match addr {
+                NT_0...NT_1_END => addr as usize,
+                NT_2...NT_3_END => (addr - 0x800) as usize,
+                _ => panic!("Vertical: addr outside of nt passed"),
+            }
+        }
+    }
 }
+
 
 impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
@@ -97,11 +138,12 @@ impl Ppu {
             vram: Vram::new(&PALETTE, mapper),
             screen_buff: [[0; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
             oam: [[0; SPRITE_ATTR]; SPRITE_NUM],
+            cc: 0,
         }
     }
 
     //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
-    pub fn load(&self, address: u16) -> u8 {
+    pub fn ld(&self, address: u16) -> u8 {
         match address {
             0 => self.regs.ppuctrl,
             1 => self.regs.ppumask,
