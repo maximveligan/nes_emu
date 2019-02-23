@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate nom;
+extern crate image;
 
 mod apu;
 mod cpu;
@@ -69,10 +70,11 @@ fn main() {
         Ppu::new(mapper.clone()),
         mapper,
     ));
-    loop {
-        match cpu.step() {
-            Ok(()) => (),
-            Err(e) => println!("{:?}", e),
-        }
-    }
+    //    loop {
+    //        match cpu.step() {
+    //            Ok(()) => (),
+    //            Err(e) => println!("{:?}", e),
+    //        }
+    //    }
+    cpu.mmu.ppu.vram.debug_pt();
 }

@@ -745,7 +745,7 @@ impl Cpu {
         self.cycle_count += CYCLES[byte as usize] as usize;
         let (op, addr_mode) = self.decode_op(byte)?;
         let addr_data = addr_mode.address_mem(&self);
-        //println!("{:?} {:?} CYC:{}", op, regs, cycle);
+        println!("{:?} {:?} CYC:{}", op, regs, cycle);
         self.execute_op(op, addr_data);
         Ok(())
     }
@@ -796,6 +796,7 @@ impl Cpu {
             CPX_ABS => {
                 Ok((Op::Reg(Reg::CPX), AddrMode::Abs(self.ld16_pc_up())))
             }
+            CPX_IMM => Ok((Op::Reg(Reg::CPX), AddrMode::Imm(self.ld8_pc_up()))),
             CPX_ZP => Ok((Op::Reg(Reg::CPX), AddrMode::ZP(self.ld8_pc_up()))),
             SBC_IMM => {
                 Ok((Op::Math(Math::SBC), AddrMode::Imm(self.ld8_pc_up())))

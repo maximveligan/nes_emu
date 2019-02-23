@@ -1,3 +1,13 @@
+use std::fs::File;
+use std::io::Write;
+use std::ops::Range;
+use image::Pixel;
+use image::ImageFormat;
+use image::Rgb;
+use image::Rgba;
+use image::DynamicImage;
+use image::GenericImage;
+
 use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -50,7 +60,7 @@ const SPRITE_ATTR: usize = 4;
 
 pub struct Ppu {
     pub regs: PRegisters,
-    vram: Vram,
+    pub vram: Vram,
 
     // multiply by 3 to account for r g b
     screen_buff: [[u8; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
@@ -58,7 +68,7 @@ pub struct Ppu {
     cc: u16,
 }
 
-struct Vram {
+pub struct Vram {
     vram: [u8; VRAM_SIZE],
     mapper: Rc<RefCell<Mapper>>,
     palette: [u8; PALETTE_SIZE],
@@ -77,8 +87,9 @@ impl Vram {
         match addr {
             PT_START...PT_END => self.mapper.borrow_mut().ld_chr(addr),
             NT_0...NT_3_END => self.vram[self.nt_mirror(addr & 0xFFF, screen)],
-            NT_MIRROR... NT_MIRROR_END => panic!(
-                "Shouldn't load from here, programmer error"),
+            NT_MIRROR...NT_MIRROR_END => {
+                panic!("Shouldn't load from here, programmer error")
+            }
             PALETTE_RAM_I...PALETTE_MIRROR_END => {
                 self.palette[(addr & 0x1F) as usize]
             }
@@ -99,27 +110,112 @@ impl Vram {
         }
     }
 
+    fn pull_tileset(
+        &self,
+        color0: Rgba<u8>,
+        color1: Rgba<u8>,
+        color2: Rgba<u8>,
+        color3: Rgba<u8>,
+        chr_addr: usize,
+    ) -> DynamicImage {
+        let mut ts = DynamicImage::new_rgb8(128, 128);
+        let mut palette_indices: [[Rgba<u8>; 8]; 8] = [[color0; 8]; 8];
+        let mut y_off = 0;
+        let mut x_off = 0;
+
+        for i in 0..256 {
+            let index = (i * 16) + chr_addr;
+            let zipped = Range {
+                start: index,
+                end: index + 8,
+            }.zip(index + 8..index + 16);
+
+            for keyval in zipped {
+                let tmp1 = self.ld8(keyval.0 as u16, ScreenMode::Horizontal);
+                let tmp2 = self.ld8(keyval.1 as u16, ScreenMode::Horizontal);
+                for num in 0..8 {
+                    let b1 = get_bit(tmp1, num)
+                        .expect("tried to index u8 outside of 8 bits");
+                    let b2 = get_bit(tmp2, num)
+                        .expect("tried to index u8 outside of 8 bits");
+                    palette_indices[num as usize][keyval.0 - index as usize] =
+                        if b1 && b2 {
+                            color3
+                        } else if b1 {
+                            color2
+                        } else if b2 {
+                            color1
+                        } else {
+                            color0
+                        };
+                }
+            }
+
+            if i == 0 {
+                y_off = 0;
+                x_off = 0;
+            } else if i % 16 == 0 {
+                y_off += 8;
+                x_off = 0;
+            }
+
+            for y in y_off..y_off + 8 {
+                for x in x_off..x_off + 8 {
+                    ts.put_pixel(
+                        x,
+                        y,
+                        palette_indices[(x % 8) as usize][(y % 8) as usize],
+                    );
+                }
+            }
+            x_off += 8;
+        }
+        ts
+    }
+
+    pub fn debug_pt(&self) {
+        let RED: Rgba<u8> = Rgba {
+            data: [160, 120, 45, 1],
+        };
+        let GREEN: Rgba<u8> = Rgba {
+            data: [255, 0, 0, 1],
+        };
+        let BLUE: Rgba<u8> = Rgba {
+            data: [244, 164, 96, 1],
+        };
+        let WHITE: Rgba<u8> = Rgba {
+            data: [128, 128, 128, 1],
+        };
+        let left = self.pull_tileset(WHITE, BLUE, GREEN, RED, 0x0000);
+        let right = self.pull_tileset(WHITE, BLUE, GREEN, RED, 0x1000);
+
+        let mut png: File = File::create("left.png").unwrap();
+        left.save(&mut png, ImageFormat::PNG);
+        let mut png: File = File::create("right.png").unwrap();
+        right.save(&mut png, ImageFormat::PNG);
+    }
+
     // Helper function that resolves the nametable mirroring and returns an
     // index usable for VRAM array indexing
     fn nt_mirror(&self, addr: u16, screen: ScreenMode) -> usize {
         match screen {
-            ScreenMode::FourScreen => unimplemented!(
-                "Four Screen mode not supported yet"),
+            ScreenMode::FourScreen => {
+                unimplemented!("Four Screen mode not supported yet")
+            }
             ScreenMode::Horizontal => match addr {
                 NT_0...NT_0_END => addr as usize,
                 NT_1...NT_2_END => (addr - 0x400) as usize,
                 NT_3...NT_3_END => (addr - 0x800) as usize,
                 _ => panic!("Horizontal: addr outside of nt passed"),
-            }
+            },
             ScreenMode::Vertical => match addr {
                 NT_0...NT_1_END => addr as usize,
                 NT_2...NT_3_END => (addr - 0x800) as usize,
                 _ => panic!("Vertical: addr outside of nt passed"),
-            }
+            },
         }
     }
 }
-
 
 impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
@@ -197,4 +293,11 @@ pub struct PRegisters {
     pub ppuaddr: u8,
     pub ppudata: u8,
     pub oamdma: u8,
+}
+
+fn get_bit(n: u8, b: u8) -> Result<bool, String> {
+    if b > 7 {
+        return Err(format!("Attempted to pass in a val greater than 7 {}", b));
+    }
+    Ok((n >> (7 - b)) & 1 == 1)
 }
