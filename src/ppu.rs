@@ -20,6 +20,7 @@ const PALETTE_SIZE: usize = 0x20;
 
 const PT_START: u16 = 0x0000;
 const PT_END: u16 = 0x1FFF;
+const TILES_PER_PT: u16 = 0x100;
 
 const NT_0: u16 = 0x2000;
 const NT_0_END: u16 = 0x23FF;
@@ -110,91 +111,6 @@ impl Vram {
         }
     }
 
-    fn pull_tileset(
-        &self,
-        color0: Rgba<u8>,
-        color1: Rgba<u8>,
-        color2: Rgba<u8>,
-        color3: Rgba<u8>,
-        chr_addr: usize,
-    ) -> DynamicImage {
-        let mut ts = DynamicImage::new_rgb8(128, 128);
-        let mut palette_indices: [[Rgba<u8>; 8]; 8] = [[color0; 8]; 8];
-        let mut y_off = 0;
-        let mut x_off = 0;
-
-        for i in 0..256 {
-            let index = (i * 16) + chr_addr;
-            let zipped = Range {
-                start: index,
-                end: index + 8,
-            }.zip(index + 8..index + 16);
-
-            for keyval in zipped {
-                let tmp1 = self.ld8(keyval.0 as u16, ScreenMode::Horizontal);
-                let tmp2 = self.ld8(keyval.1 as u16, ScreenMode::Horizontal);
-                for num in 0..8 {
-                    let b1 = get_bit(tmp1, num)
-                        .expect("tried to index u8 outside of 8 bits");
-                    let b2 = get_bit(tmp2, num)
-                        .expect("tried to index u8 outside of 8 bits");
-                    palette_indices[num as usize][keyval.0 - index as usize] =
-                        if b1 && b2 {
-                            color3
-                        } else if b1 {
-                            color2
-                        } else if b2 {
-                            color1
-                        } else {
-                            color0
-                        };
-                }
-            }
-
-            if i == 0 {
-                y_off = 0;
-                x_off = 0;
-            } else if i % 16 == 0 {
-                y_off += 8;
-                x_off = 0;
-            }
-
-            for y in y_off..y_off + 8 {
-                for x in x_off..x_off + 8 {
-                    ts.put_pixel(
-                        x,
-                        y,
-                        palette_indices[(x % 8) as usize][(y % 8) as usize],
-                    );
-                }
-            }
-            x_off += 8;
-        }
-        ts
-    }
-
-    pub fn debug_pt(&self) {
-        let RED: Rgba<u8> = Rgba {
-            data: [160, 120, 45, 1],
-        };
-        let GREEN: Rgba<u8> = Rgba {
-            data: [255, 0, 0, 1],
-        };
-        let BLUE: Rgba<u8> = Rgba {
-            data: [244, 164, 96, 1],
-        };
-        let WHITE: Rgba<u8> = Rgba {
-            data: [128, 128, 128, 1],
-        };
-        let left = self.pull_tileset(WHITE, BLUE, GREEN, RED, 0x0000);
-        let right = self.pull_tileset(WHITE, BLUE, GREEN, RED, 0x1000);
-
-        let mut png: File = File::create("left.png").unwrap();
-        left.save(&mut png, ImageFormat::PNG);
-        let mut png: File = File::create("right.png").unwrap();
-        right.save(&mut png, ImageFormat::PNG);
-    }
-
     // Helper function that resolves the nametable mirroring and returns an
     // index usable for VRAM array indexing
     fn nt_mirror(&self, addr: u16, screen: ScreenMode) -> usize {
@@ -281,6 +197,81 @@ impl Ppu {
             _ => panic!("Somehow got to invalid register"),
         }
     }
+
+    fn pull_tileset(
+        &self,
+        colors: [Rgba<u8>; 4],
+        chr_addr: u16,
+    ) -> DynamicImage {
+        let mut ts = DynamicImage::new_rgb8(128, 128);
+        let mut palette_indices: [[Rgba<u8>; 8]; 8] = [[colors[0]; 8]; 8];
+        let mut y_off = 0;
+        let mut x_off = 0;
+
+        for tile_num in 0..TILES_PER_PT {
+            let index = (tile_num * 16) + chr_addr;
+            for byte in index..index+8 {
+                let tmp1 = self.vram.ld8(byte as u16, ScreenMode::Horizontal);
+                let tmp2 = self.vram.ld8((byte + 8) as u16, ScreenMode::Horizontal);
+                for num in 0..8 {
+                    let b1 = get_bit(tmp1, num)
+                        .expect("tried to index u8 outside of 8 bits");
+                    let b2 = get_bit(tmp2, num)
+                        .expect("tried to index u8 outside of 8 bits");
+                    palette_indices[num as usize][(byte - index) as usize] =
+                        if b1 && b2 {
+                            colors[3]
+                        } else if b1 {
+                            colors[2]
+                        } else if b2 {
+                            colors[1]
+                        } else {
+                            colors[0]
+                        };
+                }
+            }
+
+            if tile_num % 16 == 0 && tile_num != 0 {
+                y_off += 8;
+                x_off = 0;
+            }
+
+            for y in y_off..y_off + 8 {
+                for x in x_off..x_off + 8 {
+                    ts.put_pixel(
+                        x,
+                        y,
+                        palette_indices[(x % 8) as usize][(y % 8) as usize],
+                    );
+                }
+            }
+            x_off += 8;
+        }
+        ts
+    }
+
+    pub fn debug_pt(&self) {
+        let RED: Rgba<u8> = Rgba {
+            data: [160, 120, 45, 1],
+        };
+        let GREEN: Rgba<u8> = Rgba {
+            data: [255, 0, 0, 1],
+        };
+        let BLUE: Rgba<u8> = Rgba {
+            data: [244, 164, 96, 1],
+        };
+        let WHITE: Rgba<u8> = Rgba {
+            data: [128, 128, 128, 1],
+        };
+        let left = self.pull_tileset([WHITE, BLUE, GREEN, RED], 0x0000);
+        let right = self.pull_tileset([WHITE, BLUE, GREEN, RED], 0x1000);
+
+        let mut png: File = File::create("left.png").unwrap();
+        left.save(&mut png, ImageFormat::PNG);
+        let mut png: File = File::create("right.png").unwrap();
+        right.save(&mut png, ImageFormat::PNG);
+    }
+
 }
 
 pub struct PRegisters {

@@ -76,5 +76,5 @@ fn main() {
     //            Err(e) => println!("{:?}", e),
     //        }
     //    }
-    cpu.mmu.ppu.vram.debug_pt();
+    cpu.mmu.ppu.debug_pt();
 }
