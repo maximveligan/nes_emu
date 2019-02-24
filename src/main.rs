@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate nom;
 extern crate image;
+extern crate sdl2;
 
 mod apu;
 mod cpu;
@@ -9,6 +10,15 @@ mod mapper;
 mod mmu;
 mod ppu;
 mod rom;
+
+use sdl2::pixels::Color;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::render::TextureAccess;
+use sdl2::render::Texture;
+use sdl2::render::Canvas;
+use sdl2::pixels::PixelFormatEnum;
+use std::time::Duration;
 
 use cpu::Cpu;
 use apu::Apu;
@@ -23,6 +33,9 @@ use mmu::Mmu;
 use mmu::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+const SCREEN_WIDTH: usize = 128;
+const SCREEN_HEIGHT: usize = 128;
 
 fn main() {
     let mut raw_bytes = Vec::new();
@@ -76,5 +89,50 @@ fn main() {
     //            Err(e) => println!("{:?}", e),
     //        }
     //    }
-    cpu.mmu.ppu.debug_pt();
+
+    let sdl_context = sdl2::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+
+    let window = video_subsystem
+        .window(
+            "Nust",
+            (SCREEN_WIDTH * 5) as u32,
+            (SCREEN_HEIGHT * 5) as u32,
+        )
+        .position_centered()
+        .build()
+        .unwrap();
+
+    let mut canvas = window.into_canvas().build().unwrap();
+
+    let texture_creator = canvas.texture_creator();
+    let mut texture = texture_creator
+        .create_texture(
+            PixelFormatEnum::RGB24,
+            TextureAccess::Streaming,
+            SCREEN_WIDTH as u32,
+            SCREEN_HEIGHT as u32,
+        )
+        .unwrap();
+
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    'running: loop {
+        texture
+            .update(None, &cpu.mmu.ppu.debug_pt(), SCREEN_WIDTH * 3)
+            .unwrap();
+        canvas.clear();
+        canvas.copy(&texture, None, None).unwrap();
+        canvas.present();
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => break 'running,
+                _ => {}
+            }
+        }
+    }
 }

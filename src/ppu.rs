@@ -1,12 +1,6 @@
 use std::fs::File;
 use std::io::Write;
 use std::ops::Range;
-use image::Pixel;
-use image::ImageFormat;
-use image::Rgb;
-use image::Rgba;
-use image::DynamicImage;
-use image::GenericImage;
 
 use mapper::Mapper;
 use std::cell::RefCell;
@@ -198,21 +192,18 @@ impl Ppu {
         }
     }
 
-    fn pull_tileset(
-        &self,
-        colors: [Rgba<u8>; 4],
-        chr_addr: u16,
-    ) -> DynamicImage {
-        let mut ts = DynamicImage::new_rgb8(128, 128);
-        let mut palette_indices: [[Rgba<u8>; 8]; 8] = [[colors[0]; 8]; 8];
+    fn pull_tileset(&self, colors: [Rgb; 4], chr_addr: u16) -> [u8; 49152] {
+        let mut ts = [0; 128 * 128 * 3];
+        let mut palette_indices: [[Rgb; 8]; 8] = [[colors[0]; 8]; 8];
         let mut y_off = 0;
         let mut x_off = 0;
 
-        for tile_num in 0..TILES_PER_PT {
+        for tile_num in 0..256 {
             let index = (tile_num * 16) + chr_addr;
-            for byte in index..index+8 {
+            for byte in index..index + 8 {
                 let tmp1 = self.vram.ld8(byte as u16, ScreenMode::Horizontal);
-                let tmp2 = self.vram.ld8((byte + 8) as u16, ScreenMode::Horizontal);
+                let tmp2 =
+                    self.vram.ld8((byte + 8) as u16, ScreenMode::Horizontal);
                 for num in 0..8 {
                     let b1 = get_bit(tmp1, num)
                         .expect("tried to index u8 outside of 8 bits");
@@ -238,11 +229,11 @@ impl Ppu {
 
             for y in y_off..y_off + 8 {
                 for x in x_off..x_off + 8 {
-                    ts.put_pixel(
-                        x,
-                        y,
-                        palette_indices[(x % 8) as usize][(y % 8) as usize],
-                    );
+                    let tmp =
+                        palette_indices[(x % 8) as usize][(y % 8) as usize];
+                    ts[(x * 3) + (y * 128 * 3)] = tmp.data[0];
+                    ts[((x * 3) + 1) + (y * 128 * 3)] = tmp.data[1];
+                    ts[((x * 3) + 2) + (y * 128 * 3)] = tmp.data[2];
                 }
             }
             x_off += 8;
@@ -250,28 +241,26 @@ impl Ppu {
         ts
     }
 
-    pub fn debug_pt(&self) {
-        let RED: Rgba<u8> = Rgba {
-            data: [160, 120, 45, 1],
+    pub fn debug_pt(&self) -> [u8; 49152] {
+        let red: Rgb = Rgb {
+            data: [160, 120, 45],
         };
-        let GREEN: Rgba<u8> = Rgba {
-            data: [255, 0, 0, 1],
+        let green: Rgb = Rgb { data: [255, 0, 0] };
+        let blue: Rgb = Rgb {
+            data: [244, 164, 96],
         };
-        let BLUE: Rgba<u8> = Rgba {
-            data: [244, 164, 96, 1],
+        let white: Rgb = Rgb {
+            data: [128, 128, 128],
         };
-        let WHITE: Rgba<u8> = Rgba {
-            data: [128, 128, 128, 1],
-        };
-        let left = self.pull_tileset([WHITE, BLUE, GREEN, RED], 0x0000);
-        let right = self.pull_tileset([WHITE, BLUE, GREEN, RED], 0x1000);
-
-        let mut png: File = File::create("left.png").unwrap();
-        left.save(&mut png, ImageFormat::PNG);
-        let mut png: File = File::create("right.png").unwrap();
-        right.save(&mut png, ImageFormat::PNG);
+        let left = self.pull_tileset([white, blue, green, red], 0x0000);
+        let right = self.pull_tileset([white, blue, green, red], 0x1000);
+        left
     }
+}
 
+#[derive(Copy, Clone)]
+struct Rgb {
+    data: [u8; 3],
 }
 
 pub struct PRegisters {

@@ -6,3 +6,4 @@ authors = ["maximveligan <maximveligan@gmail.com>"]
 [dependencies]
 nom = "*"
 image = "0.18.0"
+sdl2 = "0.32.*"
