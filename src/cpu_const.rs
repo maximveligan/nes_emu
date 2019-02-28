@@ -176,4 +176,4 @@ pub const NEG: u8 = 0b1000_0000;
 
 pub const NMI_VEC: u16 = 0xFFFA;
 pub const RESET_VEC: u16 = 0xFFFC;
-pub const BRK_VEC: u16 = 0xFFFE;
+pub const IRQ_VEC: u16 = 0xFFFE;

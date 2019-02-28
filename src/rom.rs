@@ -37,7 +37,11 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
                     save_ram: flag6 & 0b10 == 1,
                     vs_unisystem: flag7 & 0b01 == 1,
                     playchoice10: flag7 & 0b10 == 1,
-                    flag9: flag9,
+                    region: if flag9 & 0b01 == 1 {
+                        Region::PAL
+                    } else {
+                        Region::NTSC
+                    },
                     flag10: flag10,
                     rom_type: if flag7 & 0b1100 == 0b1000 {
                         RomType::Nes2
@@ -56,7 +60,7 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
     )
 }
 
-// Almost no roms use flag10 or flag9, as such pulled as u8
+// Almost no roms use flag10, as such pulled as u8
 pub struct Header {
     pub rom_type: RomType,
     pub mapper: u8,
@@ -64,7 +68,7 @@ pub struct Header {
     pub save_ram: bool,
     vs_unisystem: bool,
     playchoice10: bool,
-    flag9: u8,
+    pub region: Region,
     flag10: u8,
 }
 
@@ -74,14 +78,14 @@ impl fmt::Debug for Header {
             f,
             "Header:\n\
              Type-{:?}, Mapper-{}, ScreenMode-{:?}, SRAM-{}\n\
-             VS Unisystem-{}, Playchoice10-{}, flag9-{}, flag10-{}\n",
+             VS Unisystem-{}, Playchoice10-{}, Region-{:?}, flag10-{}\n",
             self.rom_type,
             self.mapper,
             self.screen,
             self.save_ram,
             self.vs_unisystem,
             self.playchoice10,
-            self.flag9,
+            self.region,
             self.flag10
         )
     }
@@ -121,4 +125,10 @@ pub enum ScreenMode {
 pub enum RomType {
     INes,
     Nes2,
+}
+
+#[derive(Debug)]
+pub enum Region {
+    NTSC,
+    PAL,
 }

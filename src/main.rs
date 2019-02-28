@@ -24,6 +24,7 @@ use cpu::Cpu;
 use apu::Apu;
 use ppu::Ppu;
 use rom::RomType;
+use rom::Region;
 use rom::parse_rom;
 use std::fs::File;
 use std::env;
@@ -34,8 +35,8 @@ use mmu::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const SCREEN_WIDTH: usize = 128;
-const SCREEN_HEIGHT: usize = 128;
+const SCREEN_WIDTH: usize = 256;
+const SCREEN_HEIGHT: usize = 240;
 
 fn main() {
     let mut raw_bytes = Vec::new();
@@ -76,6 +77,14 @@ fn main() {
         _ => (),
     }
 
+    match rom.header.region {
+        Region::PAL => {
+            println!("Unsupported region PAL!");
+            return;
+        }
+        _ => (),
+    }
+
     let mut mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
     let mut cpu = Cpu::new(Mmu::new(
         Apu::new(),
@@ -83,12 +92,6 @@ fn main() {
         Ppu::new(mapper.clone()),
         mapper,
     ));
-    //    loop {
-    //        match cpu.step() {
-    //            Ok(()) => (),
-    //            Err(e) => println!("{:?}", e),
-    //        }
-    //    }
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -103,7 +106,12 @@ fn main() {
         .build()
         .unwrap();
 
-    let mut canvas = window.into_canvas().build().unwrap();
+    let mut canvas = window
+        .into_canvas()
+        .accelerated()
+        .present_vsync()
+        .build()
+        .unwrap();
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
@@ -116,13 +124,25 @@ fn main() {
         .unwrap();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
-    'running: loop {
-        texture
-            .update(None, &cpu.mmu.ppu.debug_pt(), SCREEN_WIDTH * 3)
-            .unwrap();
-        canvas.clear();
-        canvas.copy(&texture, None, None).unwrap();
-        canvas.present();
+    loop {
+        let cc = match cpu.step() {
+            Ok(cc) => cc,
+            Err(e) => {
+                println!("{:?}", e);
+                return;
+            }
+        };
+
+        match cpu.mmu.ppu.emulate_cycles(cc) {
+            Some(buff) => {
+                texture.update(None, &buff, SCREEN_WIDTH * 3).unwrap();
+                canvas.clear();
+                canvas.copy(&texture, None, None).unwrap();
+                canvas.present();
+                cpu.proc_nmi();
+            }
+            None => (),
+        }
 
         for event in event_pump.poll_iter() {
             match event {
@@ -130,7 +150,7 @@ fn main() {
                 | Event::KeyDown {
                     keycode: Some(Keycode::Escape),
                     ..
-                } => break 'running,
+                } => break,
                 _ => {}
             }
         }

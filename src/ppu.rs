@@ -31,6 +31,9 @@ const PALETTE_RAM_I: u16 = 0x3F00;
 const PALETTE_MIRROR: u16 = 0x3F20;
 const PALETTE_MIRROR_END: u16 = 0x3FFF;
 
+const CYC_PER_LINE: u16 = 340;
+const SCAN_PER_FRAME: u16 = 260;
+
 static PALETTE: [u8; 192] = [
     0x80, 0x80, 0x80, 0x00, 0x3D, 0xA6, 0x00, 0x12, 0xB0, 0x44, 0x00, 0x96,
     0xA1, 0x00, 0x5E, 0xC7, 0x00, 0x28, 0xBA, 0x06, 0x00, 0x8C, 0x17, 0x00,
@@ -61,6 +64,7 @@ pub struct Ppu {
     screen_buff: [[u8; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
     oam: [[u8; SPRITE_ATTR]; SPRITE_NUM],
     cc: u16,
+    scanline: u16,
 }
 
 pub struct Vram {
@@ -145,6 +149,7 @@ impl Ppu {
             screen_buff: [[0; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
             oam: [[0; SPRITE_ATTR]; SPRITE_NUM],
             cc: 0,
+            scanline: 0,
         }
     }
 
@@ -192,14 +197,58 @@ impl Ppu {
         }
     }
 
+    pub fn emulate_cycles(
+        &mut self,
+        cyc_elapsed: u8,
+    ) -> Option<[u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3]> {
+        // Note this is grossly over simplified and needs to be changed once
+        // the initial functionality of the PPU is achieved
+        self.cc += (cyc_elapsed as u16 * 3);
+        if self.scanline < SCREEN_HEIGHT as u16 {
+            if self.cc > CYC_PER_LINE {
+                self.cc %= CYC_PER_LINE;
+                self.scanline += 1;
+                //TODO: Write function -> self.pull_scanline();
+            }
+            None
+        } else if self.scanline < 261 {
+            if self.cc > CYC_PER_LINE {
+                self.cc %= CYC_PER_LINE;
+                self.scanline += 1;
+            }
+            Some(self.flatten_buff())
+        } else {
+            if self.cc > CYC_PER_LINE {
+                self.cc %= CYC_PER_LINE;
+                self.scanline = 0;
+            }
+            None
+        }
+    }
+
+    pub fn flatten_buff(&self) -> [u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3] {
+        let mut tmp = [0; SCREEN_WIDTH * SCREEN_HEIGHT * 3];
+        for row_num in 0..SCREEN_HEIGHT {
+            for col_num in 0..SCREEN_WIDTH {
+                tmp[(row_num * SCREEN_WIDTH) + col_num] =
+                    self.screen_buff[row_num][col_num];
+                tmp[(row_num * SCREEN_WIDTH) + col_num + 1] =
+                    self.screen_buff[row_num][col_num + 1];
+                tmp[(row_num * SCREEN_WIDTH) + col_num + 2] =
+                    self.screen_buff[row_num][col_num + 2];
+            }
+        }
+        tmp
+    }
+
     fn pull_tileset(&self, colors: [Rgb; 4], chr_addr: u16) -> [u8; 49152] {
         let mut ts = [0; 128 * 128 * 3];
         let mut palette_indices: [[Rgb; 8]; 8] = [[colors[0]; 8]; 8];
         let mut y_off = 0;
         let mut x_off = 0;
 
-        for tile_num in 0..256 {
-            let index = (tile_num * 16) + chr_addr;
+        for tile_num in 0..SCREEN_WIDTH {
+            let index = (tile_num * 16) as u16 + chr_addr;
             for byte in index..index + 8 {
                 let tmp1 = self.vram.ld8(byte as u16, ScreenMode::Horizontal);
                 let tmp2 =

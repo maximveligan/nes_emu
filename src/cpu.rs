@@ -55,7 +55,7 @@ impl fmt::Debug for ProgramCounter {
 
 pub struct Cpu {
     pub regs: Registers,
-    pub cycle_count: usize,
+    pub cycle_count: u8,
     pub mmu: Mmu,
 }
 
@@ -292,14 +292,21 @@ impl Cpu {
             mmu: mmu,
         };
         cpu.set_flag(0b00100000, true);
-        //cpu.regs.pc.set_addr(mmu.ld16(RESET_VEC, mapper));
+        cpu.regs.pc.set_addr(cpu.mmu.ld16(RESET_VEC));
         // Enable this line to run nestest
-        cpu.regs.pc.set_addr(0xC000);
+        // cpu.regs.pc.set_addr(0xC000);
         cpu
     }
 
     fn incr_cc(&mut self) {
         self.cycle_count += 1;
+    }
+
+    pub fn proc_nmi(&mut self) {
+        let flags = self.regs.flags;
+        self.push_pc();
+        self.push(flags);
+        self.regs.pc.set_addr(self.mmu.ld16(NMI_VEC));
     }
 
     fn write_dma(&mut self, high_nyb: u8) {
@@ -506,7 +513,7 @@ impl Cpu {
                         self.push_pc();
                         let flags = self.regs.flags;
                         self.push(flags);
-                        self.regs.pc.set_addr(BRK_VEC);
+                        self.regs.pc.set_addr(IRQ_VEC);
                         self.set_flag(BRK_F, true);
                     }
                     Op::Sys(Sys::NOP) => (),
@@ -738,16 +745,18 @@ impl Cpu {
         (self.regs.flags & flag) != 0
     }
 
-    pub fn step(&mut self) -> Result<(), InvalidOp> {
+    pub fn step(&mut self) -> Result<u8, InvalidOp> {
         let regs = self.regs.clone();
         let byte = self.ld8_pc_up();
         let cycle = self.cycle_count;
-        self.cycle_count += CYCLES[byte as usize] as usize;
+        self.cycle_count += CYCLES[byte as usize];
         let (op, addr_mode) = self.decode_op(byte)?;
         let addr_data = addr_mode.address_mem(&self);
         println!("{:?} {:?} CYC:{}", op, regs, cycle);
         self.execute_op(op, addr_data);
-        Ok(())
+        let tmp = self.cycle_count;
+        self.cycle_count = 0;
+        Ok(tmp)
     }
 
     fn ld8_pc_up(&mut self) -> u8 {
