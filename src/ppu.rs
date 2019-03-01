@@ -62,9 +62,10 @@ pub struct Ppu {
 
     // multiply by 3 to account for r g b
     screen_buff: [[u8; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
-    oam: [[u8; SPRITE_ATTR]; SPRITE_NUM],
+    oam: [u8; SPRITE_ATTR * SPRITE_NUM],
     cc: u16,
     scanline: u16,
+    frame_sent: bool,
 }
 
 pub struct Vram {
@@ -135,35 +136,33 @@ impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
         Ppu {
             regs: PRegisters {
-                ppuctrl: 0,
-                ppumask: 0,
-                ppustatus: 0,
-                oamaddr: 0,
-                oamdata: 0,
-                ppuscroll: 0,
-                ppuaddr: 0,
-                ppudata: 0,
-                oamdma: 0,
+                control: 0,
+                mask: 0,
+                status: 0,
+                oam_addr: 0,
+                scroll: 0,
+                addr: 0,
             },
             vram: Vram::new(&PALETTE, mapper),
             screen_buff: [[0; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
-            oam: [[0; SPRITE_ATTR]; SPRITE_NUM],
+            oam: [0; SPRITE_ATTR * SPRITE_NUM],
             cc: 0,
             scanline: 0,
+            frame_sent: false,
         }
     }
 
     //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
     pub fn ld(&self, address: u16) -> u8 {
         match address {
-            0 => self.regs.ppuctrl,
-            1 => self.regs.ppumask,
-            2 => self.regs.ppustatus,
+            0 => self.regs.control,
+            1 => self.regs.mask,
+            2 => self.regs.status,
             3 => 0,
-            4 => panic!("Cannot read oamdata"),
+            4 => unimplemented!("This CAN be read from"),
             5 => 0,
             6 => 0,
-            7 => self.regs.ppudata,
+            7 => self.vram.vram[self.regs.addr as usize],
             _ => panic!("Somehow got to invalid register"),
         }
     }
@@ -172,34 +171,39 @@ impl Ppu {
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
             0 => {
-                self.regs.ppuctrl = val;
+                self.regs.control = val;
             }
             1 => {
-                self.regs.ppumask = val;
+                self.regs.mask = val;
             }
             2 => (),
             3 => {
-                self.regs.oamaddr = val;
+                self.regs.oam_addr = val;
             }
             4 => {
-                self.regs.oamdata = val;
+                self.oam[self.regs.oam_addr as usize] = val;
+                self.regs.oam_addr.wrapping_add(1);
             }
             5 => {
-                self.regs.ppuscroll = val;
+                self.regs.scroll = val;
             }
             6 => {
-                self.regs.ppuaddr = val;
+                self.regs.addr = val;
             }
             7 => {
-                self.regs.ppudata = val;
+                self.vram.vram[self.regs.addr as usize] = val;
             }
             _ => panic!("Somehow got to invalid register"),
         }
     }
 
+    fn pull_scanline(&mut self) {
+        // unimplemented!();
+    }
+
     pub fn emulate_cycles(
         &mut self,
-        cyc_elapsed: u8,
+        cyc_elapsed: u16,
     ) -> Option<[u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3]> {
         // Note this is grossly over simplified and needs to be changed once
         // the initial functionality of the PPU is achieved
@@ -208,21 +212,35 @@ impl Ppu {
             if self.cc > CYC_PER_LINE {
                 self.cc %= CYC_PER_LINE;
                 self.scanline += 1;
-                //TODO: Write function -> self.pull_scanline();
+                self.pull_scanline();
             }
             None
-        } else if self.scanline < 261 {
+        } else if self.scanline == 241 {
             if self.cc > CYC_PER_LINE {
                 self.cc %= CYC_PER_LINE;
                 self.scanline += 1;
             }
-            Some(self.flatten_buff())
-        } else {
+            if !self.frame_sent {
+                self.frame_sent = true;
+                Some(self.flatten_buff())
+            } else {
+                None
+            }
+        } else if self.scanline == 240 || self.scanline < 261 {
+            if self.cc > CYC_PER_LINE {
+                self.cc %= CYC_PER_LINE;
+                self.scanline += 1;
+            }
+            None
+        } else if self.scanline == 261 {
             if self.cc > CYC_PER_LINE {
                 self.cc %= CYC_PER_LINE;
                 self.scanline = 0;
+                self.frame_sent = false;
             }
             None
+        } else {
+            panic!("Scanline can't get here {}. Check emulate_cycles", self.scanline);
         }
     }
 
@@ -313,15 +331,12 @@ struct Rgb {
 }
 
 pub struct PRegisters {
-    pub ppuctrl: u8,
-    pub ppumask: u8,
-    pub ppustatus: u8,
-    pub oamaddr: u8,
-    pub oamdata: u8,
-    pub ppuscroll: u8,
-    pub ppuaddr: u8,
-    pub ppudata: u8,
-    pub oamdma: u8,
+    pub control: u8,
+    pub mask: u8,
+    pub status: u8,
+    pub oam_addr: u8,
+    pub scroll: u8,
+    pub addr: u8,
 }
 
 fn get_bit(n: u8, b: u8) -> Result<bool, String> {

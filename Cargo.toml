@@ -3,6 +3,9 @@ name = "nes_emu"
 version = "0.1.0"
 authors = ["maximveligan <maximveligan@gmail.com>"]
 
+[lib]
+name = "nes_emu"
+
 [dependencies]
 nom = "*"
 image = "0.18.0"

@@ -39,10 +39,10 @@ impl ProgramCounter {
         self.0 = (self.0 as i32 + offset as i32) as u16;
     }
 
-    fn set_addr(&mut self, addr: u16) {
+    pub fn set_addr(&mut self, addr: u16) {
         self.0 = addr;
     }
-    fn get_addr(&self) -> u16 {
+    pub fn get_addr(&self) -> u16 {
         self.0
     }
 }
@@ -55,7 +55,7 @@ impl fmt::Debug for ProgramCounter {
 
 pub struct Cpu {
     pub regs: Registers,
-    pub cycle_count: u8,
+    pub cycle_count: u16,
     pub mmu: Mmu,
 }
 
@@ -152,11 +152,6 @@ pub enum Reg {
 pub enum Sys {
     BRK,
     NOP,
-}
-
-#[derive(Debug)]
-pub enum InvalidOp {
-    DoesntExist(String, u8),
 }
 
 pub enum AddrMode {
@@ -280,7 +275,7 @@ fn check_pb(base: u16, base_offset: u16) -> bool {
 impl Cpu {
     pub fn new(mmu: Mmu) -> Cpu {
         let mut cpu = Cpu {
-            cycle_count: 7,
+            cycle_count: 0,
             regs: Registers {
                 acc: 0,
                 x: 0,
@@ -293,8 +288,6 @@ impl Cpu {
         };
         cpu.set_flag(0b00100000, true);
         cpu.regs.pc.set_addr(cpu.mmu.ld16(RESET_VEC));
-        // Enable this line to run nestest
-        // cpu.regs.pc.set_addr(0xC000);
         cpu
     }
 
@@ -311,7 +304,7 @@ impl Cpu {
 
     fn write_dma(&mut self, high_nyb: u8) {
         // TODO: NES adds 1 cycle if CPU is on an odd CPU cycle, add logic in
-        // CPU to track if currently cycle is even or odd
+        // CPU to track if current cycle is even or odd
 
         self.incr_cc();
         let page_num = (high_nyb as u16) << 8;
@@ -745,14 +738,16 @@ impl Cpu {
         (self.regs.flags & flag) != 0
     }
 
-    pub fn step(&mut self) -> Result<u8, InvalidOp> {
+    pub fn step(&mut self, debug: bool) -> Result<u16, u8> {
         let regs = self.regs.clone();
         let byte = self.ld8_pc_up();
         let cycle = self.cycle_count;
-        self.cycle_count += CYCLES[byte as usize];
+        self.cycle_count += CYCLES[byte as usize] as u16;
         let (op, addr_mode) = self.decode_op(byte)?;
         let addr_data = addr_mode.address_mem(&self);
-        println!("{:?} {:?} CYC:{}", op, regs, cycle);
+        if debug {
+            println!("{:?} {:?}", op, regs);
+        }
         self.execute_op(op, addr_data);
         let tmp = self.cycle_count;
         self.cycle_count = 0;
@@ -771,7 +766,7 @@ impl Cpu {
         self.mmu.ld16(ram_ptr)
     }
 
-    pub fn decode_op(&mut self, op: u8) -> Result<(Op, AddrMode), InvalidOp> {
+    pub fn decode_op(&mut self, op: u8) -> Result<(Op, AddrMode), u8> {
         match op {
             INC_ABSX => {
                 Ok((Op::Math(Math::INC), AddrMode::AbsX(self.ld16_pc_up())))
@@ -1132,7 +1127,7 @@ impl Cpu {
             JMP_IND => {
                 Ok((Op::Jump(Jump::JMP), AddrMode::JmpIndir(self.ld16_pc_up())))
             }
-            _ => Err(InvalidOp::DoesntExist("Unsupported op".to_string(), op)),
+            _ => Err(op),
         }
     }
 }

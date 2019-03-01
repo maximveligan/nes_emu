@@ -3,13 +3,13 @@ extern crate nom;
 extern crate image;
 extern crate sdl2;
 
-mod apu;
-mod cpu;
-mod cpu_const;
-mod mapper;
-mod mmu;
-mod ppu;
-mod rom;
+pub mod apu;
+pub mod cpu;
+pub mod cpu_const;
+pub mod mapper;
+pub mod mmu;
+pub mod ppu;
+pub mod rom;
 
 use sdl2::pixels::Color;
 use sdl2::event::Event;
@@ -27,7 +27,6 @@ use rom::RomType;
 use rom::Region;
 use rom::parse_rom;
 use std::fs::File;
-use std::env;
 use std::io::Read;
 use mapper::Mapper;
 use mmu::Mmu;
@@ -38,9 +37,9 @@ use std::rc::Rc;
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
-fn main() {
+pub fn start_emulator(path_in: Option<String>) {
     let mut raw_bytes = Vec::new();
-    let raw_rom = match env::args().nth(1) {
+    let raw_rom =  match path_in {
         Some(path) => match File::open(path) {
             Ok(mut rom) => {
                 rom.read_to_end(&mut raw_bytes)
@@ -125,7 +124,7 @@ fn main() {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     loop {
-        let cc = match cpu.step() {
+        let cc = match cpu.step(false) {
             Ok(cc) => cc,
             Err(e) => {
                 println!("{:?}", e);
@@ -135,13 +134,13 @@ fn main() {
 
         match cpu.mmu.ppu.emulate_cycles(cc) {
             Some(buff) => {
+                cpu.proc_nmi();
                 texture.update(None, &buff, SCREEN_WIDTH * 3).unwrap();
                 canvas.clear();
                 canvas.copy(&texture, None, None).unwrap();
                 canvas.present();
-                cpu.proc_nmi();
             }
-            None => (),
+            None => ()
         }
 
         for event in event_pump.poll_iter() {
@@ -150,7 +149,7 @@ fn main() {
                 | Event::KeyDown {
                     keycode: Some(Keycode::Escape),
                     ..
-                } => break,
+                } => return,
                 _ => {}
             }
         }
