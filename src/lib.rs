@@ -10,6 +10,8 @@ pub mod mapper;
 pub mod mmu;
 pub mod ppu;
 pub mod rom;
+pub mod pregisters;
+pub mod controller;
 
 use sdl2::pixels::Color;
 use sdl2::event::Event;

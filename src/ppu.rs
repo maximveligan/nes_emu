@@ -6,6 +6,7 @@ use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
 use rom::ScreenMode;
+use pregisters::PRegisters;
 
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
@@ -135,14 +136,7 @@ impl Vram {
 impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
         Ppu {
-            regs: PRegisters {
-                control: 0,
-                mask: 0,
-                status: 0,
-                oam_addr: 0,
-                scroll: 0,
-                addr: 0,
-            },
+            regs: PRegisters::new(),
             vram: Vram::new(&PALETTE, mapper),
             screen_buff: [[0; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
             oam: [0; SPRITE_ATTR * SPRITE_NUM],
@@ -153,16 +147,20 @@ impl Ppu {
     }
 
     //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
-    pub fn ld(&self, address: u16) -> u8 {
+    pub fn ld(&mut self, address: u16) -> u8 {
         match address {
-            0 => self.regs.control,
-            1 => self.regs.mask,
+            0 => self.regs.control.load(),
+            1 => 0,
             2 => self.regs.status,
             3 => 0,
-            4 => unimplemented!("This CAN be read from"),
+            4 => self.oam[self.regs.oam_addr as usize],
             5 => 0,
             6 => 0,
-            7 => self.vram.vram[self.regs.addr as usize],
+            7 => {
+                let tmp = self.vram.vram[self.regs.addr.read() as usize];
+                self.regs.addr.add_offset(self.regs.control.vram_incr());
+                tmp
+            }
             _ => panic!("Somehow got to invalid register"),
         }
     }
@@ -170,12 +168,8 @@ impl Ppu {
     //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
-            0 => {
-                self.regs.control = val;
-            }
-            1 => {
-                self.regs.mask = val;
-            }
+            0 => self.regs.control.store(val),
+            1 => self.regs.mask.store(val),
             2 => (),
             3 => {
                 self.regs.oam_addr = val;
@@ -187,18 +181,35 @@ impl Ppu {
             5 => {
                 self.regs.scroll = val;
             }
-            6 => {
-                self.regs.addr = val;
-            }
+            6 => self.regs.addr.store(val),
             7 => {
-                self.vram.vram[self.regs.addr as usize] = val;
+                self.vram.vram[self.regs.addr.read() as usize] = val;
+                self.regs.addr.add_offset(self.regs.control.vram_incr());
             }
             _ => panic!("Somehow got to invalid register"),
         }
     }
 
+    fn pull_bg(&mut self) {
+        unimplemented!();
+    }
+
+    fn pull_sprites(&mut self) {
+        unimplemented!();
+    }
+
     fn pull_scanline(&mut self) {
-        // unimplemented!();
+        if !self.regs.mask.show_bg() &&
+           !self.regs.mask.show_sprites() {
+            return
+        } else if self.regs.mask.show_bg() && !self.regs.mask.show_sprites() {
+            self.pull_bg();
+        } else if !self.regs.mask.show_sprites() && !self.regs.mask.show_bg() {
+            panic!("Afaik, drawing the sprites but not the bg isn't supported");
+        } else {
+            self.pull_bg();
+            self.pull_sprites();
+        }
     }
 
     pub fn emulate_cycles(
@@ -328,15 +339,6 @@ impl Ppu {
 #[derive(Copy, Clone)]
 struct Rgb {
     data: [u8; 3],
-}
-
-pub struct PRegisters {
-    pub control: u8,
-    pub mask: u8,
-    pub status: u8,
-    pub oam_addr: u8,
-    pub scroll: u8,
-    pub addr: u8,
 }
 
 fn get_bit(n: u8, b: u8) -> Result<bool, String> {

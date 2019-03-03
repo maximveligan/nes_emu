@@ -166,13 +166,16 @@ pub static CYCLES: [u8; 256] = [
     2, 7, 4, 4, 7, 7,
 ];
 
-pub const CARRY: u8 = 0b0000_0001;
-pub const ZERO: u8 = 0b0000_0010;
-pub const ITR: u8 = 0b0000_0100;
-pub const DEC: u8 = 0b0000_1000;
-pub const BRK_F: u8 = 0b0001_0000;
-pub const O_F: u8 = 0b0100_0000;
-pub const NEG: u8 = 0b1000_0000;
+pub enum Flag {
+    Carry = 0b0000_0001,
+    Zero = 0b0000_0010,
+    Itr = 0b0000_0100,
+    Dec = 0b0000_1000,
+    Brk = 0b0001_0000,
+    Unused = 0b0010_0000,
+    O_f = 0b0100_0000,
+    Neg = 0b1000_0000,
+}
 
 pub const NMI_VEC: u16 = 0xFFFA;
 pub const RESET_VEC: u16 = 0xFFFC;
