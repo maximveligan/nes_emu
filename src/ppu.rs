@@ -17,14 +17,14 @@ const PT_START: u16 = 0x0000;
 const PT_END: u16 = 0x1FFF;
 const TILES_PER_PT: u16 = 0x100;
 
-const NT_0: u16 = 0x2000;
-const NT_0_END: u16 = 0x23FF;
-const NT_1: u16 = 0x2400;
-const NT_1_END: u16 = 0x27FF;
-const NT_2: u16 = 0x2800;
-const NT_2_END: u16 = 0x2BFF;
-const NT_3: u16 = 0x2C00;
-const NT_3_END: u16 = 0x2FFF;
+const NT_0: u16 = 0x000;
+const NT_0_END: u16 = 0x3FF;
+const NT_1: u16 = 0x400;
+const NT_1_END: u16 = 0x7FF;
+const NT_2: u16 = 0x800;
+const NT_2_END: u16 = 0xBFF;
+const NT_3: u16 = 0xC00;
+const NT_3_END: u16 = 0xFFF;
 
 const NT_MIRROR: u16 = 0x3000;
 const NT_MIRROR_END: u16 = 0x3EFF;
@@ -62,11 +62,12 @@ pub struct Ppu {
     pub vram: Vram,
 
     // multiply by 3 to account for r g b
-    screen_buff: [[u8; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
+    screen_buff: [u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3],
     oam: [u8; SPRITE_ATTR * SPRITE_NUM],
     cc: u16,
     scanline: u16,
     frame_sent: bool,
+    write: u8,
 }
 
 pub struct Vram {
@@ -84,13 +85,10 @@ impl Vram {
         }
     }
 
-    fn ld8(&self, addr: u16, screen: ScreenMode) -> u8 {
+    fn ld8(&self, addr: u16) -> u8 {
         match addr {
             PT_START...PT_END => self.mapper.borrow_mut().ld_chr(addr),
-            NT_0...NT_3_END => self.vram[self.nt_mirror(addr & 0xFFF, screen)],
-            NT_MIRROR...NT_MIRROR_END => {
-                panic!("Shouldn't load from here, programmer error")
-            }
+            0x2000...NT_MIRROR_END => self.vram[self.nt_mirror(addr & 0xFFF)],
             PALETTE_RAM_I...PALETTE_MIRROR_END => {
                 self.palette[(addr & 0x1F) as usize]
             }
@@ -98,11 +96,11 @@ impl Vram {
         }
     }
 
-    fn store(&mut self, addr: u16, val: u8, screen: ScreenMode) {
+    fn store(&mut self, addr: u16, val: u8) {
         match addr {
             PT_START...PT_END => println!("Warning! Can't store to chr rom"),
-            NT_0...NT_MIRROR_END => {
-                self.vram[self.nt_mirror(addr & 0xFFF, screen)] = val;
+            0x2000...NT_MIRROR_END => {
+                self.vram[self.nt_mirror(addr & 0xFFF)] = val;
             }
             PALETTE_RAM_I...PALETTE_MIRROR_END => {
                 self.palette[(addr & 0x1F) as usize] = val;
@@ -113,8 +111,8 @@ impl Vram {
 
     // Helper function that resolves the nametable mirroring and returns an
     // index usable for VRAM array indexing
-    fn nt_mirror(&self, addr: u16, screen: ScreenMode) -> usize {
-        match screen {
+    fn nt_mirror(&self, addr: u16) -> usize {
+        match self.mapper.borrow().get_mirroring() {
             ScreenMode::FourScreen => {
                 unimplemented!("Four Screen mode not supported yet")
             }
@@ -138,27 +136,28 @@ impl Ppu {
         Ppu {
             regs: PRegisters::new(),
             vram: Vram::new(&PALETTE, mapper),
-            screen_buff: [[0; SCREEN_WIDTH * 3]; SCREEN_HEIGHT],
+            screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
             oam: [0; SPRITE_ATTR * SPRITE_NUM],
             cc: 0,
             scanline: 0,
             frame_sent: false,
+            write: 0,
         }
     }
 
     //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
     pub fn ld(&mut self, address: u16) -> u8 {
         match address {
-            0 => self.regs.control.load(),
+            0 => 0,
             1 => 0,
-            2 => self.regs.status,
+            2 => self.regs.status.load(),
             3 => 0,
             4 => self.oam[self.regs.oam_addr as usize],
             5 => 0,
             6 => 0,
             7 => {
-                let tmp = self.vram.vram[self.regs.addr.read() as usize];
-                self.regs.addr.add_offset(self.regs.control.vram_incr());
+                let tmp = self.vram.ld8(self.regs.addr.read());
+                self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
                 tmp
             }
             _ => panic!("Somehow got to invalid register"),
@@ -168,7 +167,7 @@ impl Ppu {
     //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
-            0 => self.regs.control.store(val),
+            0 => self.regs.ctrl.store(val),
             1 => self.regs.mask.store(val),
             2 => (),
             3 => {
@@ -181,33 +180,80 @@ impl Ppu {
             5 => {
                 self.regs.scroll = val;
             }
-            6 => self.regs.addr.store(val),
+            6 => {
+                self.regs.addr.store(val, self.write);
+                self.write = if self.write == 0 {
+                    1
+                } else if self.write == 1 {
+                    0
+                } else {
+                    panic!("Write can only be 1 or 2, got {}", self.write);
+                };
+            }
+
             7 => {
-                self.vram.vram[self.regs.addr.read() as usize] = val;
-                self.regs.addr.add_offset(self.regs.control.vram_incr());
+                //println!("{}", self.regs.addr.read());
+                self.vram.store(self.regs.addr.read(), val);
+                self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
             }
             _ => panic!("Somehow got to invalid register"),
         }
     }
 
-    fn pull_bg(&mut self) {
-        unimplemented!();
+    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb) {
+        self.screen_buff[(y * SCREEN_WIDTH + x) * 3..][..3]
+            .copy_from_slice(&color.data);
     }
 
     fn pull_sprites(&mut self) {
-        unimplemented!();
+        ()
+    }
+
+    fn draw_bg(&mut self) {
+        let tmp = self.scanline as usize;
+        for x in 0u16..(SCREEN_WIDTH as u16) {
+            let x_tile_start = x / 8;
+            let y_tile_start = self.scanline / 8;
+            let x_pixel = x % 8;
+            let y_pixel = self.scanline % 8;
+
+            let vram_index = x_tile_start + (y_tile_start * 32);
+            // Get my tile number
+            let tile_number =
+                self.vram.ld8(self.regs.ctrl.base_nt_addr() + vram_index);
+            println!("t_number {:X}", tile_number);
+            let palette_table_index =
+                (tile_number as u16 * 16) + self.regs.ctrl.nt_pt_addr();
+            //println!("{}", palette_table_index);
+
+            let left_byte = self.vram.ld8(palette_table_index + y_pixel);
+            // Plus 8 to get the offset for the other sliver
+            let right_byte = self.vram.ld8(palette_table_index + 8 + y_pixel);
+            let left_sliver = ((left_byte >> x_pixel & 1) == 1);
+            let right_sliver = ((right_byte >> x_pixel & 1) == 1);
+            let color = if left_sliver && right_sliver {
+                Rgb { data: [255, 0, 0] }
+            } else if left_sliver {
+                Rgb { data: [0, 255, 0] }
+            } else if right_sliver {
+                Rgb { data: [0, 0, 255] }
+            } else {
+                Rgb { data: [0, 0, 0] }
+            };
+
+            self.put_pixel(x as usize, tmp, color);
+        }
     }
 
     fn pull_scanline(&mut self) {
-        if !self.regs.mask.show_bg() &&
-           !self.regs.mask.show_sprites() {
-            return
+        if !self.regs.mask.show_bg() && !self.regs.mask.show_sprites() {
+            return;
         } else if self.regs.mask.show_bg() && !self.regs.mask.show_sprites() {
-            self.pull_bg();
+            self.draw_bg();
         } else if !self.regs.mask.show_sprites() && !self.regs.mask.show_bg() {
             panic!("Afaik, drawing the sprites but not the bg isn't supported");
         } else {
-            self.pull_bg();
+            self.draw_bg();
             self.pull_sprites();
         }
     }
@@ -222,18 +268,19 @@ impl Ppu {
         if self.scanline < SCREEN_HEIGHT as u16 {
             if self.cc > CYC_PER_LINE {
                 self.cc %= CYC_PER_LINE;
-                self.scanline += 1;
                 self.pull_scanline();
+                self.scanline += 1;
             }
             None
         } else if self.scanline == 241 {
+            self.regs.status.set_vblank(true);
             if self.cc > CYC_PER_LINE {
                 self.cc %= CYC_PER_LINE;
                 self.scanline += 1;
             }
             if !self.frame_sent {
                 self.frame_sent = true;
-                Some(self.flatten_buff())
+                Some(self.screen_buff)
             } else {
                 None
             }
@@ -251,23 +298,11 @@ impl Ppu {
             }
             None
         } else {
-            panic!("Scanline can't get here {}. Check emulate_cycles", self.scanline);
+            panic!(
+                "Scanline can't get here {}. Check emulate_cycles",
+                self.scanline
+            );
         }
-    }
-
-    pub fn flatten_buff(&self) -> [u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3] {
-        let mut tmp = [0; SCREEN_WIDTH * SCREEN_HEIGHT * 3];
-        for row_num in 0..SCREEN_HEIGHT {
-            for col_num in 0..SCREEN_WIDTH {
-                tmp[(row_num * SCREEN_WIDTH) + col_num] =
-                    self.screen_buff[row_num][col_num];
-                tmp[(row_num * SCREEN_WIDTH) + col_num + 1] =
-                    self.screen_buff[row_num][col_num + 1];
-                tmp[(row_num * SCREEN_WIDTH) + col_num + 2] =
-                    self.screen_buff[row_num][col_num + 2];
-            }
-        }
-        tmp
     }
 
     fn pull_tileset(&self, colors: [Rgb; 4], chr_addr: u16) -> [u8; 49152] {
@@ -279,14 +314,11 @@ impl Ppu {
         for tile_num in 0..SCREEN_WIDTH {
             let index = (tile_num * 16) as u16 + chr_addr;
             for byte in index..index + 8 {
-                let tmp1 = self.vram.ld8(byte as u16, ScreenMode::Horizontal);
-                let tmp2 =
-                    self.vram.ld8((byte + 8) as u16, ScreenMode::Horizontal);
+                let tmp1 = self.vram.ld8(byte as u16);
+                let tmp2 = self.vram.ld8((byte + 8) as u16);
                 for num in 0..8 {
-                    let b1 = get_bit(tmp1, num)
-                        .expect("tried to index u8 outside of 8 bits");
-                    let b2 = get_bit(tmp2, num)
-                        .expect("tried to index u8 outside of 8 bits");
+                    let b1 = (tmp1 >> num & 1) == 1;
+                    let b2 = (tmp2 >> num & 1) == 1;
                     palette_indices[num as usize][(byte - index) as usize] =
                         if b1 && b2 {
                             colors[3]
@@ -339,11 +371,4 @@ impl Ppu {
 #[derive(Copy, Clone)]
 struct Rgb {
     data: [u8; 3],
-}
-
-fn get_bit(n: u8, b: u8) -> Result<bool, String> {
-    if b > 7 {
-        return Err(format!("Attempted to pass in a val greater than 7 {}", b));
-    }
-    Ok((n >> (7 - b)) & 1 == 1)
 }

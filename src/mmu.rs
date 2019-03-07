@@ -59,7 +59,12 @@ impl Mmu {
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
             WRAM_START...WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START...PPU_END => self.ppu.store((address - 0x2000) & 7, val),
+            PPU_START...PPU_END => {
+                if address == 0x2006 {
+                    println!("Storing to: {:X}, val: 0x{:X}", address, val);
+                }
+                self.ppu.store((address - 0x2000) & 7, val);
+            }
             0x4016 => {
                 self.ctrl0.store(val);
                 self.ctrl1.store(val);

@@ -35,7 +35,7 @@ impl Controller {
         if !self.strobe {
             self.index += 1;
         }
-	0x40 | val
+        0x40 | val
     }
 
     pub fn store(&mut self, val: u8) {

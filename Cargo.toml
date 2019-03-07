@@ -8,5 +8,4 @@ name = "nes_emu"
 
 [dependencies]
 nom = "*"
-image = "0.18.0"
 sdl2 = "0.32.*"

@@ -64,7 +64,7 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
 pub struct Header {
     pub rom_type: RomType,
     pub mapper: u8,
-    screen: ScreenMode,
+    pub screen: ScreenMode,
     pub save_ram: bool,
     vs_unisystem: bool,
     playchoice10: bool,

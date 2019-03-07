@@ -1,4 +1,5 @@
 use rom::Rom;
+use rom::ScreenMode;
 
 const UNMIRRORED_MASK: usize = 0x7FFF;
 const MIRRORED_MASK: usize = 0x3FFF;
@@ -81,6 +82,12 @@ impl Mapper {
     pub fn store_chr(&mut self, address: u16, val: u8) {
         match *self {
             Mapper::Nrom(ref mut nrom) => nrom.store_chr(address, val),
+        }
+    }
+
+    pub fn get_mirroring(&self) -> &ScreenMode {
+        match *self {
+            Mapper::Nrom(ref nrom) => &nrom.rom.header.screen,
         }
     }
 }

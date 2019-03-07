@@ -10,12 +10,10 @@ pub struct Ctrl(u8);
 
 impl Ctrl {
     fn new() -> Ctrl {
-        Ctrl {
-            0: 0
-        }
+        Ctrl { 0: 0 }
     }
 
-    fn get_nmi(&self) -> bool {
+    pub fn nmi_on(&self) -> bool {
         self.0 & NMI != 0
     }
 
@@ -39,7 +37,7 @@ impl Ctrl {
         }
     }
 
-    fn bg_tab_addr(&self) -> u16 {
+    pub fn nt_pt_addr(&self) -> u16 {
         self.table_addr(BG_TAB)
     }
 
@@ -55,14 +53,14 @@ impl Ctrl {
         }
     }
 
-    fn base_nt_addr(&self) -> u16 {
+    pub fn base_nt_addr(&self) -> u16 {
         let tmp = self.0 & BASE_ADDR;
         match tmp {
             0 => 0x2000,
             1 => 0x2400,
             2 => 0x2800,
             3 => 0x2C00,
-            _ => panic!("Other values shouldn't be possible")
+            _ => panic!("Other values shouldn't be possible"),
         }
     }
 
@@ -75,35 +73,27 @@ impl Ctrl {
     }
 }
 
-pub struct VramAddr {
-    addr: u16,
-    write2: bool,
-}
+pub struct VramAddr(u16);
 
 impl VramAddr {
-    fn new() -> VramAddr {
-        VramAddr {
-            addr: 0,
-            write2: false,
-        }
-    }
-
-    pub fn store(&mut self, val: u8) {
-        if self.write2 {
-            self.addr |= (val as u16);
-            self.write2 = false;
-        } else {
-            self.addr |= ((val as u16) << 8);
-            self.write2 = true;
+    pub fn store(&mut self, val: u8, write: u8) {
+        match write {
+            0 => {
+                self.0 |= ((val as u16) << 8);
+            }
+            1 => {
+                self.0 |= (val as u16);
+            }
+            i => panic!("Write has to be either 1 or 2, got {}", i),
         }
     }
 
     pub fn read(&self) -> u16 {
-        self.addr % 0x4000
+        self.0 % 0x4000
     }
 
     pub fn add_offset(&mut self, offset: u8) {
-        self.addr += offset as u16;
+        self.0 = self.0.wrapping_add(offset as u16);
     }
 }
 
@@ -118,7 +108,7 @@ impl Status {
         }
     }
 
-    fn set_vblank(&mut self, on: bool) {
+    pub fn set_vblank(&mut self, on: bool) {
         self.set_flag(on, 0b1000_0000);
     }
 
@@ -134,7 +124,7 @@ impl Status {
         self.set_flag(on, 0b0010_0000);
     }
 
-    fn load(&mut self) -> u8 {
+    pub fn load(&mut self) -> u8 {
         let tmp = self.0;
         self.set_vblank(false);
         tmp
@@ -153,26 +143,26 @@ impl Mask {
     }
 
     fn left8_bg(&self) -> bool {
-        self.get_flag(0b0000_0010
+        self.get_flag(0b0000_0010)
     }
 
     fn left8_sprite(&self) -> bool {
-        self.get_flag(0b0000_0100
+        self.get_flag(0b0000_0100)
     }
 
     pub fn show_bg(&self) -> bool {
-        self.get_flag(0b0000_1000
+        self.get_flag(0b0000_1000)
     }
 
     pub fn show_sprites(&self) -> bool {
-        self.get_flag(0b0001_0000
+        self.get_flag(0b0001_0000)
     }
 
     fn emphasize_r(&self) -> bool {
-        self.get_flag(0b0010_0000
+        self.get_flag(0b0010_0000)
     }
     fn emphasize_g(&self) -> bool {
-        self.get_flag(0b0100_0000
+        self.get_flag(0b0100_0000)
     }
     fn emphasize_b(&self) -> bool {
         self.get_flag(0b1000_0000)
@@ -183,9 +173,9 @@ impl Mask {
 }
 
 pub struct PRegisters {
-    pub control: Ctrl,
+    pub ctrl: Ctrl,
     pub mask: Mask,
-    pub status: u8,
+    pub status: Status,
     pub oam_addr: u8,
     pub scroll: u8,
     pub addr: VramAddr,
@@ -194,12 +184,12 @@ pub struct PRegisters {
 impl PRegisters {
     pub fn new() -> PRegisters {
         PRegisters {
-            control: Ctrl::new(),
+            ctrl: Ctrl::new(),
             mask: Mask(0),
-            status: 0,
+            status: Status(0),
             oam_addr: 0,
             scroll: 0,
-            addr: VramAddr::new(),
+            addr: VramAddr(0),
         }
     }
 }

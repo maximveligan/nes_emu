@@ -1,17 +1,16 @@
 #[macro_use]
 extern crate nom;
-extern crate image;
 extern crate sdl2;
 
 pub mod apu;
+pub mod controller;
 pub mod cpu;
 pub mod cpu_const;
 pub mod mapper;
 pub mod mmu;
 pub mod ppu;
-pub mod rom;
 pub mod pregisters;
-pub mod controller;
+pub mod rom;
 
 use sdl2::pixels::Color;
 use sdl2::event::Event;
@@ -41,7 +40,7 @@ const SCREEN_HEIGHT: usize = 240;
 
 pub fn start_emulator(path_in: Option<String>) {
     let mut raw_bytes = Vec::new();
-    let raw_rom =  match path_in {
+    let raw_rom = match path_in {
         Some(path) => match File::open(path) {
             Ok(mut rom) => {
                 rom.read_to_end(&mut raw_bytes)
@@ -100,8 +99,8 @@ pub fn start_emulator(path_in: Option<String>) {
     let window = video_subsystem
         .window(
             "Nust",
-            (SCREEN_WIDTH * 5) as u32,
-            (SCREEN_HEIGHT * 5) as u32,
+            (SCREEN_WIDTH * 3) as u32,
+            (SCREEN_HEIGHT * 3) as u32,
         )
         .position_centered()
         .build()
@@ -124,9 +123,11 @@ pub fn start_emulator(path_in: Option<String>) {
         )
         .unwrap();
 
+    let mut cycle_counter: usize = 0;
     let mut event_pump = sdl_context.event_pump().unwrap();
+
     loop {
-        let cc = match cpu.step(false) {
+        let cc = match cpu.step(true) {
             Ok(cc) => cc,
             Err(e) => {
                 println!("{:?}", e);
@@ -134,15 +135,19 @@ pub fn start_emulator(path_in: Option<String>) {
             }
         };
 
+        //cycle_counter += cc as usize;
+        //println!("{}", cycle_counter);
         match cpu.mmu.ppu.emulate_cycles(cc) {
             Some(buff) => {
-                cpu.proc_nmi();
+                if cpu.mmu.ppu.regs.ctrl.nmi_on() {
+                    cpu.proc_nmi();
+                }
                 texture.update(None, &buff, SCREEN_WIDTH * 3).unwrap();
                 canvas.clear();
                 canvas.copy(&texture, None, None).unwrap();
                 canvas.present();
             }
-            None => ()
+            None => (),
         }
 
         for event in event_pump.poll_iter() {

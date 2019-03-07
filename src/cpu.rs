@@ -295,6 +295,7 @@ impl Cpu {
     }
 
     pub fn proc_nmi(&mut self) {
+        //println!("NMI");
         let flags = self.regs.flags;
         self.push_pc();
         self.push(flags);
@@ -403,13 +404,25 @@ impl Cpu {
                     }
                     AddrDT::Signed(i) => {
                         let flag = match op {
-                            Op::Branch(Branch::BCC) => !self.get_flag(Flag::Carry),
-                            Op::Branch(Branch::BCS) => self.get_flag(Flag::Carry),
-                            Op::Branch(Branch::BNE) => !self.get_flag(Flag::Zero),
-                            Op::Branch(Branch::BEQ) => self.get_flag(Flag::Zero),
-                            Op::Branch(Branch::BPL) => !self.get_flag(Flag::Neg),
+                            Op::Branch(Branch::BCC) => {
+                                !self.get_flag(Flag::Carry)
+                            }
+                            Op::Branch(Branch::BCS) => {
+                                self.get_flag(Flag::Carry)
+                            }
+                            Op::Branch(Branch::BNE) => {
+                                !self.get_flag(Flag::Zero)
+                            }
+                            Op::Branch(Branch::BEQ) => {
+                                self.get_flag(Flag::Zero)
+                            }
+                            Op::Branch(Branch::BPL) => {
+                                !self.get_flag(Flag::Neg)
+                            }
                             Op::Branch(Branch::BMI) => self.get_flag(Flag::Neg),
-                            Op::Branch(Branch::BVC) => !self.get_flag(Flag::O_f),
+                            Op::Branch(Branch::BVC) => {
+                                !self.get_flag(Flag::O_f)
+                            }
                             Op::Branch(Branch::BVS) => self.get_flag(Flag::O_f),
                             e => panic!("Nothing else uses signed {:?}", e),
                         };
@@ -501,13 +514,7 @@ impl Cpu {
                     Op::Reg(Reg::SEC) => self.set_flag(Flag::Carry, true),
                     Op::Reg(Reg::SED) => self.set_flag(Flag::Dec, true),
                     Op::Reg(Reg::SEI) => self.set_flag(Flag::Itr, true),
-                    Op::Sys(Sys::BRK) => {
-                        self.push_pc();
-                        let flags = self.regs.flags;
-                        self.push(flags);
-                        self.regs.pc.set_addr(IRQ_VEC);
-                        self.set_flag(Flag::Brk, true);
-                    }
+                    Op::Sys(Sys::BRK) => self.brk(),
                     Op::Sys(Sys::NOP) => (),
 
                     // ACC mode
@@ -521,6 +528,14 @@ impl Cpu {
                 }
             }
         }
+    }
+
+    fn brk(&mut self) {
+        self.push_pc();
+        let flags = self.regs.flags;
+        self.push(flags);
+        self.regs.pc.set_addr(IRQ_VEC);
+        self.set_flag(Flag::Brk, true);
     }
 
     fn and(&mut self, val: u8) {
@@ -574,7 +589,8 @@ impl Cpu {
     }
 
     fn ror_acc(&mut self) {
-        let (tmp, n_flag) = Cpu::get_ror(self.get_flag(Flag::Carry), self.regs.acc);
+        let (tmp, n_flag) =
+            Cpu::get_ror(self.get_flag(Flag::Carry), self.regs.acc);
         self.set_flag(Flag::Carry, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -593,7 +609,8 @@ impl Cpu {
     }
 
     fn rol_acc(&mut self) {
-        let (tmp, n_flag) = Cpu::get_rol(self.get_flag(Flag::Carry), self.regs.acc);
+        let (tmp, n_flag) =
+            Cpu::get_rol(self.get_flag(Flag::Carry), self.regs.acc);
         self.set_flag(Flag::Carry, n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -745,7 +762,7 @@ impl Cpu {
         let (op, addr_mode) = self.decode_op(byte)?;
         let addr_data = addr_mode.address_mem(self);
         if debug {
-            println!("{:?} {:?}", op, regs);
+            //println!("{:?} {:?}", op, regs);
         }
         self.execute_op(op, addr_data);
         let tmp = self.cycle_count;
