@@ -59,12 +59,7 @@ impl Mmu {
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
             WRAM_START...WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START...PPU_END => {
-                if address == 0x2006 {
-                    println!("Storing to: {:X}, val: 0x{:X}", address, val);
-                }
-                self.ppu.store((address - 0x2000) & 7, val);
-            }
+            PPU_START...PPU_END => self.ppu.store((address - 0x2000) & 7, val),
             0x4016 => {
                 self.ctrl0.store(val);
                 self.ctrl1.store(val);
@@ -72,12 +67,7 @@ impl Mmu {
             0x4017 => self.apu.store(address - 0x4000, val),
             APU_START...APU_END => self.apu.store(address - 0x4000, val),
             ROM_START...ROM_END => {
-                println!(
-                    "Warning! Attempt to write to rom at address {:X}",
-                    address
-                );
-                let mut mapper = self.mapper.borrow_mut();
-                mapper.store_prg(address, val);
+                self.mapper.borrow_mut().store_prg(address, val)
             }
             _ => panic!("Undefined load"),
         }

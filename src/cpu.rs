@@ -333,7 +333,6 @@ impl Cpu {
                 }
                 match mode {
                     AddrDT::Addr(addr) => {
-                        let tmp = self.mmu.ld8(addr);
                         match op {
                             // Operandless mirrors (those using the acc addr)
                             Op::Bit(Bit::ROR) => self.ror_addr(addr),
@@ -342,20 +341,56 @@ impl Cpu {
                             Op::Bit(Bit::LSR) => self.lsr_addr(addr),
 
                             // Imm mirrors
-                            Op::Reg(Reg::CPX) => self.cpx(tmp),
-                            Op::Reg(Reg::CMP) => self.cmp(tmp),
-                            Op::Reg(Reg::CPY) => self.cpy(tmp),
-                            Op::Math(Math::SBC) => self.sbc(tmp),
-                            Op::Math(Math::ADC) => self.adc(tmp),
-                            Op::Store(Store::LDA) => self.lda(tmp),
-                            Op::Store(Store::LDX) => self.ldx(tmp),
-                            Op::Store(Store::LDY) => self.ldy(tmp),
-                            Op::Bit(Bit::EOR) => self.eor(tmp),
-                            Op::Bit(Bit::AND) => self.and(tmp),
-                            Op::Bit(Bit::ORA) => self.ora(tmp),
+                            Op::Reg(Reg::CPX) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.cpx(tmp)
+                            }
+                            Op::Reg(Reg::CMP) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.cmp(tmp)
+                            }
+                            Op::Reg(Reg::CPY) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.cpy(tmp)
+                            }
+                            Op::Math(Math::SBC) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.sbc(tmp)
+                            }
+                            Op::Math(Math::ADC) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.adc(tmp)
+                            }
+                            Op::Store(Store::LDA) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.lda(tmp)
+                            }
+                            Op::Store(Store::LDX) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.ldx(tmp)
+                            }
+                            Op::Store(Store::LDY) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.ldy(tmp)
+                            }
+                            Op::Bit(Bit::EOR) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.eor(tmp)
+                            }
+                            Op::Bit(Bit::AND) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.and(tmp)
+                            }
+                            Op::Bit(Bit::ORA) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.ora(tmp)
+                            }
 
                             // Ops without IMP and ACC support
-                            Op::Bit(Bit::BIT) => self.bit(tmp),
+                            Op::Bit(Bit::BIT) => {
+                                let tmp = self.mmu.ld8(addr);
+                                self.bit(tmp)
+                            }
                             Op::Math(Math::DEC) => self.dec(addr),
                             Op::Math(Math::INC) => self.inc(addr),
                             Op::Jump(Jump::JMP) => self.regs.pc.set_addr(addr),
@@ -762,7 +797,7 @@ impl Cpu {
         let (op, addr_mode) = self.decode_op(byte)?;
         let addr_data = addr_mode.address_mem(self);
         if debug {
-            //println!("{:?} {:?}", op, regs);
+            println!("{:?} {:?}", op, regs);
         }
         self.execute_op(op, addr_data);
         let tmp = self.cycle_count;

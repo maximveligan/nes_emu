@@ -35,6 +35,7 @@ use mmu::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+const SCALAR: usize = 5;
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
@@ -99,8 +100,8 @@ pub fn start_emulator(path_in: Option<String>) {
     let window = video_subsystem
         .window(
             "Nust",
-            (SCREEN_WIDTH * 3) as u32,
-            (SCREEN_HEIGHT * 3) as u32,
+            (SCREEN_WIDTH * SCALAR) as u32,
+            (SCREEN_HEIGHT * SCALAR) as u32,
         )
         .position_centered()
         .build()
@@ -127,7 +128,7 @@ pub fn start_emulator(path_in: Option<String>) {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     loop {
-        let cc = match cpu.step(true) {
+        let cc = match cpu.step(false) {
             Ok(cc) => cc,
             Err(e) => {
                 println!("{:?}", e);

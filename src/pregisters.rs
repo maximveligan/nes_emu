@@ -9,10 +9,6 @@ const BASE_ADDR: u8 = 0b0000_0011;
 pub struct Ctrl(u8);
 
 impl Ctrl {
-    fn new() -> Ctrl {
-        Ctrl { 0: 0 }
-    }
-
     pub fn nmi_on(&self) -> bool {
         self.0 & NMI != 0
     }
@@ -79,9 +75,11 @@ impl VramAddr {
     pub fn store(&mut self, val: u8, write: u8) {
         match write {
             0 => {
+                self.0 &= 0x00FF;
                 self.0 |= ((val as u16) << 8);
             }
             1 => {
+                self.0 &= 0xFF00;
                 self.0 |= (val as u16);
             }
             i => panic!("Write has to be either 1 or 2, got {}", i),
@@ -184,7 +182,7 @@ pub struct PRegisters {
 impl PRegisters {
     pub fn new() -> PRegisters {
         PRegisters {
-            ctrl: Ctrl::new(),
+            ctrl: Ctrl(0),
             mask: Mask(0),
             status: Status(0),
             oam_addr: 0,

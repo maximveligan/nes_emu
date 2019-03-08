@@ -68,6 +68,7 @@ pub struct Ppu {
     scanline: u16,
     frame_sent: bool,
     write: u8,
+    ppudata_buff: u8,
 }
 
 pub struct Vram {
@@ -142,6 +143,7 @@ impl Ppu {
             scanline: 0,
             frame_sent: false,
             write: 0,
+            ppudata_buff: 0,
         }
     }
 
@@ -156,9 +158,16 @@ impl Ppu {
             5 => 0,
             6 => 0,
             7 => {
-                let tmp = self.vram.ld8(self.regs.addr.read());
+                let addr = self.regs.addr.read();
+                let val = self.vram.ld8(addr);
                 self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
-                tmp
+                if addr < 0x3F00 {
+                    let buff_val = self.ppudata_buff;
+                    self.ppudata_buff = val;
+                    buff_val
+                } else {
+                    val
+                }
             }
             _ => panic!("Somehow got to invalid register"),
         }
@@ -192,8 +201,8 @@ impl Ppu {
             }
 
             7 => {
-                //println!("{}", self.regs.addr.read());
-                self.vram.store(self.regs.addr.read(), val);
+                let addr = self.regs.addr.read();
+                self.vram.store(addr, val);
                 self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
             }
             _ => panic!("Somehow got to invalid register"),
@@ -221,16 +230,14 @@ impl Ppu {
             // Get my tile number
             let tile_number =
                 self.vram.ld8(self.regs.ctrl.base_nt_addr() + vram_index);
-            println!("t_number {:X}", tile_number);
             let palette_table_index =
                 (tile_number as u16 * 16) + self.regs.ctrl.nt_pt_addr();
-            //println!("{}", palette_table_index);
 
             let left_byte = self.vram.ld8(palette_table_index + y_pixel);
             // Plus 8 to get the offset for the other sliver
             let right_byte = self.vram.ld8(palette_table_index + 8 + y_pixel);
-            let left_sliver = ((left_byte >> x_pixel & 1) == 1);
-            let right_sliver = ((right_byte >> x_pixel & 1) == 1);
+            let left_sliver = ((left_byte << x_pixel & 0x80) != 0);
+            let right_sliver = ((right_byte << x_pixel & 0x80) != 0);
             let color = if left_sliver && right_sliver {
                 Rgb { data: [255, 0, 0] }
             } else if left_sliver {
