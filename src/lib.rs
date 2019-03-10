@@ -1,3 +1,4 @@
+#![feature(nll)]
 #[macro_use]
 extern crate nom;
 extern crate sdl2;
@@ -12,14 +13,10 @@ pub mod ppu;
 pub mod pregisters;
 pub mod rom;
 
-use sdl2::pixels::Color;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::TextureAccess;
-use sdl2::render::Texture;
-use sdl2::render::Canvas;
 use sdl2::pixels::PixelFormatEnum;
-use std::time::Duration;
 
 use cpu::Cpu;
 use apu::Apu;
@@ -35,7 +32,7 @@ use mmu::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const SCALAR: usize = 5;
+const SCALAR: usize = 2;
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
@@ -86,7 +83,7 @@ pub fn start_emulator(path_in: Option<String>) {
         _ => (),
     }
 
-    let mut mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
+    let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
     let mut cpu = Cpu::new(Mmu::new(
         Apu::new(),
         Ram::new(),
@@ -124,14 +121,14 @@ pub fn start_emulator(path_in: Option<String>) {
         )
         .unwrap();
 
-    let mut cycle_counter: usize = 0;
+    //let mut cycle_counter: usize = 0;
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     loop {
         let cc = match cpu.step(false) {
             Ok(cc) => cc,
             Err(e) => {
-                println!("{:?}", e);
+                println!("Got unsupported op {:X}", e);
                 return;
             }
         };

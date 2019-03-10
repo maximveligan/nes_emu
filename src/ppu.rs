@@ -1,7 +1,3 @@
-use std::fs::File;
-use std::io::Write;
-use std::ops::Range;
-
 use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -25,6 +21,7 @@ const NT_2: u16 = 0x800;
 const NT_2_END: u16 = 0xBFF;
 const NT_3: u16 = 0xC00;
 const NT_3_END: u16 = 0xFFF;
+const AT_OFFSET: u16 = 0x03C0;
 
 const NT_MIRROR: u16 = 0x3000;
 const NT_MIRROR_END: u16 = 0x3EFF;
@@ -78,7 +75,7 @@ pub struct Vram {
 }
 
 impl Vram {
-    pub fn new(palette: &[u8], mapper: Rc<RefCell<Mapper>>) -> Vram {
+    pub fn new(mapper: Rc<RefCell<Mapper>>) -> Vram {
         Vram {
             vram: [0; VRAM_SIZE],
             mapper: mapper,
@@ -91,7 +88,15 @@ impl Vram {
             PT_START...PT_END => self.mapper.borrow_mut().ld_chr(addr),
             0x2000...NT_MIRROR_END => self.vram[self.nt_mirror(addr & 0xFFF)],
             PALETTE_RAM_I...PALETTE_MIRROR_END => {
-                self.palette[(addr & 0x1F) as usize]
+                if addr == 0x3F10
+                    || addr == 0x3F14
+                    || addr == 0x3F18
+                    || addr == 0x3F1C
+                {
+                    self.palette[(addr & 0x0F) as usize]
+                } else {
+                    self.palette[(addr & 0x1F) as usize]
+                }
             }
             _ => panic!(),
         }
@@ -104,7 +109,15 @@ impl Vram {
                 self.vram[self.nt_mirror(addr & 0xFFF)] = val;
             }
             PALETTE_RAM_I...PALETTE_MIRROR_END => {
-                self.palette[(addr & 0x1F) as usize] = val;
+                if addr == 0x3F10
+                    || addr == 0x3F14
+                    || addr == 0x3F18
+                    || addr == 0x3F1C
+                {
+                    self.palette[(addr & 0x0F) as usize] = val;
+                } else {
+                    self.palette[(addr & 0x1F) as usize] = val;
+                }
             }
             _ => panic!(),
         }
@@ -136,7 +149,7 @@ impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
         Ppu {
             regs: PRegisters::new(),
-            vram: Vram::new(&PALETTE, mapper),
+            vram: Vram::new(mapper),
             screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
             oam: [0; SPRITE_ATTR * SPRITE_NUM],
             cc: 0,
@@ -214,54 +227,94 @@ impl Ppu {
             .copy_from_slice(&color.data);
     }
 
-    fn pull_sprites(&mut self) {
+    fn draw_sprites(&mut self) {
         ()
     }
 
-    fn draw_bg(&mut self) {
-        let tmp = self.scanline as usize;
-        for x in 0u16..(SCREEN_WIDTH as u16) {
-            let x_tile_start = x / 8;
-            let y_tile_start = self.scanline / 8;
-            let x_pixel = x % 8;
-            let y_pixel = self.scanline % 8;
+    fn get_attr_color(&self, x_tile: u16, y_tile: u16, pt_index: u8) -> Rgb {
+        let at_index = (x_tile / 4) + ((y_tile / 4) * 8);
+        let at_byte = self
+            .vram
+            .ld8(self.regs.ctrl.base_nt_addr() + AT_OFFSET + (at_index as u16));
 
-            let vram_index = x_tile_start + (y_tile_start * 32);
-            // Get my tile number
-            let tile_number =
-                self.vram.ld8(self.regs.ctrl.base_nt_addr() + vram_index);
-            let palette_table_index =
-                (tile_number as u16 * 16) + self.regs.ctrl.nt_pt_addr();
+        let at_color = match (x_tile % 4 < 2, y_tile % 4 < 2) {
+            (false, false) => (at_byte >> 6) & 0b11,
+            (false, true) => (at_byte >> 2) & 0b11,
+            (true, false) => (at_byte >> 4) & 0b11,
+            (true, true) => at_byte & 0b11,
+        };
 
-            let left_byte = self.vram.ld8(palette_table_index + y_pixel);
-            // Plus 8 to get the offset for the other sliver
-            let right_byte = self.vram.ld8(palette_table_index + 8 + y_pixel);
-            let left_sliver = ((left_byte << x_pixel & 0x80) != 0);
-            let right_sliver = ((right_byte << x_pixel & 0x80) != 0);
-            let color = if left_sliver && right_sliver {
-                Rgb { data: [255, 0, 0] }
-            } else if left_sliver {
-                Rgb { data: [0, 255, 0] }
-            } else if right_sliver {
-                Rgb { data: [0, 0, 255] }
-            } else {
-                Rgb { data: [0, 0, 0] }
-            };
-
-            self.put_pixel(x as usize, tmp, color);
+        let tile_color = (at_color << 2) | pt_index;
+        let pal_index = self.vram.ld8(PALETTE_RAM_I + (tile_color as u16));
+        Rgb {
+            data: [
+                PALETTE[pal_index as usize * 3],
+                PALETTE[pal_index as usize * 3 + 1],
+                PALETTE[pal_index as usize * 3 + 2],
+            ],
         }
     }
 
+    fn bg_pixel(&mut self, x: u16) -> Option<Rgb> {
+        let x_tile = x / 8;
+        let y_tile = self.scanline / 8;
+        let x_pixel = x % 8;
+        let y_pixel = self.scanline % 8;
+
+        let vram_index = x_tile + (y_tile * 32);
+        // Get my tile number
+        let tile_num =
+            self.vram.ld8(self.regs.ctrl.base_nt_addr() + vram_index);
+        let pt_i = self.get_tile(
+            self.regs.ctrl.nt_pt_addr(),
+            tile_num as u16,
+            x_pixel,
+            y_pixel,
+        );
+        match pt_i {
+            0 => None,
+            _ => Some(self.get_attr_color(x_tile, y_tile, pt_i)),
+        }
+    }
+
+    fn get_tile(&self, offset: u16, tile_number: u16, x: u16, y: u16) -> u8 {
+        //
+        // * 16 because each tile is 16 bytes long
+        let pt_index = (tile_number * 16) + offset + y;
+
+        let left_byte = self.vram.ld8(pt_index);
+        // Plus 8 to get the offset for the other sliver
+        let right_byte = self.vram.ld8(pt_index + 8);
+        let l_bit = ((left_byte << x & 0x80) != 0) as u8;
+        let r_bit = ((right_byte << x & 0x80) != 0) as u8;
+        r_bit << 1 | l_bit
+    }
+
     fn pull_scanline(&mut self) {
-        if !self.regs.mask.show_bg() && !self.regs.mask.show_sprites() {
-            return;
-        } else if self.regs.mask.show_bg() && !self.regs.mask.show_sprites() {
-            self.draw_bg();
-        } else if !self.regs.mask.show_sprites() && !self.regs.mask.show_bg() {
-            panic!("Afaik, drawing the sprites but not the bg isn't supported");
-        } else {
-            self.draw_bg();
-            self.pull_sprites();
+        // U bg refers to universal background
+        let u_bg_i = self.vram.ld8(0x3F00);
+        let u_bg_color = Rgb {
+            data: [
+                PALETTE[u_bg_i as usize * 3],
+                PALETTE[u_bg_i as usize * 3 + 1],
+                PALETTE[u_bg_i as usize * 3 + 2],
+            ],
+        };
+
+        let mut color = Rgb { data: [0, 0, 0] };
+
+        for x in 0u16..SCREEN_WIDTH as u16 {
+            if self.regs.mask.show_bg() {
+                if let Some(bg_color) = self.bg_pixel(x) {
+                    color = bg_color;
+                } else {
+                    color = u_bg_color;
+                }
+            }
+            if self.regs.mask.show_sprites() {
+                self.draw_sprites();
+            }
+            self.put_pixel(x as usize, self.scanline as usize, color);
         }
     }
 
@@ -271,7 +324,7 @@ impl Ppu {
     ) -> Option<[u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3]> {
         // Note this is grossly over simplified and needs to be changed once
         // the initial functionality of the PPU is achieved
-        self.cc += (cyc_elapsed as u16 * 3);
+        self.cc += cyc_elapsed as u16 * 3;
         if self.scanline < SCREEN_HEIGHT as u16 {
             if self.cc > CYC_PER_LINE {
                 self.cc %= CYC_PER_LINE;
@@ -358,7 +411,7 @@ impl Ppu {
         ts
     }
 
-    pub fn debug_pt(&self) -> [u8; 49152] {
+    pub fn debug_pt(&self) -> ([u8; 49152], [u8; 49152]) {
         let red: Rgb = Rgb {
             data: [160, 120, 45],
         };
@@ -371,7 +424,7 @@ impl Ppu {
         };
         let left = self.pull_tileset([white, blue, green, red], 0x0000);
         let right = self.pull_tileset([white, blue, green, red], 0x1000);
-        left
+        (left, right)
     }
 }
 

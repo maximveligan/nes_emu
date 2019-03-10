@@ -76,11 +76,11 @@ impl VramAddr {
         match write {
             0 => {
                 self.0 &= 0x00FF;
-                self.0 |= ((val as u16) << 8);
+                self.0 |= (val as u16) << 8;
             }
             1 => {
                 self.0 &= 0xFF00;
-                self.0 |= (val as u16);
+                self.0 |= val as u16;
             }
             i => panic!("Write has to be either 1 or 2, got {}", i),
         }

@@ -1,5 +1,4 @@
 extern crate nom;
-extern crate image;
 extern crate sdl2;
 extern crate nes_emu;
 
@@ -48,15 +47,19 @@ fn run_nestest() {
         match cpu.step(true) {
             Ok(cc) => {
                 cycle_count += cc as usize;
+                if cpu.regs.pc.get_addr() == 0xE545 {
+                    assert_eq!(cpu.regs.pc.get_addr(), 0xE545);
+                    assert_eq!(cpu.regs.acc, 0x00);
+                    assert_eq!(cpu.regs.x, 0x03);
+                    assert_eq!(cpu.regs.y, 0x77);
+                    assert_eq!(cpu.regs.flags, 0x67);
+                    assert_eq!(cpu.regs.sp, 0xFB);
+                    break;
+                }
             }
-            Err(last_op) => {
-                assert_eq!(cpu.regs.pc.get_addr(), 0xE546);
-                assert_eq!(cpu.regs.acc, 0x00);
-                assert_eq!(cpu.regs.x, 0x03);
-                assert_eq!(cpu.regs.y, 0x77);
-                assert_eq!(cpu.regs.flags, 0x67);
-                assert_eq!(cpu.regs.sp, 0xFB);
-                break;
+            Err(err) => {
+                println!("{}", err);
+                assert!(false);
             }
         }
     }

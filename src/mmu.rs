@@ -69,7 +69,6 @@ impl Mmu {
             ROM_START...ROM_END => {
                 self.mapper.borrow_mut().store_prg(address, val)
             }
-            _ => panic!("Undefined load"),
         }
     }
 
@@ -84,7 +83,6 @@ impl Mmu {
                 let mapper = self.mapper.borrow();
                 mapper.ld_prg(address)
             }
-            _ => panic!("Undefined load"),
         }
     }
 
