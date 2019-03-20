@@ -54,6 +54,40 @@ static PALETTE: [u8; 192] = [
 const SPRITE_NUM: usize = 64;
 const SPRITE_ATTR: usize = 4;
 
+#[derive(Copy, Clone)]
+struct Rgb {
+    data: [u8; 3],
+}
+
+#[derive(Copy, Clone)]
+struct Sprite {
+    x: u8,
+    y: u8,
+    pt_index: u8,
+    attributes: u8,
+}
+
+enum Priority {
+    Foreground,
+    Background,
+}
+
+impl Priority {
+    fn from_attr(byte: u8) -> Priority {
+        let bit = byte >> 5 & 1;
+        match bit {
+            0 => Priority::Foreground,
+            1 => Priority::Background,
+            _ => panic!("Can't get number either than 0 or 1 after anding"),
+        }
+    }
+}
+
+pub enum PpuRes {
+    Nmi,
+    Draw,
+}
+
 pub struct Ppu {
     pub regs: PRegisters,
     pub vram: Vram,
@@ -64,6 +98,7 @@ pub struct Ppu {
     cc: u16,
     scanline: u16,
     frame_sent: bool,
+    nmi_sent: bool,
     write: u8,
     ppudata_buff: u8,
 }
@@ -155,6 +190,7 @@ impl Ppu {
             cc: 0,
             scanline: 0,
             frame_sent: false,
+            nmi_sent: false,
             write: 0,
             ppudata_buff: 0,
         }
@@ -167,7 +203,7 @@ impl Ppu {
             1 => 0,
             2 => self.regs.status.load(),
             3 => 0,
-            4 => self.oam[self.regs.oam_addr as usize],
+            4 => unimplemented!(),
             5 => 0,
             6 => 0,
             7 => {
@@ -197,7 +233,7 @@ impl Ppu {
             }
             4 => {
                 self.oam[self.regs.oam_addr as usize] = val;
-                self.regs.oam_addr.wrapping_add(1);
+                self.regs.oam_addr = self.regs.oam_addr.wrapping_add(1);
             }
             5 => {
                 self.regs.scroll = val;
@@ -227,8 +263,69 @@ impl Ppu {
             .copy_from_slice(&color.data);
     }
 
-    fn draw_sprites(&mut self) {
-        ()
+    fn get_sprites(&mut self) -> [Option<Sprite>; 8] {
+        let mut sprite_count = 0;
+        let mut sprites = [None; 8];
+        for sprite_index in 0..SPRITE_NUM {
+            if sprite_count >= 8 {
+                self.regs.status.set_sprite_of(true);
+                return sprites
+            }
+            let raw_y = self.oam[sprite_index * SPRITE_ATTR];
+            let y_pos = raw_y.wrapping_add(1) as u16;
+            if y_pos <= self.scanline && y_pos + self.regs.ctrl.sprite_size() > self.scanline {
+                sprites[sprite_count] = Some(Sprite {
+                    x: self.oam[(sprite_index * SPRITE_ATTR) + 3],
+                    y: y_pos as u8,
+                    pt_index: self.oam[(sprite_index * SPRITE_ATTR) + 1],
+                    attributes: self.oam[(sprite_index * SPRITE_ATTR) + 2]
+                });
+                sprite_count += 1;
+            }
+        }
+        sprites
+    }
+
+    fn sprite_pixel(&mut self, x: u8, sprites: [Option<Sprite>; 8]) -> Option<(Rgb, Priority)> {
+        for sprite in sprites.iter() {
+            match sprite {
+                Some(s) => {
+                    if (s.x <= x && s.x + 8 > x) {
+                        let pt_i = match self.regs.ctrl.sprite_size() {
+                            8 => (self.regs.ctrl.sprite_pt_addr() + s.pt_index as u16),
+                            16 => {
+                                let tile_num = s.pt_index & !1;
+                                let offset: u16 = if s.pt_index & 1 == 1 {
+                                    0x1000
+                                } else {
+                                    0x0000
+                                };
+                                (tile_num as u16 + offset)
+                            }
+                            _ => panic!("No other sprite sizes"),
+                        };
+
+                        let x = x - s.x;
+
+                        match self.get_tile(pt_i, x) {
+                            0 => return None,
+                            1 => return Some((Rgb { data: [0xFF, 0x00, 0x00] },
+                                     Priority::from_attr(s.attributes))),
+
+                            2 => return Some((Rgb { data: [0x00, 0xFF, 0x00] },
+                                     Priority::from_attr(s.attributes))),
+
+                            3 => return Some((Rgb { data: [0x00, 0x00, 0xFF] },
+                                     Priority::from_attr(s.attributes))),
+
+                            _ => panic!("No other  colors can be derived"),
+                        }
+                    }
+                }
+                None => return None,
+            }
+        }
+        None
     }
 
     fn get_attr_color(&self, x_tile: u16, y_tile: u16, pt_index: u8) -> Rgb {
@@ -258,18 +355,18 @@ impl Ppu {
     fn bg_pixel(&mut self, x: u16) -> Option<Rgb> {
         let x_tile = x / 8;
         let y_tile = self.scanline / 8;
-        let x_pixel = x % 8;
+        let x_pixel = (x % 8) as u8;
         let y_pixel = self.scanline % 8;
 
         let vram_index = x_tile + (y_tile * 32);
         // Get my tile number
         let tile_num =
             self.vram.ld8(self.regs.ctrl.base_nt_addr() + vram_index);
+
+        // * 16 because each tile is 16 bytes long
         let pt_i = self.get_tile(
-            self.regs.ctrl.nt_pt_addr(),
-            tile_num as u16,
+            (self.regs.ctrl.nt_pt_addr() + y_pixel + (tile_num as u16 * 16)),
             x_pixel,
-            y_pixel,
         );
         match pt_i {
             0 => None,
@@ -277,11 +374,7 @@ impl Ppu {
         }
     }
 
-    fn get_tile(&self, offset: u16, tile_number: u16, x: u16, y: u16) -> u8 {
-        //
-        // * 16 because each tile is 16 bytes long
-        let pt_index = (tile_number * 16) + offset + y;
-
+    fn get_tile(&self, pt_index: u16, x: u8) -> u8 {
         let left_byte = self.vram.ld8(pt_index);
         // Plus 8 to get the offset for the other sliver
         let right_byte = self.vram.ld8(pt_index + 8);
@@ -302,66 +395,97 @@ impl Ppu {
         };
 
         let mut color = Rgb { data: [0, 0, 0] };
+        let sprites = self.get_sprites();
 
         for x in 0u16..SCREEN_WIDTH as u16 {
+            let mut bg_color = None;
+            let mut sprite_color = None;
             if self.regs.mask.show_bg() {
-                if let Some(bg_color) = self.bg_pixel(x) {
-                    color = bg_color;
-                } else {
-                    color = u_bg_color;
-                }
+                bg_color = self.bg_pixel(x);
             }
+
             if self.regs.mask.show_sprites() {
-                self.draw_sprites();
+                sprite_color = self.sprite_pixel(x as u8, sprites);
             }
+
+            let color = match (bg_color, sprite_color) {
+                (None, None) => u_bg_color,
+                (Some(bg_c), None) => bg_c,
+                (None, Some((spr_c, _))) => spr_c,
+                (Some(bg_c), Some((spr_c, p))) => match p {
+                    Priority::Foreground => spr_c,
+                    Priority::Background => bg_c,
+                }
+            };
+
             self.put_pixel(x as usize, self.scanline as usize, color);
         }
+    }
+
+    fn scanline_handler(&mut self) {
+        if self.cc > CYC_PER_LINE {
+            self.cc %= CYC_PER_LINE;
+            self.scanline += 1;
+        }
+    }
+
+    pub fn get_buffer(&self) -> &[u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3] {
+        &self.screen_buff
     }
 
     pub fn emulate_cycles(
         &mut self,
         cyc_elapsed: u16,
-    ) -> Option<[u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3]> {
+    ) -> Option<PpuRes> {
         // Note this is grossly over simplified and needs to be changed once
         // the initial functionality of the PPU is achieved
         self.cc += cyc_elapsed as u16 * 3;
-        if self.scanline < SCREEN_HEIGHT as u16 {
-            if self.cc > CYC_PER_LINE {
-                self.cc %= CYC_PER_LINE;
-                self.pull_scanline();
-                self.scanline += 1;
-            }
-            None
-        } else if self.scanline == 241 {
-            self.regs.status.set_vblank(true);
-            if self.cc > CYC_PER_LINE {
-                self.cc %= CYC_PER_LINE;
-                self.scanline += 1;
-            }
-            if !self.frame_sent {
-                self.frame_sent = true;
-                Some(self.screen_buff)
-            } else {
+        match self.scanline {
+            0...239 => {
+                if self.cc > CYC_PER_LINE {
+                    self.cc %= CYC_PER_LINE;
+                    self.pull_scanline();
+                    self.scanline += 1;
+                }
                 None
             }
-        } else if self.scanline == 240 || self.scanline < 261 {
-            if self.cc > CYC_PER_LINE {
-                self.cc %= CYC_PER_LINE;
-                self.scanline += 1;
+            240 => {
+                self.scanline_handler();
+                if !self.frame_sent {
+                    self.frame_sent = true;
+                    Some(PpuRes::Draw)
+                } else {
+                    None
+                }
             }
-            None
-        } else if self.scanline == 261 {
-            if self.cc > CYC_PER_LINE {
-                self.cc %= CYC_PER_LINE;
-                self.scanline = 0;
-                self.frame_sent = false;
+            241 => {
+                self.regs.status.set_vblank(true);
+                self.scanline_handler();
+                if self.regs.ctrl.nmi_on() && !self.nmi_sent {
+                    self.nmi_sent = true;
+                    Some(PpuRes::Nmi)
+                } else {
+                    None
+                }
             }
-            None
-        } else {
-            panic!(
+            242...260 => {
+                self.scanline_handler();
+                None
+            }
+            261 => {
+                if self.cc > CYC_PER_LINE {
+                    self.cc %= CYC_PER_LINE;
+                    self.scanline = 0;
+                    self.frame_sent = false;
+                    self.nmi_sent = false;
+                    self.regs.status.set_vblank(false);
+                    self.regs.status.set_sprite_of(false);
+                }
+                None
+            }
+        _ => panic!(
                 "Scanline can't get here {}. Check emulate_cycles",
-                self.scanline
-            );
+                self.scanline)
         }
     }
 
@@ -426,9 +550,4 @@ impl Ppu {
         let right = self.pull_tileset([white, blue, green, red], 0x1000);
         (left, right)
     }
-}
-
-#[derive(Copy, Clone)]
-struct Rgb {
-    data: [u8; 3],
 }

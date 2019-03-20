@@ -163,7 +163,6 @@ impl Cpu {
     }
 
     pub fn proc_nmi(&mut self) {
-        //println!("NMI");
         let flags = self.regs.flags;
         self.push_pc();
         self.push(flags);

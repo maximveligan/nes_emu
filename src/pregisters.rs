@@ -17,7 +17,7 @@ impl Ctrl {
         self.0 & PPU_MASTER != 0
     }
 
-    fn sprite_size(&self) -> u8 {
+    pub fn sprite_size(&self) -> u16 {
         if self.0 & SPR_SIZE != 0 {
             16
         } else {
@@ -37,7 +37,7 @@ impl Ctrl {
         self.table_addr(BG_TAB)
     }
 
-    fn sprite_pt_addr(&self) -> u16 {
+    pub fn sprite_pt_addr(&self) -> u16 {
         self.table_addr(SPRITE_TAB)
     }
 
@@ -118,7 +118,7 @@ impl Status {
         self.set_flag(on, 0b0100_0000);
     }
 
-    fn set_sprite_of(&mut self, on: bool) {
+    pub fn set_sprite_of(&mut self, on: bool) {
         self.set_flag(on, 0b0010_0000);
     }
 

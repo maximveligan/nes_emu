@@ -21,6 +21,7 @@ use sdl2::pixels::PixelFormatEnum;
 use cpu::Cpu;
 use apu::Apu;
 use ppu::Ppu;
+use ppu::PpuRes;
 use rom::RomType;
 use rom::Region;
 use rom::parse_rom;
@@ -136,14 +137,14 @@ pub fn start_emulator(path_in: Option<String>) {
         //cycle_counter += cc as usize;
         //println!("{}", cycle_counter);
         match cpu.mmu.ppu.emulate_cycles(cc) {
-            Some(buff) => {
-                if cpu.mmu.ppu.regs.ctrl.nmi_on() {
-                    cpu.proc_nmi();
+            Some(r) => match r {
+                PpuRes::Nmi => cpu.proc_nmi(),
+                PpuRes::Draw => {
+                    texture.update(None, cpu.mmu.ppu.get_buffer(), SCREEN_WIDTH * 3).unwrap();
+                    canvas.clear();
+                    canvas.copy(&texture, None, None).unwrap();
+                    canvas.present();
                 }
-                texture.update(None, &buff, SCREEN_WIDTH * 3).unwrap();
-                canvas.clear();
-                canvas.copy(&texture, None, None).unwrap();
-                canvas.present();
             }
             None => (),
         }
