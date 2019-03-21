@@ -180,7 +180,7 @@ impl Cpu {
 
         self.incr_cc();
         let page_num = (high_nyb as u16) << 8;
-        for address in page_num..page_num + 0xFF {
+        for address in page_num..=page_num + 0xFF {
             let tmp = self.mmu.ld8(address);
             self.mmu.store(OAM_DATA, tmp);
             self.cycle_count += 2;

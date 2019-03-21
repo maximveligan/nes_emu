@@ -114,7 +114,7 @@ impl Status {
         self.0 & 0b1000_0000 != 0
     }
 
-    fn set_sprite0(&mut self, on: bool) {
+    pub fn set_sprite0(&mut self, on: bool) {
         self.set_flag(on, 0b0100_0000);
     }
 
@@ -140,11 +140,11 @@ impl Mask {
         self.get_flag(0b0000_0001)
     }
 
-    fn left8_bg(&self) -> bool {
+    pub fn left8_bg(&self) -> bool {
         self.get_flag(0b0000_0010)
     }
 
-    fn left8_sprite(&self) -> bool {
+    pub fn left8_sprite(&self) -> bool {
         self.get_flag(0b0000_0100)
     }
 

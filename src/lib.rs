@@ -18,6 +18,7 @@ use sdl2::keyboard::Keycode;
 use sdl2::render::TextureAccess;
 use sdl2::pixels::PixelFormatEnum;
 
+use controller::Button;
 use cpu::Cpu;
 use apu::Apu;
 use ppu::Ppu;
@@ -125,7 +126,7 @@ pub fn start_emulator(path_in: Option<String>) {
     //let mut cycle_counter: usize = 0;
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    loop {
+    'running: loop {
         let cc = match cpu.step(false) {
             Ok(cc) => cc,
             Err(e) => {
@@ -151,12 +152,27 @@ pub fn start_emulator(path_in: Option<String>) {
 
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
+                Event::Quit {
+                ..
+                } => break 'running,
+
+                Event::KeyDown {
                     keycode: Some(Keycode::Escape),
                     ..
-                } => return,
-                _ => {}
+                } => break 'running,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    cpu.mmu.ctrl0.set_button_state(Button::Down, true);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    cpu.mmu.ctrl0.set_button_state(Button::Down, false);
+                }
+                _ => {},
             }
         }
     }

@@ -263,7 +263,7 @@ impl Ppu {
             .copy_from_slice(&color.data);
     }
 
-    fn get_sprites(&mut self) -> [Option<Sprite>; 8] {
+    fn get_sprites(&mut self) -> [Option<u8>; 8] {
         let mut sprite_count = 0;
         let mut sprites = [None; 8];
         for sprite_index in 0..SPRITE_NUM {
@@ -274,25 +274,38 @@ impl Ppu {
             let raw_y = self.oam[sprite_index * SPRITE_ATTR];
             let y_pos = raw_y.wrapping_add(1) as u16;
             if y_pos <= self.scanline && y_pos + self.regs.ctrl.sprite_size() > self.scanline {
-                sprites[sprite_count] = Some(Sprite {
-                    x: self.oam[(sprite_index * SPRITE_ATTR) + 3],
-                    y: y_pos as u8,
-                    pt_index: self.oam[(sprite_index * SPRITE_ATTR) + 1],
-                    attributes: self.oam[(sprite_index * SPRITE_ATTR) + 2]
-                });
+                sprites[sprite_count] = Some(sprite_index as u8);
                 sprite_count += 1;
             }
         }
         sprites
     }
 
-    fn sprite_pixel(&mut self, x: u8, sprites: [Option<Sprite>; 8]) -> Option<(Rgb, Priority)> {
-        for sprite in sprites.iter() {
-            match sprite {
-                Some(s) => {
+    fn sprite_pixel(&mut self, x: u8, sprites: [Option<u8>; 8], bg_opaque: bool) -> Option<(Rgb, Priority)> {
+        for sprite_index in sprites.iter() {
+            match sprite_index {
+                Some(index) => {
+                    let s = Sprite {
+                        x: self.oam[(*index as usize * SPRITE_ATTR) + 3],
+                        y: self.oam[(*index as usize * SPRITE_ATTR)].wrapping_add(1),
+                        pt_index: self.oam[(*index as usize * SPRITE_ATTR) + 1],
+                        attributes: self.oam[(*index as usize * SPRITE_ATTR) + 2]
+                    };
+
                     if (s.x <= x && s.x + 8 > x) {
+                        if s.x == 0 && s.y != 0 {
+                            println!("Some sprite with x = 0");
+                        }
+                        if (x <= 8) && !self.regs.mask.left8_sprite() {
+                            continue;
+                        }
+
+                        if self.scanline <= 8 || self.scanline >= SCREEN_HEIGHT as u16 - 8 {
+                            continue;
+                        }
+
                         let pt_i = match self.regs.ctrl.sprite_size() {
-                            8 => (self.regs.ctrl.sprite_pt_addr() + s.pt_index as u16),
+                            8 => self.regs.ctrl.sprite_pt_addr() + s.pt_index as u16,
                             16 => {
                                 let tile_num = s.pt_index & !1;
                                 let offset: u16 = if s.pt_index & 1 == 1 {
@@ -305,21 +318,37 @@ impl Ppu {
                             _ => panic!("No other sprite sizes"),
                         };
 
-                        let x = x - s.x;
+                        let x = if s.attributes >> 6 != 0 {
+                            (7 - (x - s.x)) % 8
+                        } else {
+                            (x - s.x) % 8
+                        };
 
-                        match self.get_tile(pt_i, x) {
-                            0 => return None,
-                            1 => return Some((Rgb { data: [0xFF, 0x00, 0x00] },
-                                     Priority::from_attr(s.attributes))),
+                        let y = if s.attributes >> 7 != 0 {
+                            7 - (self.scanline - s.y as u16)
+                        } else {
+                            self.scanline - s.y as u16
+                        };
 
-                            2 => return Some((Rgb { data: [0x00, 0xFF, 0x00] },
-                                     Priority::from_attr(s.attributes))),
+                        let tile_color = self.get_tile((pt_i * 16) + y, x);
 
-                            3 => return Some((Rgb { data: [0x00, 0x00, 0xFF] },
-                                     Priority::from_attr(s.attributes))),
-
-                            _ => panic!("No other  colors can be derived"),
+                        if tile_color == 0 {
+                            continue;
                         }
+
+                        if *index == 0 && bg_opaque {
+                            self.regs.status.set_sprite0(true);
+                        }
+
+                        let sprite_color = (s.attributes & 0b11) + 4 << 2 | tile_color;
+                        let pal_index = self.vram.ld8(PALETTE_RAM_I + (sprite_color as u16)) & 0x3F;
+                        return Some((Rgb {
+                            data: [
+                                PALETTE[pal_index as usize * 3],
+                                PALETTE[pal_index as usize * 3 + 1],
+                                PALETTE[pal_index as usize * 3 + 2],
+                            ],
+                        }, Priority::from_attr(s.attributes)))
                     }
                 }
                 None => return None,
@@ -341,7 +370,7 @@ impl Ppu {
             (true, true) => at_byte & 0b11,
         };
 
-        let tile_color = (at_color << 2) | pt_index;
+        let tile_color = (at_color * 4) | pt_index;
         let pal_index = self.vram.ld8(PALETTE_RAM_I + (tile_color as u16));
         Rgb {
             data: [
@@ -353,6 +382,14 @@ impl Ppu {
     }
 
     fn bg_pixel(&mut self, x: u16) -> Option<Rgb> {
+        if x <= 8 && !self.regs.mask.left8_bg() {
+            return None
+        }
+
+        if self.scanline <= 8 || self.scanline >= SCREEN_HEIGHT as u16 - 8 {
+            return None
+        }
+
         let x_tile = x / 8;
         let y_tile = self.scanline / 8;
         let x_pixel = (x % 8) as u8;
@@ -405,7 +442,7 @@ impl Ppu {
             }
 
             if self.regs.mask.show_sprites() {
-                sprite_color = self.sprite_pixel(x as u8, sprites);
+                sprite_color = self.sprite_pixel(x as u8, sprites, bg_color.is_some());
             }
 
             let color = match (bg_color, sprite_color) {
@@ -480,6 +517,7 @@ impl Ppu {
                     self.nmi_sent = false;
                     self.regs.status.set_vblank(false);
                     self.regs.status.set_sprite_of(false);
+                    self.regs.status.set_sprite0(false);
                 }
                 None
             }
