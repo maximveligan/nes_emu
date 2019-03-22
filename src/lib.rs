@@ -46,7 +46,7 @@ use std::collections::HashMap;
 struct Config {
     pixel_scale: usize,
     ctrl1_layout: ButtonLayout,
-    ctrl2_layout: ButtonLayout
+    ctrl2_layout: ButtonLayout,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -58,7 +58,7 @@ struct ButtonLayout {
     a: String,
     b: String,
     start: String,
-    select: String
+    select: String,
 }
 
 const SCREEN_WIDTH: usize = 256;
@@ -116,13 +116,18 @@ fn make_ctrl_map(layout: ButtonLayout) -> HashMap<String, Button> {
     sdl_map
 }
 
-fn set_ctrl_state(key: Keycode, ctrl: &mut Controller, button_map: &HashMap<String, Button>, state: bool) {
+fn set_ctrl_state(
+    key: Keycode,
+    ctrl: &mut Controller,
+    button_map: &HashMap<String, Button>,
+    state: bool,
+) {
     match keycode_to_str(key) {
         Some(key) => match button_map.get(&key) {
             Some(button) => ctrl.set_button_state(*button, state),
-            None => ()
-        }
-        None => ()
+            None => (),
+        },
+        None => (),
     }
 }
 
@@ -138,19 +143,22 @@ pub fn start_emulator(path_in: Option<String>) {
                             config
                         }
                         Err(err) => {
-                            println!("Unable to parse config file correctly! {}", err);
-                            return
+                            println!(
+                                "Unable to parse config file correctly! {}",
+                                err
+                            );
+                            return;
                         }
-                    }
+                    },
                     Err(err) => {
                         println!("Unable to read config file! {}", err);
-                        return
+                        return;
                     }
                 }
             }
             Err(err) => {
                 println!("Unable to open config file! {}", err);
-                return
+                return;
             }
         }
     } else {
@@ -162,7 +170,7 @@ pub fn start_emulator(path_in: Option<String>) {
             a: "F".to_string(),
             b: "G".to_string(),
             start: "T".to_string(),
-            select: "Y".to_string()
+            select: "Y".to_string(),
         };
 
         let layout2 = ButtonLayout {
@@ -173,7 +181,7 @@ pub fn start_emulator(path_in: Option<String>) {
             a: "RShift".to_string(),
             b: "Enter".to_string(),
             start: "B".to_string(),
-            select: "B".to_string()
+            select: "B".to_string(),
         };
 
         let config = Config {
@@ -290,20 +298,24 @@ pub fn start_emulator(path_in: Option<String>) {
             Some(r) => match r {
                 PpuRes::Nmi => cpu.proc_nmi(),
                 PpuRes::Draw => {
-                    texture.update(None, cpu.mmu.ppu.get_buffer(), SCREEN_WIDTH * 3).unwrap();
+                    texture
+                        .update(
+                            None,
+                            cpu.mmu.ppu.get_buffer(),
+                            SCREEN_WIDTH * 3,
+                        )
+                        .unwrap();
                     canvas.clear();
                     canvas.copy(&texture, None, None).unwrap();
                     canvas.present();
                 }
-            }
+            },
             None => (),
         }
 
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit {
-                ..
-                } => break 'running,
+                Event::Quit { .. } => break 'running,
 
                 Event::KeyDown {
                     keycode: Some(Keycode::Escape),
@@ -321,7 +333,7 @@ pub fn start_emulator(path_in: Option<String>) {
                     set_ctrl_state(key, &mut cpu.mmu.ctrl0, &sdl_map1, false);
                     set_ctrl_state(key, &mut cpu.mmu.ctrl1, &sdl_map2, false);
                 }
-                _ => {},
+                _ => {}
             }
         }
     }

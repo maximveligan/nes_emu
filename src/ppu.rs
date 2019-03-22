@@ -269,11 +269,13 @@ impl Ppu {
         for sprite_index in 0..SPRITE_NUM {
             if sprite_count >= 8 {
                 self.regs.status.set_sprite_of(true);
-                return sprites
+                return sprites;
             }
             let raw_y = self.oam[sprite_index * SPRITE_ATTR];
             let y_pos = raw_y.wrapping_add(1) as u16;
-            if y_pos <= self.scanline && y_pos + self.regs.ctrl.sprite_size() > self.scanline {
+            if y_pos <= self.scanline
+                && y_pos + self.regs.ctrl.sprite_size() > self.scanline
+            {
                 sprites[sprite_count] = Some(sprite_index as u8);
                 sprite_count += 1;
             }
@@ -281,15 +283,22 @@ impl Ppu {
         sprites
     }
 
-    fn sprite_pixel(&mut self, x: u8, sprites: [Option<u8>; 8], bg_opaque: bool) -> Option<(Rgb, Priority)> {
+    fn sprite_pixel(
+        &mut self,
+        x: u8,
+        sprites: [Option<u8>; 8],
+        bg_opaque: bool,
+    ) -> Option<(Rgb, Priority)> {
         for sprite_index in sprites.iter() {
             match sprite_index {
                 Some(index) => {
                     let s = Sprite {
                         x: self.oam[(*index as usize * SPRITE_ATTR) + 3],
-                        y: self.oam[(*index as usize * SPRITE_ATTR)].wrapping_add(1),
+                        y: self.oam[(*index as usize * SPRITE_ATTR)]
+                            .wrapping_add(1),
                         pt_index: self.oam[(*index as usize * SPRITE_ATTR) + 1],
-                        attributes: self.oam[(*index as usize * SPRITE_ATTR) + 2]
+                        attributes: self.oam
+                            [(*index as usize * SPRITE_ATTR) + 2],
                     };
 
                     if (s.x <= x && s.x + 8 > x) {
@@ -297,12 +306,17 @@ impl Ppu {
                             continue;
                         }
 
-                        if self.scanline <= 8 || self.scanline >= SCREEN_HEIGHT as u16 - 8 {
+                        if self.scanline <= 8
+                            || self.scanline >= SCREEN_HEIGHT as u16 - 8
+                        {
                             continue;
                         }
 
                         let pt_i = match self.regs.ctrl.sprite_size() {
-                            8 => self.regs.ctrl.sprite_pt_addr() + s.pt_index as u16,
+                            8 => {
+                                self.regs.ctrl.sprite_pt_addr()
+                                    + s.pt_index as u16
+                            }
                             16 => {
                                 let tile_num = s.pt_index & !1;
                                 let offset: u16 = if s.pt_index & 1 == 1 {
@@ -337,15 +351,22 @@ impl Ppu {
                             self.regs.status.set_sprite0(true);
                         }
 
-                        let sprite_color = (s.attributes & 0b11) + 4 << 2 | tile_color;
-                        let pal_index = self.vram.ld8(PALETTE_RAM_I + (sprite_color as u16)) & 0x3F;
-                        return Some((Rgb {
-                            data: [
-                                PALETTE[pal_index as usize * 3],
-                                PALETTE[pal_index as usize * 3 + 1],
-                                PALETTE[pal_index as usize * 3 + 2],
-                            ],
-                        }, Priority::from_attr(s.attributes)))
+                        let sprite_color =
+                            (s.attributes & 0b11) + 4 << 2 | tile_color;
+                        let pal_index = self
+                            .vram
+                            .ld8(PALETTE_RAM_I + (sprite_color as u16))
+                            & 0x3F;
+                        return Some((
+                            Rgb {
+                                data: [
+                                    PALETTE[pal_index as usize * 3],
+                                    PALETTE[pal_index as usize * 3 + 1],
+                                    PALETTE[pal_index as usize * 3 + 2],
+                                ],
+                            },
+                            Priority::from_attr(s.attributes),
+                        ));
                     }
                 }
                 None => return None,
@@ -380,11 +401,11 @@ impl Ppu {
 
     fn bg_pixel(&mut self, x: u16) -> Option<Rgb> {
         if x <= 8 && !self.regs.mask.left8_bg() {
-            return None
+            return None;
         }
 
         if self.scanline <= 8 || self.scanline >= SCREEN_HEIGHT as u16 - 8 {
-            return None
+            return None;
         }
 
         let x_tile = x / 8;
@@ -397,6 +418,7 @@ impl Ppu {
         let tile_num =
             self.vram.ld8(self.regs.ctrl.base_nt_addr() + vram_index);
 
+        //
         // * 16 because each tile is 16 bytes long
         let pt_i = self.get_tile(
             (self.regs.ctrl.nt_pt_addr() + y_pixel + (tile_num as u16 * 16)),
@@ -439,7 +461,8 @@ impl Ppu {
             }
 
             if self.regs.mask.show_sprites() {
-                sprite_color = self.sprite_pixel(x as u8, sprites, bg_color.is_some());
+                sprite_color =
+                    self.sprite_pixel(x as u8, sprites, bg_color.is_some());
             }
 
             let color = match (bg_color, sprite_color) {
@@ -449,7 +472,7 @@ impl Ppu {
                 (Some(bg_c), Some((spr_c, p))) => match p {
                     Priority::Foreground => spr_c,
                     Priority::Background => bg_c,
-                }
+                },
             };
 
             self.put_pixel(x as usize, self.scanline as usize, color);
@@ -467,10 +490,7 @@ impl Ppu {
         &self.screen_buff
     }
 
-    pub fn emulate_cycles(
-        &mut self,
-        cyc_elapsed: u16,
-    ) -> Option<PpuRes> {
+    pub fn emulate_cycles(&mut self, cyc_elapsed: u16) -> Option<PpuRes> {
         // Note this is grossly over simplified and needs to be changed once
         // the initial functionality of the PPU is achieved
         self.cc += cyc_elapsed as u16 * 3;
@@ -518,9 +538,10 @@ impl Ppu {
                 }
                 None
             }
-        _ => panic!(
+            _ => panic!(
                 "Scanline can't get here {}. Check emulate_cycles",
-                self.scanline)
+                self.scanline
+            ),
         }
     }
 
