@@ -44,6 +44,12 @@ use std::collections::HashMap;
 #[derive(Serialize, Deserialize, Debug)]
 struct Config {
     pixel_scale: usize,
+    ctrl1_layout: ButtonLayout,
+    ctrl2_layout: ButtonLayout
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ButtonLayout {
     left: String,
     up: String,
     down: String,
@@ -125,8 +131,7 @@ pub fn start_emulator(path_in: Option<String>) {
             }
         }
     } else {
-        let config = Config {
-            pixel_scale: 3,
+        let layout1 = ButtonLayout {
             left: "A".to_string(),
             up: "W".to_string(),
             down: "S".to_string(),
@@ -136,19 +141,47 @@ pub fn start_emulator(path_in: Option<String>) {
             start: "RShift".to_string(),
             select: "Enter".to_string()
         };
+
+        let layout2 = ButtonLayout {
+            left: "B".to_string(),
+            up: "B".to_string(),
+            down: "B".to_string(),
+            right: "B".to_string(),
+            a: "B".to_string(),
+            b: "B".to_string(),
+            start: "B".to_string(),
+            select: "B".to_string()
+        };
+
+        let config = Config {
+            pixel_scale: 3,
+            ctrl1_layout: layout1,
+            ctrl2_layout: layout2,
+        };
+
         println!("Did not find config file! Loading defaults {:?}", config);
         config
     };
 
-    let mut sdl_map = HashMap::new();
-    sdl_map.insert(config.left, Button::Left);
-    sdl_map.insert(config.right, Button::Right);
-    sdl_map.insert(config.down, Button::Down);
-    sdl_map.insert(config.up, Button::Up);
-    sdl_map.insert(config.a, Button::A);
-    sdl_map.insert(config.b, Button::B);
-    sdl_map.insert(config.start, Button::Start);
-    sdl_map.insert(config.select, Button::Select);
+    let mut sdl_map1 = HashMap::new();
+    sdl_map1.insert(config.ctrl1_layout.left, Button::Left);
+    sdl_map1.insert(config.ctrl1_layout.right, Button::Right);
+    sdl_map1.insert(config.ctrl1_layout.down, Button::Down);
+    sdl_map1.insert(config.ctrl1_layout.up, Button::Up);
+    sdl_map1.insert(config.ctrl1_layout.a, Button::A);
+    sdl_map1.insert(config.ctrl1_layout.b, Button::B);
+    sdl_map1.insert(config.ctrl1_layout.start, Button::Start);
+    sdl_map1.insert(config.ctrl1_layout.select, Button::Select);
+
+    let mut sdl_map2 = HashMap::new();
+    sdl_map2.insert(config.ctrl2_layout.left, Button::Left);
+    sdl_map2.insert(config.ctrl2_layout.right, Button::Right);
+    sdl_map2.insert(config.ctrl2_layout.down, Button::Down);
+    sdl_map2.insert(config.ctrl2_layout.up, Button::Up);
+    sdl_map2.insert(config.ctrl2_layout.a, Button::A);
+    sdl_map2.insert(config.ctrl2_layout.b, Button::B);
+    sdl_map2.insert(config.ctrl2_layout.start, Button::Start);
+    sdl_map2.insert(config.ctrl2_layout.select, Button::Select);
 
     let mut raw_bytes = Vec::new();
     let raw_rom = match path_in {
@@ -275,8 +308,15 @@ pub fn start_emulator(path_in: Option<String>) {
                     keycode: Some(key), ..
                 } => {
                     match keycode_to_str(key) {
-                        Some(key) => match sdl_map.get(&key) {
+                        Some(key) => match sdl_map1.get(&key) {
                             Some(button) => cpu.mmu.ctrl0.set_button_state(*button, true),
+                            None => ()
+                        }
+                        None => ()
+                    }
+                    match keycode_to_str(key) {
+                        Some(key) => match sdl_map2.get(&key) {
+                            Some(button) => cpu.mmu.ctrl1.set_button_state(*button, true),
                             None => ()
                         }
                         None => ()
@@ -286,8 +326,15 @@ pub fn start_emulator(path_in: Option<String>) {
                     keycode: Some(key), ..
                 } => {
                     match keycode_to_str(key) {
-                        Some(key) => match sdl_map.get(&key) {
+                        Some(key) => match sdl_map1.get(&key) {
                             Some(button) => cpu.mmu.ctrl0.set_button_state(*button, false),
+                            None => ()
+                        }
+                        None => ()
+                    }
+                    match keycode_to_str(key) {
+                        Some(key) => match sdl_map2.get(&key) {
+                            Some(button) => cpu.mmu.ctrl1.set_button_state(*button, false),
                             None => ()
                         }
                         None => ()

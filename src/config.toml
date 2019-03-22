@@ -1,0 +1,21 @@
+pixel_scale = 3
+
+[ctrl1_layout]
+left = "A"
+up = "W"
+down = "S"
+right = "D"
+a = "F"
+b = "G"
+start = "RShift"
+select = "Enter"
+
+[ctrl2_layout]
+left = "B"
+up = "B"
+down = "B"
+right = "B"
+a = "B"
+b = "B"
+start = "B"
+select = "B"
