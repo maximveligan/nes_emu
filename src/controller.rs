@@ -1,4 +1,5 @@
 #[derive(Copy, Clone)]
+#[repr(u8)]
 pub enum Button {
     A = 0b0000_0001,
     B = 0b0000_0010,
