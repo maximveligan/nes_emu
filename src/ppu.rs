@@ -293,9 +293,6 @@ impl Ppu {
                     };
 
                     if (s.x <= x && s.x + 8 > x) {
-                        if s.x == 0 && s.y != 0 {
-                            println!("Some sprite with x = 0");
-                        }
                         if (x <= 8) && !self.regs.mask.left8_sprite() {
                             continue;
                         }
