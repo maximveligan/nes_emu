@@ -196,66 +196,83 @@ impl Ppu {
         }
     }
 
-    //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
+    //Note: It is unclear what happens if we read from 4 outside of vblank
     pub fn ld(&mut self, address: u16) -> u8 {
         match address {
             0 => 0,
             1 => 0,
-            2 => self.regs.status.load(),
+            2 => self.read_ppuctrl(),
             3 => 0,
-            4 => unimplemented!(),
+            4 => self.oam[self.regs.oam_addr as usize],
             5 => 0,
             6 => 0,
-            7 => {
-                let addr = self.regs.addr.read();
-                let val = self.vram.ld8(addr);
-                self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
-                if addr < 0x3F00 {
-                    let buff_val = self.ppudata_buff;
-                    self.ppudata_buff = val;
-                    buff_val
-                } else {
-                    val
-                }
-            }
+            7 => self.read_ppudata(),
             _ => panic!("Somehow got to invalid register"),
         }
     }
 
-    //TODO: NOT ACCURATE, HERE FOR PLACE HOLDER
+    fn read_ppuctrl(&mut self) -> u8 {
+        self.write = 0;
+        self.regs.status.load()
+    }
+
+    fn read_ppudata(&mut self) -> u8 {
+        let addr = self.regs.addr.read();
+        let val = self.vram.ld8(addr);
+        self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
+        if addr < 0x3F00 {
+            let buff_val = self.ppudata_buff;
+            self.ppudata_buff = val;
+            buff_val
+        } else {
+            val
+        }
+    }
+
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
             0 => self.regs.ctrl.store(val),
             1 => self.regs.mask.store(val),
             2 => (),
-            3 => {
-                self.regs.oam_addr = val;
-            }
-            4 => {
-                self.oam[self.regs.oam_addr as usize] = val;
-                self.regs.oam_addr = self.regs.oam_addr.wrapping_add(1);
-            }
-            5 => {
-                self.regs.scroll = val;
-            }
-            6 => {
-                self.regs.addr.store(val, self.write);
-                self.write = if self.write == 0 {
-                    1
-                } else if self.write == 1 {
-                    0
-                } else {
-                    panic!("Write can only be 1 or 2, got {}", self.write);
-                };
-            }
-
-            7 => {
-                let addr = self.regs.addr.read();
-                self.vram.store(addr, val);
-                self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
-            }
+            3 => self.write_oamaddr(val),
+            4 => self.write_oamdata(val),
+            5 => self.update_scroll(val),
+            6 => self.write_ppuaddr(val),
+            7 => self.write_ppudata(val),
             _ => panic!("Somehow got to invalid register"),
         }
+    }
+
+    fn write_oamaddr(&mut self, val: u8) {
+        self.regs.oam_addr = val;
+    }
+
+    fn write_oamdata(&mut self, val: u8) {
+        self.oam[self.regs.oam_addr as usize] = val;
+        self.regs.oam_addr = self.regs.oam_addr.wrapping_add(1);
+    }
+
+    //TODO: Implement scrolling
+    fn update_scroll(&mut self, val: u8) {
+        self.regs.scroll = val;
+    }
+
+    fn write_ppuaddr(&mut self, val: u8) {
+        self.write = if self.write == 0 {
+            self.regs.addr.set_h_byte(val);
+            1
+        } else if self.write == 1 {
+            self.regs.addr.set_l_byte(val);
+            0
+        } else {
+            panic!("Write can only be 1 or 2, got {}", self.write);
+        };
+    }
+
+    fn write_ppudata(&mut self, val: u8) {
+        let addr = self.regs.addr.read();
+        self.vram.store(addr, val);
+        self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb) {
@@ -268,7 +285,7 @@ impl Ppu {
         let mut sprites = [None; 8];
         for sprite_index in 0..SPRITE_NUM {
             if sprite_count >= 8 {
-                self.regs.status.set_sprite_of(true);
+                self.regs.status.set_sprite_o_f(true);
                 return sprites;
             }
             let raw_y = self.oam[sprite_index * SPRITE_ATTR];
@@ -302,11 +319,8 @@ impl Ppu {
                     };
 
                     if (s.x <= x && s.x + 8 > x) {
-                        if (x <= 8) && !self.regs.mask.left8_sprite() {
-                            continue;
-                        }
-
-                        if self.scanline <= 8
+                        if ((x <= 8) && !self.regs.mask.left8_sprite())
+                            || self.scanline <= 8
                             || self.scanline >= SCREEN_HEIGHT as u16 - 8
                         {
                             continue;
@@ -348,7 +362,7 @@ impl Ppu {
                         }
 
                         if *index == 0 && bg_opaque {
-                            self.regs.status.set_sprite0(true);
+                            self.regs.status.set_sprite_0_hit(true);
                         }
 
                         let sprite_color =
@@ -533,8 +547,8 @@ impl Ppu {
                     self.frame_sent = false;
                     self.nmi_sent = false;
                     self.regs.status.set_vblank(false);
-                    self.regs.status.set_sprite_of(false);
-                    self.regs.status.set_sprite0(false);
+                    self.regs.status.set_sprite_o_f(false);
+                    self.regs.status.set_sprite_0_hit(false);
                 }
                 None
             }

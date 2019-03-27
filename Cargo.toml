@@ -11,3 +11,4 @@ nom = "*"
 serde = { version = "*", features = ["derive"] }
 sdl2 = "0.32.*"
 toml = "*"
+bitfield = "*"

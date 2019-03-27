@@ -5,6 +5,8 @@ extern crate sdl2;
 #[macro_use]
 extern crate serde;
 extern crate toml;
+#[macro_use]
+extern crate bitfield;
 
 pub mod apu;
 pub mod controller;
