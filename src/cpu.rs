@@ -52,6 +52,17 @@ impl fmt::Debug for ProgramCounter {
     }
 }
 
+enum Flag {
+    Carry = 0b0000_0001,
+    Zero = 0b0000_0010,
+    Itr = 0b0000_0100,
+    Dec = 0b0000_1000,
+    Brk = 0b0001_0000,
+    Unused = 0b0010_0000,
+    Overflow = 0b0100_0000,
+    Neg = 0b1000_0000,
+}
+
 pub struct Cpu {
     pub regs: Registers,
     pub cycle_count: u16,
@@ -223,7 +234,7 @@ impl Cpu {
         let tmp = acc as u16 + val as u16 + self.get_flag(Flag::Carry) as u16;
         self.set_flag(Flag::Carry, tmp > 0xFF);
         self.set_flag(
-            Flag::O_f,
+            Flag::Overflow,
             ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0,
         );
         let tmp = tmp as u8;
@@ -371,7 +382,7 @@ impl Cpu {
         let val = self.read_op(mode);
         let acc = self.regs.acc;
         self.set_flag(Flag::Zero, (val & acc) == 0);
-        self.set_flag(Flag::O_f, (val & 0x40) != 0);
+        self.set_flag(Flag::Overflow, (val & 0x40) != 0);
         self.set_flag(Flag::Neg, (val & 0x80) != 0);
     }
 
@@ -615,7 +626,7 @@ impl Cpu {
             SEC => self.set_flag(Flag::Carry, true),
             CLI => self.set_flag(Flag::Itr, false),
             SEI => self.set_flag(Flag::Itr, true),
-            CLV => self.set_flag(Flag::O_f, false),
+            CLV => self.set_flag(Flag::Overflow, false),
             CLD => self.set_flag(Flag::Dec, false),
 
             NOP | 0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => (),
@@ -704,11 +715,11 @@ impl Cpu {
                 self.pull_status();
             }
             BVS => {
-                let flag = self.get_flag(Flag::O_f);
+                let flag = self.get_flag(Flag::Overflow);
                 self.generic_branch(flag);
             }
             BVC => {
-                let flag = !self.get_flag(Flag::O_f);
+                let flag = !self.get_flag(Flag::Overflow);
                 self.generic_branch(flag);
             }
             BMI => {

@@ -1,36 +1,19 @@
 use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
-use rom::ScreenMode;
-use pregisters::PRegisters;
+use super::pregisters::PRegisters;
+use super::sprite::Sprite;
+use super::sprite::Priority;
+use super::vram::*;
 
+const PALETTE_RAM_I: u16 = 0x3F00;
+const SPRITE_NUM: usize = 64;
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
-const VRAM_SIZE: usize = 0x800;
-const PALETTE_SIZE: usize = 0x20;
 
-const PT_START: u16 = 0x0000;
-const PT_END: u16 = 0x1FFF;
-const TILES_PER_PT: u16 = 0x100;
-
-const NT_0: u16 = 0x000;
-const NT_0_END: u16 = 0x3FF;
-const NT_1: u16 = 0x400;
-const NT_1_END: u16 = 0x7FF;
-const NT_2: u16 = 0x800;
-const NT_2_END: u16 = 0xBFF;
-const NT_3: u16 = 0xC00;
-const NT_3_END: u16 = 0xFFF;
 const AT_OFFSET: u16 = 0x03C0;
 
-const NT_MIRROR: u16 = 0x3000;
-const NT_MIRROR_END: u16 = 0x3EFF;
-const PALETTE_RAM_I: u16 = 0x3F00;
-const PALETTE_MIRROR: u16 = 0x3F20;
-const PALETTE_MIRROR_END: u16 = 0x3FFF;
-
 const CYC_PER_LINE: u16 = 340;
-const SCAN_PER_FRAME: u16 = 260;
 
 static PALETTE: [u8; 192] = [
     0x80, 0x80, 0x80, 0x00, 0x3D, 0xA6, 0x00, 0x12, 0xB0, 0x44, 0x00, 0x96,
@@ -51,36 +34,9 @@ static PALETTE: [u8; 192] = [
     0x99, 0xFF, 0xFC, 0xDD, 0xDD, 0xDD, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
 ];
 
-const SPRITE_NUM: usize = 64;
-const SPRITE_ATTR: usize = 4;
-
 #[derive(Copy, Clone)]
 struct Rgb {
     data: [u8; 3],
-}
-
-#[derive(Copy, Clone)]
-struct Sprite {
-    x: u8,
-    y: u8,
-    pt_index: u8,
-    attributes: u8,
-}
-
-enum Priority {
-    Foreground,
-    Background,
-}
-
-impl Priority {
-    fn from_attr(byte: u8) -> Priority {
-        let bit = byte >> 5 & 1;
-        match bit {
-            0 => Priority::Foreground,
-            1 => Priority::Background,
-            _ => panic!("Can't get number either than 0 or 1 after anding"),
-        }
-    }
 }
 
 pub enum PpuRes {
@@ -94,7 +50,7 @@ pub struct Ppu {
 
     // multiply by 3 to account for r g b
     screen_buff: [u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3],
-    oam: [u8; SPRITE_ATTR * SPRITE_NUM],
+    oam: [u8; 256],
     cc: u16,
     scanline: u16,
     frame_sent: bool,
@@ -103,90 +59,13 @@ pub struct Ppu {
     ppudata_buff: u8,
 }
 
-pub struct Vram {
-    vram: [u8; VRAM_SIZE],
-    mapper: Rc<RefCell<Mapper>>,
-    palette: [u8; PALETTE_SIZE],
-}
-
-impl Vram {
-    pub fn new(mapper: Rc<RefCell<Mapper>>) -> Vram {
-        Vram {
-            vram: [0; VRAM_SIZE],
-            mapper: mapper,
-            palette: [0; PALETTE_SIZE],
-        }
-    }
-
-    fn ld8(&self, addr: u16) -> u8 {
-        match addr {
-            PT_START...PT_END => self.mapper.borrow_mut().ld_chr(addr),
-            0x2000...NT_MIRROR_END => self.vram[self.nt_mirror(addr & 0xFFF)],
-            PALETTE_RAM_I...PALETTE_MIRROR_END => {
-                if addr == 0x3F10
-                    || addr == 0x3F14
-                    || addr == 0x3F18
-                    || addr == 0x3F1C
-                {
-                    self.palette[(addr & 0x0F) as usize]
-                } else {
-                    self.palette[(addr & 0x1F) as usize]
-                }
-            }
-            _ => panic!(),
-        }
-    }
-
-    fn store(&mut self, addr: u16, val: u8) {
-        match addr {
-            PT_START...PT_END => println!("Warning! Can't store to chr rom"),
-            0x2000...NT_MIRROR_END => {
-                self.vram[self.nt_mirror(addr & 0xFFF)] = val;
-            }
-            PALETTE_RAM_I...PALETTE_MIRROR_END => {
-                if addr == 0x3F10
-                    || addr == 0x3F14
-                    || addr == 0x3F18
-                    || addr == 0x3F1C
-                {
-                    self.palette[(addr & 0x0F) as usize] = val;
-                } else {
-                    self.palette[(addr & 0x1F) as usize] = val;
-                }
-            }
-            _ => panic!(),
-        }
-    }
-
-    // Helper function that resolves the nametable mirroring and returns an
-    // index usable for VRAM array indexing
-    fn nt_mirror(&self, addr: u16) -> usize {
-        match self.mapper.borrow().get_mirroring() {
-            ScreenMode::FourScreen => {
-                unimplemented!("Four Screen mode not supported yet")
-            }
-            ScreenMode::Horizontal => match addr {
-                NT_0...NT_0_END => addr as usize,
-                NT_1...NT_2_END => (addr - 0x400) as usize,
-                NT_3...NT_3_END => (addr - 0x800) as usize,
-                _ => panic!("Horizontal: addr outside of nt passed"),
-            },
-            ScreenMode::Vertical => match addr {
-                NT_0...NT_1_END => addr as usize,
-                NT_2...NT_3_END => (addr - 0x800) as usize,
-                _ => panic!("Vertical: addr outside of nt passed"),
-            },
-        }
-    }
-}
-
 impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
         Ppu {
             regs: PRegisters::new(),
             vram: Vram::new(mapper),
             screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
-            oam: [0; SPRITE_ATTR * SPRITE_NUM],
+            oam: [0; 256],
             cc: 0,
             scanline: 0,
             frame_sent: false,
@@ -217,7 +96,7 @@ impl Ppu {
     }
 
     fn read_ppudata(&mut self) -> u8 {
-        let addr = self.regs.addr.read();
+        let addr = self.regs.addr.addr();
         let val = self.vram.ld8(addr);
         self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
         if addr < 0x3F00 {
@@ -270,7 +149,7 @@ impl Ppu {
     }
 
     fn write_ppudata(&mut self, val: u8) {
-        let addr = self.regs.addr.read();
+        let addr = self.regs.addr.addr();
         self.vram.store(addr, val);
         self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
     }
@@ -288,7 +167,7 @@ impl Ppu {
                 self.regs.status.set_sprite_o_f(true);
                 return sprites;
             }
-            let raw_y = self.oam[sprite_index * SPRITE_ATTR];
+            let raw_y = self.oam[sprite_index * 4];
             let y_pos = raw_y.wrapping_add(1) as u16;
             if y_pos <= self.scanline
                 && y_pos + self.regs.ctrl.sprite_size() > self.scanline
@@ -307,83 +186,66 @@ impl Ppu {
         bg_opaque: bool,
     ) -> Option<(Rgb, Priority)> {
         for sprite_index in sprites.iter() {
-            match sprite_index {
-                Some(index) => {
-                    let s = Sprite {
-                        x: self.oam[(*index as usize * SPRITE_ATTR) + 3],
-                        y: self.oam[(*index as usize * SPRITE_ATTR)]
-                            .wrapping_add(1),
-                        pt_index: self.oam[(*index as usize * SPRITE_ATTR) + 1],
-                        attributes: self.oam
-                            [(*index as usize * SPRITE_ATTR) + 2],
-                    };
+            if let Some(index) = sprite_index {
+                let s = Sprite::new(*index as usize, &self.oam);
 
-                    if (s.x <= x && s.x + 8 > x) {
-                        if ((x <= 8) && !self.regs.mask.left8_sprite())
-                            || self.scanline <= 8
-                            || self.scanline >= SCREEN_HEIGHT as u16 - 8
-                        {
-                            continue;
-                        }
-
-                        let pt_i = match self.regs.ctrl.sprite_size() {
-                            8 => {
-                                self.regs.ctrl.sprite_pt_addr()
-                                    + s.pt_index as u16
-                            }
-                            16 => {
-                                let tile_num = s.pt_index & !1;
-                                let offset: u16 = if s.pt_index & 1 == 1 {
-                                    0x1000
-                                } else {
-                                    0x0000
-                                };
-                                (tile_num as u16 + offset)
-                            }
-                            _ => panic!("No other sprite sizes"),
-                        };
-
-                        let x = if s.attributes >> 6 != 0 {
-                            (7 - (x - s.x)) % 8
-                        } else {
-                            (x - s.x) % 8
-                        };
-
-                        let y = if s.attributes >> 7 != 0 {
-                            7 - (self.scanline - s.y as u16)
-                        } else {
-                            self.scanline - s.y as u16
-                        };
-
-                        let tile_color = self.get_tile((pt_i * 16) + y, x);
-
-                        if tile_color == 0 {
-                            continue;
-                        }
-
-                        if *index == 0 && bg_opaque {
-                            self.regs.status.set_sprite_0_hit(true);
-                        }
-
-                        let sprite_color =
-                            (s.attributes & 0b11) + 4 << 2 | tile_color;
-                        let pal_index = self
-                            .vram
-                            .ld8(PALETTE_RAM_I + (sprite_color as u16))
-                            & 0x3F;
-                        return Some((
-                            Rgb {
-                                data: [
-                                    PALETTE[pal_index as usize * 3],
-                                    PALETTE[pal_index as usize * 3 + 1],
-                                    PALETTE[pal_index as usize * 3 + 2],
-                                ],
-                            },
-                            Priority::from_attr(s.attributes),
-                        ));
-                    }
+                if !s.in_bounding_box(
+                    x,
+                    self.scanline as u8,
+                    self.regs.mask.left8_bg(),
+                ) {
+                    continue;
                 }
-                None => return None,
+
+                let pt_i = match self.regs.ctrl.sprite_size() {
+                    8 => self.regs.ctrl.sprite_pt_addr() + s.pt_index as u16,
+                    16 => {
+                        let tile_num = s.pt_index & !1;
+                        let offset: u16 =
+                            if s.pt_index & 1 == 1 { 0x1000 } else { 0x0000 };
+                        (tile_num as u16 + offset)
+                    }
+                    _ => panic!("No other sprite sizes"),
+                };
+
+                let x = if s.attributes.flip_x() {
+                    (7 - (x - s.x)) % 8
+                } else {
+                    (x - s.x) % 8
+                };
+
+                let y = if s.attributes.flip_y() {
+                    7 - (self.scanline - s.y as u16)
+                } else {
+                    self.scanline - s.y as u16
+                };
+
+                let tile_color = self.get_tile((pt_i * 16) + y, x);
+
+                if tile_color == 0 {
+                    continue;
+                }
+
+                if *index == 0 && bg_opaque {
+                    self.regs.status.set_sprite_0_hit(true);
+                }
+
+                let sprite_color =
+                    (s.attributes.palette()) + 4 << 2 | tile_color;
+                let pal_index =
+                    self.vram.ld8(PALETTE_RAM_I + (sprite_color as u16)) & 0x3F;
+                return Some((
+                    Rgb {
+                        data: [
+                            PALETTE[pal_index as usize * 3],
+                            PALETTE[pal_index as usize * 3 + 1],
+                            PALETTE[pal_index as usize * 3 + 2],
+                        ],
+                    },
+                    Priority::from_attr(s.attributes.priority() as u8),
+                ));
+            } else {
+                return None;
             }
         }
         None
@@ -435,7 +297,7 @@ impl Ppu {
         //
         // * 16 because each tile is 16 bytes long
         let pt_i = self.get_tile(
-            (self.regs.ctrl.nt_pt_addr() + y_pixel + (tile_num as u16 * 16)),
+            self.regs.ctrl.nt_pt_addr() + y_pixel + (tile_num as u16 * 16),
             x_pixel,
         );
         match pt_i {
@@ -464,7 +326,6 @@ impl Ppu {
             ],
         };
 
-        let mut color = Rgb { data: [0, 0, 0] };
         let sprites = self.get_sprites();
 
         for x in 0u16..SCREEN_WIDTH as u16 {
@@ -557,67 +418,5 @@ impl Ppu {
                 self.scanline
             ),
         }
-    }
-
-    fn pull_tileset(&self, colors: [Rgb; 4], chr_addr: u16) -> [u8; 49152] {
-        let mut ts = [0; 128 * 128 * 3];
-        let mut palette_indices: [[Rgb; 8]; 8] = [[colors[0]; 8]; 8];
-        let mut y_off = 0;
-        let mut x_off = 0;
-
-        for tile_num in 0..SCREEN_WIDTH {
-            let index = (tile_num * 16) as u16 + chr_addr;
-            for byte in index..index + 8 {
-                let tmp1 = self.vram.ld8(byte as u16);
-                let tmp2 = self.vram.ld8((byte + 8) as u16);
-                for num in 0..8 {
-                    let b1 = (tmp1 >> num & 1) == 1;
-                    let b2 = (tmp2 >> num & 1) == 1;
-                    palette_indices[num as usize][(byte - index) as usize] =
-                        if b1 && b2 {
-                            colors[3]
-                        } else if b1 {
-                            colors[2]
-                        } else if b2 {
-                            colors[1]
-                        } else {
-                            colors[0]
-                        };
-                }
-            }
-
-            if tile_num % 16 == 0 && tile_num != 0 {
-                y_off += 8;
-                x_off = 0;
-            }
-
-            for y in y_off..y_off + 8 {
-                for x in x_off..x_off + 8 {
-                    let tmp =
-                        palette_indices[(x % 8) as usize][(y % 8) as usize];
-                    ts[(x * 3) + (y * 128 * 3)] = tmp.data[0];
-                    ts[((x * 3) + 1) + (y * 128 * 3)] = tmp.data[1];
-                    ts[((x * 3) + 2) + (y * 128 * 3)] = tmp.data[2];
-                }
-            }
-            x_off += 8;
-        }
-        ts
-    }
-
-    pub fn debug_pt(&self) -> ([u8; 49152], [u8; 49152]) {
-        let red: Rgb = Rgb {
-            data: [160, 120, 45],
-        };
-        let green: Rgb = Rgb { data: [255, 0, 0] };
-        let blue: Rgb = Rgb {
-            data: [244, 164, 96],
-        };
-        let white: Rgb = Rgb {
-            data: [128, 128, 128],
-        };
-        let left = self.pull_tileset([white, blue, green, red], 0x0000);
-        let right = self.pull_tileset([white, blue, green, red], 0x1000);
-        (left, right)
     }
 }

@@ -2,7 +2,6 @@
 #[macro_use]
 extern crate nom;
 extern crate sdl2;
-#[macro_use]
 extern crate serde;
 extern crate toml;
 #[macro_use]
@@ -17,6 +16,8 @@ pub mod mmu;
 pub mod ppu;
 pub mod pregisters;
 pub mod rom;
+pub mod sprite;
+pub mod vram;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;

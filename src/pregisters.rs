@@ -61,10 +61,6 @@ bitfield! {
 }
 
 impl VramAddr {
-    pub fn read(&self) -> u16 {
-        self.0 % 0x4000
-    }
-
     pub fn add_offset(&mut self, offset: u8) {
         self.0 = self.0.wrapping_add(offset as u16);
     }
