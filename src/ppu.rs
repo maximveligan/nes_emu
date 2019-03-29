@@ -1,10 +1,10 @@
 use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::pregisters::PRegisters;
-use super::sprite::Sprite;
-use super::sprite::Priority;
-use super::vram::*;
+use pregisters::PRegisters;
+use sprite::Sprite;
+use sprite::Priority;
+use vram::*;
 
 const PALETTE_RAM_I: u16 = 0x3F00;
 const SPRITE_NUM: usize = 64;
@@ -72,6 +72,17 @@ impl Ppu {
             nmi_sent: false,
             write: 0,
             ppudata_buff: 0,
+        }
+    }
+
+    fn get_palette_color(&self, vram_index: u16) -> Rgb {
+        let pal_index = self.vram.ld8(vram_index);
+        Rgb {
+            data: [
+                PALETTE[pal_index as usize * 3],
+                PALETTE[pal_index as usize * 3 + 1],
+                PALETTE[pal_index as usize * 3 + 2],
+            ],
         }
     }
 
@@ -188,7 +199,6 @@ impl Ppu {
         for sprite_index in sprites.iter() {
             if let Some(index) = sprite_index {
                 let s = Sprite::new(*index as usize, &self.oam);
-
                 if !s.in_bounding_box(
                     x,
                     self.scanline as u8,
@@ -197,30 +207,10 @@ impl Ppu {
                     continue;
                 }
 
-                let pt_i = match self.regs.ctrl.sprite_size() {
-                    8 => self.regs.ctrl.sprite_pt_addr() + s.pt_index as u16,
-                    16 => {
-                        let tile_num = s.pt_index & !1;
-                        let offset: u16 =
-                            if s.pt_index & 1 == 1 { 0x1000 } else { 0x0000 };
-                        (tile_num as u16 + offset)
-                    }
-                    _ => panic!("No other sprite sizes"),
-                };
-
-                let x = if s.attributes.flip_x() {
-                    (7 - (x - s.x)) % 8
-                } else {
-                    (x - s.x) % 8
-                };
-
-                let y = if s.attributes.flip_y() {
-                    7 - (self.scanline - s.y as u16)
-                } else {
-                    self.scanline - s.y as u16
-                };
-
-                let tile_color = self.get_tile((pt_i * 16) + y, x);
+                let ctrl = &self.regs.ctrl;
+                let (pt_tile_i, x_offset) =
+                    s.get_tile_values(ctrl, x, self.scanline);
+                let tile_color = self.get_tile(pt_tile_i, x_offset);
 
                 if tile_color == 0 {
                     continue;
@@ -232,16 +222,10 @@ impl Ppu {
 
                 let sprite_color =
                     (s.attributes.palette()) + 4 << 2 | tile_color;
-                let pal_index =
-                    self.vram.ld8(PALETTE_RAM_I + (sprite_color as u16)) & 0x3F;
                 return Some((
-                    Rgb {
-                        data: [
-                            PALETTE[pal_index as usize * 3],
-                            PALETTE[pal_index as usize * 3 + 1],
-                            PALETTE[pal_index as usize * 3 + 2],
-                        ],
-                    },
+                    self.get_palette_color(
+                        PALETTE_RAM_I + (sprite_color as u16),
+                    ),
                     Priority::from_attr(s.attributes.priority() as u8),
                 ));
             } else {
@@ -265,22 +249,14 @@ impl Ppu {
         };
 
         let tile_color = (at_color * 4) | pt_index;
-        let pal_index = self.vram.ld8(PALETTE_RAM_I + (tile_color as u16));
-        Rgb {
-            data: [
-                PALETTE[pal_index as usize * 3],
-                PALETTE[pal_index as usize * 3 + 1],
-                PALETTE[pal_index as usize * 3 + 2],
-            ],
-        }
+        self.get_palette_color(PALETTE_RAM_I + (tile_color as u16))
     }
 
     fn bg_pixel(&mut self, x: u16) -> Option<Rgb> {
-        if x <= 8 && !self.regs.mask.left8_bg() {
-            return None;
-        }
-
-        if self.scanline <= 8 || self.scanline >= SCREEN_HEIGHT as u16 - 8 {
+        if (x <= 8 && !self.regs.mask.left8_bg())
+            || self.scanline <= 8
+            || self.scanline >= SCREEN_HEIGHT as u16 - 8
+        {
             return None;
         }
 

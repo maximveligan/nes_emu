@@ -1,3 +1,5 @@
+use pregisters::Ctrl;
+
 const SPRITE_ATTR: usize = 4;
 
 #[derive(Copy, Clone)]
@@ -34,6 +36,35 @@ impl Sprite {
         || y <= 8
         // This is screenheight - 8
         || y >= 240 - 8)
+    }
+
+    pub fn get_tile_values(&self, ctrl: &Ctrl, x: u8, y: u16) -> (u16, u8) {
+        let pt_i = match ctrl.sprite_size() {
+            8 => ctrl.sprite_pt_addr() + self.pt_index as u16,
+            16 => {
+                let tile_num = self.pt_index & !1;
+                let offset: u16 = if self.pt_index & 1 == 1 {
+                    0x1000
+                } else {
+                    0x0000
+                };
+                (tile_num as u16 + offset)
+            }
+            _ => panic!("No other sprite sizes"),
+        };
+
+        let x = if self.attributes.flip_x() {
+            (7 - (x - self.x)) % 8
+        } else {
+            (x - self.x) % 8
+        };
+
+        let y = if self.attributes.flip_y() {
+            7 - (y - self.y as u16)
+        } else {
+            y - self.y as u16
+        };
+        (((pt_i * 16) + y), x)
     }
 }
 

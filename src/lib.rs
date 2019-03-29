@@ -142,7 +142,7 @@ pub fn start_emulator(path_in: Option<String>) {
                 match file.read_to_string(&mut config_string) {
                     Ok(_) => match toml::from_str(&config_string) {
                         Ok(config) => {
-                            println!("Loading config: {:?}", config);
+                            println!("Loading config: {:#?}", config);
                             config
                         }
                         Err(err) => {
