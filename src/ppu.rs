@@ -39,6 +39,7 @@ struct Rgb {
     data: [u8; 3],
 }
 
+#[derive(Debug)]
 pub enum PpuRes {
     Nmi,
     Draw,
@@ -53,8 +54,6 @@ pub struct Ppu {
     oam: [u8; 256],
     cc: u16,
     scanline: u16,
-    frame_sent: bool,
-    nmi_sent: bool,
     write: u8,
     ppudata_buff: u8,
 }
@@ -68,8 +67,6 @@ impl Ppu {
             oam: [0; 256],
             cc: 0,
             scanline: 0,
-            frame_sent: false,
-            nmi_sent: false,
             write: 0,
             ppudata_buff: 0,
         }
@@ -330,69 +327,73 @@ impl Ppu {
         }
     }
 
-    fn scanline_handler(&mut self) {
-        if self.cc > CYC_PER_LINE {
-            self.cc %= CYC_PER_LINE;
-            self.scanline += 1;
-        }
-    }
-
     pub fn get_buffer(&self) -> &[u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3] {
         &self.screen_buff
     }
 
-    pub fn emulate_cycles(&mut self, cyc_elapsed: u16) -> Option<PpuRes> {
-        // Note this is grossly over simplified and needs to be changed once
-        // the initial functionality of the PPU is achieved
-        self.cc += cyc_elapsed as u16 * 3;
-        match self.scanline {
+    fn step(&mut self) {
+        self.cc += 1;
+        if self.cc > CYC_PER_LINE {
+            self.cc = 0;
+            self.scanline += 1;
+            if self.scanline > 261 {
+                self.scanline = 0;
+            }
+        }
+    }
+
+    fn tick(&mut self) -> Option<PpuRes> {
+        let res = match self.scanline {
             0...239 => {
-                if self.cc > CYC_PER_LINE {
-                    self.cc %= CYC_PER_LINE;
+                if self.cc == 260 {
                     self.pull_scanline();
-                    self.scanline += 1;
                 }
                 None
             }
             240 => {
-                self.scanline_handler();
-                if !self.frame_sent {
-                    self.frame_sent = true;
+                if self.cc == 0 {
                     Some(PpuRes::Draw)
                 } else {
                     None
                 }
             }
             241 => {
-                self.regs.status.set_vblank(true);
-                self.scanline_handler();
-                if self.regs.ctrl.nmi_on() && !self.nmi_sent {
-                    self.nmi_sent = true;
-                    Some(PpuRes::Nmi)
+                if self.cc == 1 {
+                    self.regs.status.set_vblank(true);
+                    if self.regs.ctrl.nmi_on() {
+                        Some(PpuRes::Nmi)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
             }
             242...260 => {
-                self.scanline_handler();
                 None
             }
             261 => {
-                if self.cc > CYC_PER_LINE {
-                    self.cc %= CYC_PER_LINE;
-                    self.scanline = 0;
-                    self.frame_sent = false;
-                    self.nmi_sent = false;
-                    self.regs.status.set_vblank(false);
-                    self.regs.status.set_sprite_o_f(false);
-                    self.regs.status.set_sprite_0_hit(false);
-                }
+                self.regs.status.set_vblank(false);
+                self.regs.status.set_sprite_o_f(false);
+                self.regs.status.set_sprite_0_hit(false);
                 None
             }
             _ => panic!(
                 "Scanline can't get here {}. Check emulate_cycles",
                 self.scanline
             ),
+        };
+        self.step();
+        res
+    }
+
+    pub fn emulate_cycles(&mut self, cyc_elapsed: u16) -> Option<PpuRes> {
+        let mut ppu_res = None;
+        for _ in 0..(cyc_elapsed * 3) {
+            if let Some(res) = self.tick() {
+                ppu_res = Some(res);
+            }
         }
+        ppu_res
     }
 }
