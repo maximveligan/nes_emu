@@ -2,6 +2,7 @@ use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
 use pregisters::PRegisters;
+use pregisters::VramAddr;
 use sprite::Sprite;
 use sprite::Priority;
 use vram::*;
@@ -54,8 +55,15 @@ pub struct Ppu {
     oam: [u8; 256],
     cc: u16,
     scanline: u16,
-    write: u8,
+    // Internal registers
+    write_latch: bool,
     ppudata_buff: u8,
+    t_addr: VramAddr,
+    fine_x: u8,
+    // TODO: Scrolling is implemented solely through the address register
+    // Fix this for more accurate emulation
+    x_scroll: u16,
+    y_scroll: u16,
 }
 
 impl Ppu {
@@ -67,8 +75,12 @@ impl Ppu {
             oam: [0; 256],
             cc: 0,
             scanline: 0,
-            write: 0,
+            write_latch: false,
             ppudata_buff: 0,
+            x_scroll: 0,
+            y_scroll: 0,
+            fine_x: 0,
+            t_addr: VramAddr(0),
         }
     }
 
@@ -99,8 +111,10 @@ impl Ppu {
     }
 
     fn read_ppuctrl(&mut self) -> u8 {
-        self.write = 0;
-        self.regs.status.load()
+        self.write_latch = false;
+        let tmp = self.regs.status.load();
+        self.regs.status.set_vblank(false);
+        tmp
     }
 
     fn read_ppudata(&mut self) -> u8 {
@@ -118,16 +132,24 @@ impl Ppu {
 
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
-            0 => self.regs.ctrl.store(val),
+            0 => self.write_ctrl(val),
             1 => self.regs.mask.store(val),
             2 => (),
             3 => self.write_oamaddr(val),
             4 => self.write_oamdata(val),
-            5 => self.update_scroll(val),
+            5 => self.write_scroll(val),
             6 => self.write_ppuaddr(val),
             7 => self.write_ppudata(val),
             _ => panic!("Somehow got to invalid register"),
         }
+    }
+
+    fn write_ctrl(&mut self, val: u8) {
+        //TODO: This is very hacky, all of this behaviour should be taken care
+        //of by emulating the internal registers.
+        self.regs.ctrl.store(val);
+        self.x_scroll = (self.x_scroll & 0xFF) | self.regs.ctrl.x_scroll_base();
+        self.y_scroll = (self.y_scroll & 0xFF) | self.regs.ctrl.y_scroll_base();
     }
 
     fn write_oamaddr(&mut self, val: u8) {
@@ -139,21 +161,29 @@ impl Ppu {
         self.regs.oam_addr = self.regs.oam_addr.wrapping_add(1);
     }
 
-    //TODO: Implement scrolling
-    fn update_scroll(&mut self, val: u8) {
-        self.regs.scroll = val;
+    //TODO: This is innacurate, go back and emulate the internal
+    // registers properly
+    fn write_scroll(&mut self, val: u8) {
+        if self.write_latch {
+            self.y_scroll = val as u16;
+        } else {
+            self.x_scroll = val as u16;
+        }
+        self.write_latch = !self.write_latch;
     }
 
     fn write_ppuaddr(&mut self, val: u8) {
-        self.write = if self.write == 0 {
-            self.regs.addr.set_h_byte(val);
-            1
-        } else if self.write == 1 {
+        if self.write_latch {
             self.regs.addr.set_l_byte(val);
-            0
+            // This is innacurate, go back and emulate the internal registers
+            let x_base = (self.regs.addr.nt() & 0x01) as u16 * 256;
+            let y_base = (self.regs.addr.nt() & 0x02) as u16 * 240;
+            self.x_scroll = (self.x_scroll & 0xff) | x_base;
+            self.y_scroll = (self.y_scroll & 0xff) | y_base;
         } else {
-            panic!("Write can only be 1 or 2, got {}", self.write);
-        };
+            self.regs.addr.set_h_byte(val);
+        }
+        self.write_latch = !self.write_latch
     }
 
     fn write_ppudata(&mut self, val: u8) {
@@ -232,11 +262,15 @@ impl Ppu {
         None
     }
 
-    fn get_attr_color(&self, x_tile: u16, y_tile: u16, pt_index: u8) -> Rgb {
+    fn get_attr_color(
+        &self,
+        x_tile: u16,
+        y_tile: u16,
+        pt_index: u8,
+        base: u16,
+    ) -> Rgb {
         let at_index = (x_tile / 4) + ((y_tile / 4) * 8);
-        let at_byte = self
-            .vram
-            .ld8(self.regs.ctrl.base_nt_addr() + AT_OFFSET + (at_index as u16));
+        let at_byte = self.vram.ld8(base + AT_OFFSET + (at_index as u16));
 
         let at_color = match (x_tile % 4 < 2, y_tile % 4 < 2) {
             (false, false) => (at_byte >> 6) & 0b11,
@@ -250,22 +284,31 @@ impl Ppu {
     }
 
     fn bg_pixel(&mut self, x: u16) -> Option<Rgb> {
-        if (x <= 8 && !self.regs.mask.left8_bg())
-            || self.scanline <= 8
-            || self.scanline >= SCREEN_HEIGHT as u16 - 8
-        {
+        if x <= 8 && !self.regs.mask.left8_bg() {
             return None;
         }
 
-        let x_tile = x / 8;
-        let y_tile = self.scanline / 8;
+        let x = x + self.x_scroll as u16;
+        let y = self.scanline + self.y_scroll as u16;
+
+        let x_tile = (x / 8) % 64;
+        let y_tile = (y / 8) % 64;
+        let base = match (x_tile >= 32, y_tile >= 30) {
+            (false, false) => 0x2000,
+            (true, false) => 0x2400,
+            (false, true) => 0x2800,
+            (true, true) => 0x2C00,
+        };
+
+        let x_tile = (x_tile % 32) as u16;
+        let y_tile = (y_tile % 32) as u16;
+
         let x_pixel = (x % 8) as u8;
-        let y_pixel = self.scanline % 8;
+        let y_pixel = y % 8;
 
         let vram_index = x_tile + (y_tile * 32);
         // Get my tile number
-        let tile_num =
-            self.vram.ld8(self.regs.ctrl.base_nt_addr() + vram_index);
+        let tile_num = self.vram.ld8(base + vram_index);
 
         //
         // * 16 because each tile is 16 bytes long
@@ -275,7 +318,7 @@ impl Ppu {
         );
         match pt_i {
             0 => None,
-            _ => Some(self.get_attr_color(x_tile, y_tile, pt_i)),
+            _ => Some(self.get_attr_color(x_tile, y_tile, pt_i, base)),
         }
     }
 
@@ -369,9 +412,7 @@ impl Ppu {
                     None
                 }
             }
-            242...260 => {
-                None
-            }
+            242...260 => None,
             261 => {
                 self.regs.status.set_vblank(false);
                 self.regs.status.set_sprite_o_f(false);

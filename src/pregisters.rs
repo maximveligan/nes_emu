@@ -6,9 +6,19 @@ bitfield! {
     pub bg_tab,     _ : 4;
     pub sprite_tab, _ : 3;
     pub vert_inc,   _ : 2;
+    pub y_offset,   _ : 1;
+    pub x_offset,   _ : 0;
 }
 
 impl Ctrl {
+    pub fn x_scroll_base(&self) -> u16 {
+        self.x_offset() as u16 * 256
+    }
+
+    pub fn y_scroll_base(&self) -> u16 {
+        self.y_offset() as u16 * 240
+    }
+
     pub fn sprite_size(&self) -> u16 {
         if self.spr_size() {
             16
@@ -33,17 +43,6 @@ impl Ctrl {
         }
     }
 
-    pub fn base_nt_addr(&self) -> u16 {
-        let tmp = self.0 & 0b11;
-        match tmp {
-            0 => 0x2000,
-            1 => 0x2400,
-            2 => 0x2800,
-            3 => 0x2C00,
-            _ => panic!("Other values shouldn't be possible"),
-        }
-    }
-
     pub fn store(&mut self, val: u8) {
         self.0 = val;
     }
@@ -55,9 +54,14 @@ impl Ctrl {
 
 bitfield! {
     pub struct VramAddr(u16);
+    pub u8, nt, set_nt:         11, 10;
     pub u16, addr,           _: 13, 0;
     pub u8, h_byte, set_h_byte: 13, 8;
     pub u8, l_byte, set_l_byte:  7, 0;
+    pub u16, all,            _: 14, 0;
+    pub u8, fine_y, set_fine_y: 14, 12;
+    pub u8, coarse_x, set_coarse_x: 4, 0;
+    pub u8, coarse_y, set_coarse_y: 9, 5;
 }
 
 impl VramAddr {

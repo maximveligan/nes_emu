@@ -67,6 +67,7 @@ pub struct Cpu {
     pub regs: Registers,
     pub cycle_count: u16,
     pub mmu: Mmu,
+    cc: usize,
 }
 
 pub enum Mode {
@@ -76,16 +77,20 @@ pub enum Mode {
     ZPY,
     Abs,
     AbsX,
+    NoPBAbsX,
     AbsY,
+    NoPBAbsY,
     JmpIndir,
     IndX,
     IndY,
+    NoPBIndY,
 }
 
 impl Cpu {
     pub fn new(mmu: Mmu) -> Cpu {
         let mut cpu = Cpu {
             cycle_count: 0,
+            cc: 7,
             regs: Registers {
                 acc: 0,
                 x: 0,
@@ -139,6 +144,16 @@ impl Cpu {
                 self.check_pb(base, tmp);
                 tmp
             }
+            Mode::NoPBAbsX => {
+                let base = self.ld16_pc_up();
+                let tmp = base + self.regs.x as u16;
+                tmp
+            }
+            Mode::NoPBAbsY => {
+                let base = self.ld16_pc_up();
+                let tmp = base.wrapping_add(self.regs.y as u16);
+                tmp
+            }
             Mode::JmpIndir => {
                 let tmp = self.ld16_pc_up();
                 let low = self.mmu.ld8(tmp);
@@ -170,6 +185,16 @@ impl Cpu {
                 self.check_pb(tmp, addr);
                 addr
             }
+            Mode::NoPBIndY => {
+                let base = self.ld8_pc_up();
+                let tmp = if base == 0xFF {
+                    (self.mmu.ld8(0) as u16) << 8 | (self.mmu.ld8(0xFF) as u16)
+                } else {
+                    self.mmu.ld16(base as u16)
+                };
+                let addr = tmp.wrapping_add(self.regs.y as u16);
+                addr
+            }
         }
     }
 
@@ -199,8 +224,6 @@ impl Cpu {
     }
 
     fn store(&mut self, addr: u16, val: u8) {
-        //println!("Address {:X}, Old val {:X}, New val {:X}", addr,
-        // self.mem.ld8(addr), val);
         if addr == DMA_ADDR {
             self.write_dma(val);
         } else {
@@ -475,10 +498,11 @@ impl Cpu {
         let byte = self.ld8_pc_up();
         self.cycle_count += CYCLES[byte as usize] as u16;
         self.execute_op(byte);
-        if debug {
-            println!("{:?}", regs);
-        }
         let tmp = self.cycle_count;
+        if debug {
+            println!("{:?} CYC:{}", regs, self.cc);
+            self.cc += tmp as usize;
+        }
         self.cycle_count = 0;
         Ok(tmp)
     }
@@ -545,10 +569,10 @@ impl Cpu {
             LDY_ABS => self.ldy(Mode::Abs),
             LDY_ABSX => self.ldy(Mode::AbsX),
             LDY_ZP => self.ldy(Mode::ZP),
-            STA_ABSX => self.sta(Mode::AbsX),
-            STA_ABSY => self.sta(Mode::AbsY),
+            STA_ABSX => self.sta(Mode::NoPBAbsX),
+            STA_ABSY => self.sta(Mode::NoPBAbsY),
             STA_ZPX => self.sta(Mode::ZPX),
-            STA_INDY => self.sta(Mode::IndY),
+            STA_INDY => self.sta(Mode::NoPBIndY),
             STA_ABS => self.sta(Mode::Abs),
             STA_ZP => self.sta(Mode::ZP),
             STA_INDX => self.sta(Mode::IndX),
@@ -566,7 +590,7 @@ impl Cpu {
             ADC_ABS => self.adc(Mode::Abs),
             ADC_ZP => self.adc(Mode::ZP),
             ADC_INDX => self.adc(Mode::IndX),
-            ROR_ABSX => self.ror_addr(Mode::AbsX),
+            ROR_ABSX => self.ror_addr(Mode::NoPBAbsX),
             ROR_ZPX => self.ror_addr(Mode::ZPX),
             ROR_ZP => self.ror_addr(Mode::ZP),
             ROR_ABS => self.ror_addr(Mode::Abs),
@@ -586,7 +610,7 @@ impl Cpu {
             LSR_ACC => self.lsr_acc(),
             JMP_ABS => self.jmp(Mode::Abs),
             ROL_ABS => self.rol_addr(Mode::Abs),
-            ROL_ABSX => self.rol_addr(Mode::AbsX),
+            ROL_ABSX => self.rol_addr(Mode::NoPBAbsX),
             ROL_ZPX => self.rol_addr(Mode::ZPX),
             ROL_ZP => self.rol_addr(Mode::ZP),
             ROL_ACC => self.rol_acc(),
@@ -608,7 +632,7 @@ impl Cpu {
             ORA_ABS => self.ora(Mode::Abs),
             ORA_ZP => self.ora(Mode::ZP),
             ORA_INDX => self.ora(Mode::IndX),
-            ASL_ABSX => self.asl_addr(Mode::AbsX),
+            ASL_ABSX => self.asl_addr(Mode::NoPBAbsX),
             ASL_ABS => self.asl_addr(Mode::Abs),
             ASL_ZP => self.asl_addr(Mode::ZP),
             ASL_ZPX => self.asl_addr(Mode::ZPX),
@@ -638,8 +662,11 @@ impl Cpu {
             }
 
             // TOP: Triple NOP
-            0x0C | 0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
-                self.regs.pc.add_signed(2);
+            0x0C => {
+                let _ = self.address_mem(Mode::Abs);
+            }
+            0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
+                let _ = self.address_mem(Mode::AbsX);
             }
 
             BRK => {
