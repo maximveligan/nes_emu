@@ -6,19 +6,10 @@ bitfield! {
     pub bg_tab,     _ : 4;
     pub sprite_tab, _ : 3;
     pub vert_inc,   _ : 2;
-    pub y_offset,   _ : 1;
-    pub x_offset,   _ : 0;
+    pub nametable,  _ : 1, 0;
 }
 
 impl Ctrl {
-    pub fn x_scroll_base(&self) -> u16 {
-        self.x_offset() as u16 * 256
-    }
-
-    pub fn y_scroll_base(&self) -> u16 {
-        self.y_offset() as u16 * 240
-    }
-
     pub fn sprite_size(&self) -> u16 {
         if self.spr_size() {
             16

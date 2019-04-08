@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use pregisters::PRegisters;
 use pregisters::VramAddr;
+use pregisters::Ctrl;
 use sprite::Sprite;
 use sprite::Priority;
 use vram::*;
@@ -53,6 +54,7 @@ pub struct Ppu {
     // multiply by 3 to account for r g b
     screen_buff: [u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3],
     oam: [u8; 256],
+    tmp_oam: [Option<Sprite>; 8],
     cc: u16,
     scanline: u16,
     // Internal registers
@@ -60,6 +62,7 @@ pub struct Ppu {
     ppudata_buff: u8,
     t_addr: VramAddr,
     fine_x: u8,
+    trip_nmi: bool,
     // TODO: Scrolling is implemented solely through the address register
     // Fix this for more accurate emulation
     x_scroll: u16,
@@ -69,10 +72,12 @@ pub struct Ppu {
 impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
         Ppu {
+            trip_nmi: false,
             regs: PRegisters::new(),
             vram: Vram::new(mapper),
             screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
             oam: [0; 256],
+            tmp_oam: [None; 8],
             cc: 0,
             scanline: 0,
             write_latch: false,
@@ -147,9 +152,13 @@ impl Ppu {
     fn write_ctrl(&mut self, val: u8) {
         //TODO: This is very hacky, all of this behaviour should be taken care
         //of by emulating the internal registers.
-        self.regs.ctrl.store(val);
-        self.x_scroll = (self.x_scroll & 0xFF) | self.regs.ctrl.x_scroll_base();
-        self.y_scroll = (self.y_scroll & 0xFF) | self.regs.ctrl.y_scroll_base();
+        let ctrl = Ctrl(val);
+        if !self.regs.ctrl.nmi_on() && ctrl.nmi_on() {
+            self.trip_nmi = true;
+        }
+
+        self.regs.ctrl = ctrl;
+        self.t_addr.set_nt(self.regs.ctrl.nametable());
     }
 
     fn write_oamaddr(&mut self, val: u8) {
@@ -161,13 +170,16 @@ impl Ppu {
         self.regs.oam_addr = self.regs.oam_addr.wrapping_add(1);
     }
 
-    //TODO: This is innacurate, go back and emulate the internal
-    // registers properly
     fn write_scroll(&mut self, val: u8) {
         if self.write_latch {
-            self.y_scroll = val as u16;
+            //TODO Check if this is actually taking the first 3 bits of val
+            //and check if bitflags crate automatically takes the amount of
+            //bits necassary
+            self.t_addr.set_fine_y(val & 0b11);
+            self.t_addr.set_coarse_y(val >> 3);
         } else {
-            self.x_scroll = val as u16;
+            self.fine_x = val & 0b11;
+            self.t_addr.set_coarse_x(val >> 3)
         }
         self.write_latch = !self.write_latch;
     }
@@ -197,35 +209,31 @@ impl Ppu {
             .copy_from_slice(&color.data);
     }
 
-    fn get_sprites(&mut self) -> [Option<u8>; 8] {
+    fn get_sprites(&mut self) {
+        self.tmp_oam = [None; 8];
         let mut sprite_count = 0;
-        let mut sprites = [None; 8];
         for sprite_index in 0..SPRITE_NUM {
             if sprite_count >= 8 {
                 self.regs.status.set_sprite_o_f(true);
-                return sprites;
+                return;
             }
-            let raw_y = self.oam[sprite_index * 4];
-            let y_pos = raw_y.wrapping_add(1) as u16;
-            if y_pos <= self.scanline
-                && y_pos + self.regs.ctrl.sprite_size() > self.scanline
+            let sprite_y = self.oam[sprite_index * 4] as u16;
+            if sprite_y <= self.scanline
+                && sprite_y + self.regs.ctrl.sprite_size() > self.scanline
             {
-                sprites[sprite_count] = Some(sprite_index as u8);
+                self.tmp_oam[sprite_count] = Some(Sprite::new(sprite_index, &self.oam));
                 sprite_count += 1;
             }
         }
-        sprites
     }
 
     fn sprite_pixel(
         &mut self,
         x: u8,
-        sprites: [Option<u8>; 8],
         bg_opaque: bool,
     ) -> Option<(Rgb, Priority)> {
-        for sprite_index in sprites.iter() {
-            if let Some(index) = sprite_index {
-                let s = Sprite::new(*index as usize, &self.oam);
+        for sprite in self.tmp_oam.iter() {
+            if let Some(s) = sprite {
                 if !s.in_bounding_box(
                     x,
                     self.scanline as u8,
@@ -243,7 +251,7 @@ impl Ppu {
                     continue;
                 }
 
-                if *index == 0 && bg_opaque {
+                if s.index == 0 && bg_opaque {
                     self.regs.status.set_sprite_0_hit(true);
                 }
 
@@ -288,8 +296,7 @@ impl Ppu {
             return None;
         }
 
-        let x = x + self.x_scroll as u16;
-        let y = self.scanline + self.y_scroll as u16;
+        let y = self.scanline;
 
         let x_tile = (x / 8) % 64;
         let y_tile = (y / 8) % 64;
@@ -308,7 +315,7 @@ impl Ppu {
 
         let vram_index = x_tile + (y_tile * 32);
         // Get my tile number
-        let tile_num = self.vram.ld8(base + vram_index);
+        let tile_num = self.vram.ld8(0x2000 + vram_index);
 
         //
         // * 16 because each tile is 16 bytes long
@@ -342,7 +349,7 @@ impl Ppu {
             ],
         };
 
-        let sprites = self.get_sprites();
+        self.get_sprites();
 
         for x in 0u16..SCREEN_WIDTH as u16 {
             let mut bg_color = None;
@@ -353,7 +360,7 @@ impl Ppu {
 
             if self.regs.mask.show_sprites() {
                 sprite_color =
-                    self.sprite_pixel(x as u8, sprites, bg_color.is_some());
+                    self.sprite_pixel(x as u8, bg_color.is_some());
             }
 
             let color = match (bg_color, sprite_color) {
@@ -388,6 +395,10 @@ impl Ppu {
     fn tick(&mut self) -> Option<PpuRes> {
         let res = match self.scanline {
             0...239 => {
+                if self.cc == 0 {
+                    self.tmp_oam = [None; 8];
+                }
+
                 if self.cc == 260 {
                     self.pull_scanline();
                 }
