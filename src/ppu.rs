@@ -8,7 +8,6 @@ use sprite::Sprite;
 use sprite::Priority;
 use vram::*;
 
-const PALETTE_RAM_I: u16 = 0x3F00;
 const SPRITE_NUM: usize = 64;
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
@@ -63,16 +62,14 @@ pub struct Ppu {
     t_addr: VramAddr,
     fine_x: u8,
     trip_nmi: bool,
-    // TODO: Scrolling is implemented solely through the address register
-    // Fix this for more accurate emulation
-    x_scroll: u16,
-    y_scroll: u16,
+    vblank_off: bool,
 }
 
 impl Ppu {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Ppu {
         Ppu {
             trip_nmi: false,
+            vblank_off: false,
             regs: PRegisters::new(),
             vram: Vram::new(mapper),
             screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
@@ -82,15 +79,13 @@ impl Ppu {
             scanline: 0,
             write_latch: false,
             ppudata_buff: 0,
-            x_scroll: 0,
-            y_scroll: 0,
             fine_x: 0,
             t_addr: VramAddr(0),
         }
     }
 
-    fn get_palette_color(&self, vram_index: u16) -> Rgb {
-        let pal_index = self.vram.ld8(vram_index);
+    fn get_palette_color(&self, vram_offset: u8) -> Rgb {
+        let pal_index = self.vram.ld8(0x3F00 + vram_offset as u16);
         Rgb {
             data: [
                 PALETTE[pal_index as usize * 3],
@@ -105,7 +100,7 @@ impl Ppu {
         match address {
             0 => 0,
             1 => 0,
-            2 => self.read_ppuctrl(),
+            2 => self.read_ppustatus(),
             3 => 0,
             4 => self.oam[self.regs.oam_addr as usize],
             5 => 0,
@@ -115,10 +110,11 @@ impl Ppu {
         }
     }
 
-    fn read_ppuctrl(&mut self) -> u8 {
+    fn read_ppustatus(&mut self) -> u8 {
         self.write_latch = false;
         let tmp = self.regs.status.load();
         self.regs.status.set_vblank(false);
+        self.vblank_off = true;
         tmp
     }
 
@@ -187,11 +183,6 @@ impl Ppu {
     fn write_ppuaddr(&mut self, val: u8) {
         if self.write_latch {
             self.regs.addr.set_l_byte(val);
-            // This is innacurate, go back and emulate the internal registers
-            let x_base = (self.regs.addr.nt() & 0x01) as u16 * 256;
-            let y_base = (self.regs.addr.nt() & 0x02) as u16 * 240;
-            self.x_scroll = (self.x_scroll & 0xff) | x_base;
-            self.y_scroll = (self.y_scroll & 0xff) | y_base;
         } else {
             self.regs.addr.set_h_byte(val);
         }
@@ -221,7 +212,8 @@ impl Ppu {
             if sprite_y <= self.scanline
                 && sprite_y + self.regs.ctrl.sprite_size() > self.scanline
             {
-                self.tmp_oam[sprite_count] = Some(Sprite::new(sprite_index, &self.oam));
+                self.tmp_oam[sprite_count] =
+                    Some(Sprite::new(sprite_index, &self.oam));
                 sprite_count += 1;
             }
         }
@@ -231,8 +223,12 @@ impl Ppu {
         &mut self,
         x: u8,
         bg_opaque: bool,
-    ) -> Option<(Rgb, Priority)> {
+    ) -> (u8, Option<Priority>) {
         for sprite in self.tmp_oam.iter() {
+            if !self.regs.mask.show_sprites() {
+                return (0, None);
+            }
+
             if let Some(s) = sprite {
                 if !s.in_bounding_box(
                     x,
@@ -257,17 +253,15 @@ impl Ppu {
 
                 let sprite_color =
                     (s.attributes.palette()) + 4 << 2 | tile_color;
-                return Some((
-                    self.get_palette_color(
-                        PALETTE_RAM_I + (sprite_color as u16),
-                    ),
-                    Priority::from_attr(s.attributes.priority() as u8),
-                ));
+                return (
+                    sprite_color,
+                    Some(Priority::from_attr(s.attributes.priority() as u8)),
+                );
             } else {
-                return None;
+                return (0, None);
             }
         }
-        None
+        (0, None)
     }
 
     fn get_attr_color(
@@ -276,7 +270,7 @@ impl Ppu {
         y_tile: u16,
         pt_index: u8,
         base: u16,
-    ) -> Rgb {
+    ) -> u8 {
         let at_index = (x_tile / 4) + ((y_tile / 4) * 8);
         let at_byte = self.vram.ld8(base + AT_OFFSET + (at_index as u16));
 
@@ -287,13 +281,12 @@ impl Ppu {
             (true, true) => at_byte & 0b11,
         };
 
-        let tile_color = (at_color * 4) | pt_index;
-        self.get_palette_color(PALETTE_RAM_I + (tile_color as u16))
+        (at_color * 4) | pt_index
     }
 
-    fn bg_pixel(&mut self, x: u16) -> Option<Rgb> {
-        if x <= 8 && !self.regs.mask.left8_bg() {
-            return None;
+    fn bg_pixel(&mut self, x: u16) -> u8 {
+        if (x <= 8 && !self.regs.mask.left8_bg()) || !self.regs.mask.show_bg() {
+            return 0;
         }
 
         let y = self.scanline;
@@ -323,9 +316,10 @@ impl Ppu {
             self.regs.ctrl.nt_pt_addr() + y_pixel + (tile_num as u16 * 16),
             x_pixel,
         );
-        match pt_i {
-            0 => None,
-            _ => Some(self.get_attr_color(x_tile, y_tile, pt_i, base)),
+        if pt_i == 0 {
+            0
+        } else {
+            self.get_attr_color(x_tile, y_tile, pt_i, base)
         }
     }
 
@@ -339,41 +333,30 @@ impl Ppu {
     }
 
     fn pull_scanline(&mut self) {
-        // U bg refers to universal background
-        let u_bg_i = self.vram.ld8(0x3F00);
-        let u_bg_color = Rgb {
-            data: [
-                PALETTE[u_bg_i as usize * 3],
-                PALETTE[u_bg_i as usize * 3 + 1],
-                PALETTE[u_bg_i as usize * 3 + 2],
-            ],
-        };
-
         self.get_sprites();
 
         for x in 0u16..SCREEN_WIDTH as u16 {
-            let mut bg_color = None;
-            let mut sprite_color = None;
-            if self.regs.mask.show_bg() {
-                bg_color = self.bg_pixel(x);
-            }
+            let bg_color = self.bg_pixel(x);
+            let (spr_color, priority) =
+                self.sprite_pixel(x as u8, bg_color != 0);
 
-            if self.regs.mask.show_sprites() {
-                sprite_color =
-                    self.sprite_pixel(x as u8, bg_color.is_some());
-            }
-
-            let color = match (bg_color, sprite_color) {
-                (None, None) => u_bg_color,
-                (Some(bg_c), None) => bg_c,
-                (None, Some((spr_c, _))) => spr_c,
-                (Some(bg_c), Some((spr_c, p))) => match p {
-                    Priority::Foreground => spr_c,
-                    Priority::Background => bg_c,
-                },
+            let color = match (bg_color, spr_color) {
+                (0, 0) => 0,
+                (bg_c, 0) => bg_c,
+                (0, spr_c) => spr_c,
+                (bg_c, spr_c) => {
+                    match priority.expect("Cannot get none here") {
+                        Priority::Foreground => spr_c,
+                        Priority::Background => bg_c,
+                    }
+                }
             };
 
-            self.put_pixel(x as usize, self.scanline as usize, color);
+            self.put_pixel(
+                x as usize,
+                self.scanline as usize,
+                self.get_palette_color(color),
+            );
         }
     }
 
@@ -393,7 +376,7 @@ impl Ppu {
     }
 
     fn tick(&mut self) -> Option<PpuRes> {
-        let res = match self.scanline {
+        let mut res = match self.scanline {
             0...239 => {
                 if self.cc == 0 {
                     self.tmp_oam = [None; 8];
@@ -412,7 +395,7 @@ impl Ppu {
                 }
             }
             241 => {
-                if self.cc == 1 {
+                if self.cc == 1 && !self.vblank_off {
                     self.regs.status.set_vblank(true);
                     if self.regs.ctrl.nmi_on() {
                         Some(PpuRes::Nmi)
@@ -435,6 +418,19 @@ impl Ppu {
                 self.scanline
             ),
         };
+
+        res = if self.regs.status.vblank() && self.trip_nmi && !self.vblank_off {
+            match res {
+                None => Some(PpuRes::Nmi),
+                _ => panic!("This shouldn't be possible"),
+            }
+        } else {
+            res
+        };
+
+        self.trip_nmi = false;
+        self.vblank_off = false;
+
         self.step();
         res
     }
