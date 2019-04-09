@@ -1,3 +1,6 @@
+const X_SCROLL_MASK: u16 = 0b000010000011111;
+const Y_SCROLL_MASK: u16 = 0b111101111100000;
+
 bitfield! {
     pub struct Ctrl(u8);
     pub nmi_on,     _ : 7;
@@ -43,21 +46,69 @@ impl Ctrl {
     }
 }
 
+//yyy NN YYYYY XXXXX
+//||| || ||||| +++++-- coarse X scroll
+//||| || +++++-------- coarse Y scroll
+//||| ++-------------- nametable select
+//+++----------------- fine Y scroll
+//Bit layouts follow the diagram above
+
 bitfield! {
     pub struct VramAddr(u16);
-    pub u8, nt, set_nt:         11, 10;
-    pub u16, addr,           _: 13, 0;
-    pub u8, h_byte, set_h_byte: 13, 8;
-    pub u8, l_byte, set_l_byte:  7, 0;
-    pub u16, all,            _: 14, 0;
-    pub u8, fine_y, set_fine_y: 14, 12;
-    pub u8, coarse_x, set_coarse_x: 4, 0;
-    pub u8, coarse_y, set_coarse_y: 9, 5;
+    pub u8, coarse_x, set_coarse_x: 4,  0;
+    pub u8, coarse_y, set_coarse_y: 9,  5;
+    pub u8, nt, set_nt:            11, 10;
+    pub u8, fine_y, set_fine_y:    14, 12;
+    pub u8, l_byte, set_l_byte:     7,  0;
+    pub u8, h_byte, set_h_byte:    13,  8;
+    pub u16, addr,           _:    13,  0;
 }
 
 impl VramAddr {
     pub fn add_offset(&mut self, offset: u8) {
         self.0 = self.0.wrapping_add(offset as u16);
+    }
+
+    // Both of these scroll functions were taken from
+    // https://wiki.nesdev.com/w/index.php/PPU_scrolling#Register_controls
+    pub fn scroll_x(&mut self) {
+        if self.coarse_x() == 31 {
+            self.set_coarse_x(0);
+            self.0 ^= 0x0400
+        } else {
+            let tmp = self.coarse_x();
+            self.set_coarse_x(tmp + 1);
+        }
+    }
+
+    pub fn scroll_y(&mut self) {
+        let fine_y = self.fine_y();
+        if fine_y < 7 {
+            self.set_fine_y(fine_y + 1);
+
+        } else {
+            self.set_fine_y(0);
+            let coarse_y = self.coarse_y();
+
+            if coarse_y == 29 {
+                self.set_coarse_y(0);
+                self.0 ^= 0x0800
+
+            } else if coarse_y == 31 {
+                self.set_coarse_y(0);
+
+            } else {
+                self.set_coarse_y(coarse_y + 1);
+            }
+        }
+    }
+
+    pub fn pull_x(&mut self, addr: VramAddr) {
+        self.0 = (self.0 & !X_SCROLL_MASK) | (addr.0 & X_SCROLL_MASK);
+    }
+
+    pub fn pull_y(&mut self, addr: VramAddr) {
+        self.0 = (self.0 & !Y_SCROLL_MASK) | (addr.0 & Y_SCROLL_MASK);
     }
 }
 

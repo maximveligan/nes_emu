@@ -14,8 +14,6 @@ const SCREEN_HEIGHT: usize = 240;
 
 const AT_OFFSET: u16 = 0x03C0;
 
-const CYC_PER_LINE: u16 = 340;
-
 static PALETTE: [u8; 192] = [
     0x80, 0x80, 0x80, 0x00, 0x3D, 0xA6, 0x00, 0x12, 0xB0, 0x44, 0x00, 0x96,
     0xA1, 0x00, 0x5E, 0xC7, 0x00, 0x28, 0xBA, 0x06, 0x00, 0x8C, 0x17, 0x00,
@@ -63,6 +61,7 @@ pub struct Ppu {
     fine_x: u8,
     trip_nmi: bool,
     vblank_off: bool,
+    odd_frame: bool,
 }
 
 impl Ppu {
@@ -70,6 +69,7 @@ impl Ppu {
         Ppu {
             trip_nmi: false,
             vblank_off: false,
+            odd_frame: false,
             regs: PRegisters::new(),
             vram: Vram::new(mapper),
             screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
@@ -366,11 +366,12 @@ impl Ppu {
 
     fn step(&mut self) {
         self.cc += 1;
-        if self.cc > CYC_PER_LINE {
-            self.cc = 0;
+        if self.cc >= 341 {
+            self.cc %= 341;
             self.scanline += 1;
             if self.scanline > 261 {
                 self.scanline = 0;
+                self.odd_frame = !self.odd_frame;
             }
         }
     }
