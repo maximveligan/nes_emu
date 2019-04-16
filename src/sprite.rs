@@ -58,7 +58,8 @@ impl Sprite {
             x.wrapping_sub(self.x)
         };
 
-        let tmp = ((y - self.y as u16) % ctrl.sprite_size() as u16) as u16;
+        //TODO: No idea why the - 1 is necassary here, it's a complete hack
+        let tmp = ((y - 1 - self.y as u16) % ctrl.sprite_size() as u16) as u16;
 
         let y = if self.attributes.flip_y() {
             ctrl.sprite_size() as u16 - 1 - tmp

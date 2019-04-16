@@ -295,8 +295,6 @@ pub fn start_emulator(path_in: Option<String>) {
             }
         };
 
-        //cycle_counter += cc as usize;
-        //println!("{}", cycle_counter);
         match cpu.mmu.ppu.emulate_cycles(cc) {
             Some(r) => match r {
                 PpuRes::Nmi => cpu.proc_nmi(),

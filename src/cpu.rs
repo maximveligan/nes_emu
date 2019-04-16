@@ -90,7 +90,7 @@ impl Cpu {
     pub fn new(mmu: Mmu) -> Cpu {
         let mut cpu = Cpu {
             cycle_count: 0,
-            cc: 7,
+            cc: 0,
             regs: Registers {
                 acc: 0,
                 x: 0,
