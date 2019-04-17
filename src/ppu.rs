@@ -136,8 +136,8 @@ pub struct Ppu {
     // multiply by 3 to account for r g b
     screen_buff: [u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3],
     oam: [u8; 256],
-    tmp_oam: [Option<Sprite>; 8],
-    main_oam: [Option<Sprite>; 8],
+    tmp_oam: Vec<Sprite>,
+    main_oam: Vec<Sprite>,
     cc: u16,
     scanline: u16,
     // Internal registers
@@ -173,8 +173,8 @@ impl Ppu {
             vram: Vram::new(mapper),
             screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
             oam: [0; 256],
-            tmp_oam: [None; 8],
-            main_oam: [None; 8],
+            tmp_oam: Vec::with_capacity(8),
+            main_oam: Vec::with_capacity(8),
             cc: 0,
             scanline: 0,
             write_latch: false,
@@ -209,7 +209,6 @@ impl Ppu {
         }
     }
 
-    //Note: It is unclear what happens if we read from 4 outside of vblank
     pub fn ld(&mut self, address: u16) -> u8 {
         match address {
             0 => 0,
@@ -317,28 +316,35 @@ impl Ppu {
     fn step_sprites(&mut self) {
         match self.cc {
             1 => {
-                self.tmp_oam = [None; 8];
+                self.tmp_oam.clear();
                 if self.is_prerender() {
                     self.regs.status.set_sprite_o_f(false);
                     self.regs.status.set_sprite_0_hit(false);
                 }
             }
-            257 => self.get_sprites(),
+            257 => {
+                self.get_sprites();
+                self.regs.oam_addr = 0;
+            }
+            258...320 => {
+                self.regs.oam_addr = 0;
+            }
             321 => {
-                //TODO: This is more or less a hack for going from secondary
-                // oam to primary oam This needs to be rewritten
-                // to more accurately emulate sprite evaluation
                 self.main_oam = self.tmp_oam.clone();
+                for sprite in self.main_oam.iter_mut() {
+                    let address = sprite.get_pt_address(&self.regs.ctrl, self.scanline);
+                    sprite.low_byte = self.vram.ld8(address);
+                    sprite.high_byte = self.vram.ld8(address + 8);
+                }
             }
             _ => (),
         }
     }
 
     fn get_sprites(&mut self) {
-        self.tmp_oam = [None; 8];
-        let mut sprite_count = 0;
+        self.tmp_oam.clear();
         for sprite_index in 0..SPRITE_NUM {
-            if sprite_count >= 8 {
+            if self.tmp_oam.len() == 8 {
                 self.regs.status.set_sprite_o_f(true);
                 return;
             }
@@ -346,9 +352,7 @@ impl Ppu {
             if sprite_y <= self.scanline
                 && sprite_y + self.regs.ctrl.sprite_size() > self.scanline
             {
-                self.tmp_oam[sprite_count] =
-                    Some(Sprite::new(sprite_index, &self.oam));
-                sprite_count += 1;
+                self.tmp_oam.push(Sprite::new(sprite_index, &self.oam));
             }
         }
     }
@@ -363,43 +367,38 @@ impl Ppu {
                 return (0, None);
             }
 
-            if let Some(s) = sprite {
-                if !s.in_bounding_box(
-                    x,
-                    self.scanline as u8,
-                    self.regs.mask.left8_bg(),
-                ) {
-                    continue;
-                }
-
-                let ctrl = &self.regs.ctrl;
-                let (pt_tile_i, x_offset) =
-                    s.get_tile_values(ctrl, x, self.scanline);
-
-                let left_byte = self.vram.ld8(pt_tile_i);
-                // Plus 8 to get the offset for the other sliver
-                let right_byte = self.vram.ld8(pt_tile_i + 8);
-                let l_bit = ((left_byte << x_offset & 0x80) != 0) as u8;
-                let r_bit = ((right_byte << x_offset & 0x80) != 0) as u8;
-                let tile_color = r_bit << 1 | l_bit;
-
-                if tile_color == 0 {
-                    continue;
-                }
-
-                if s.index == 0 && bg_opaque {
-                    self.regs.status.set_sprite_0_hit(true);
-                }
-
-                let sprite_color =
-                    (s.attributes.palette()) + 4 << 2 | tile_color;
-                return (
-                    sprite_color,
-                    Some(Priority::from_attr(s.attributes.priority() as u8)),
-                );
-            } else {
-                return (0, None);
+            if !sprite.in_bounding_box(
+                x,
+                self.scanline as u8,
+                self.regs.mask.left8_bg(),
+            ) {
+                continue;
             }
+
+            let x_offset = if sprite.attributes.flip_x() {
+                7 - (x.wrapping_sub(sprite.x))
+            } else {
+                x.wrapping_sub(sprite.x)
+            };
+
+            let l_bit = ((sprite.low_byte << x_offset & 0x80) != 0) as u8;
+            let r_bit = ((sprite.high_byte << x_offset & 0x80) != 0) as u8;
+            let tile_color = r_bit << 1 | l_bit;
+
+            if tile_color == 0 {
+                continue;
+            }
+
+            if sprite.index == 0 && bg_opaque {
+                self.regs.status.set_sprite_0_hit(true);
+            }
+
+            let sprite_color =
+                (sprite.attributes.palette()) + 4 << 2 | tile_color;
+            return (
+                sprite_color,
+                Some(Priority::from_attr(sprite.attributes.priority() as u8)),
+            );
         }
         (0, None)
     }

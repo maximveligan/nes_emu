@@ -211,15 +211,11 @@ impl Cpu {
     }
 
     fn write_dma(&mut self, high_nyb: u8) {
-        // TODO: NES adds 1 cycle if CPU is on an odd CPU cycle, add logic in
-        // CPU to track if current cycle is even or odd
-
-        self.incr_cc();
+        self.cycle_count += 513 + (self.cycle_count % 2);
         let page_num = (high_nyb as u16) << 8;
         for address in page_num..=page_num + 0xFF {
             let tmp = self.mmu.ld8(address);
             self.mmu.store(OAM_DATA, tmp);
-            self.cycle_count += 2;
         }
     }
 

@@ -9,6 +9,8 @@ pub struct Sprite {
     pub pt_index: u8,
     pub attributes: SpriteAttr,
     pub index: u8,
+    pub low_byte: u8,
+    pub high_byte: u8,
 }
 
 bitfield! {
@@ -28,6 +30,8 @@ impl Sprite {
             y: oam[(index * SPRITE_ATTR)],
             pt_index: oam[(index * SPRITE_ATTR) + 1],
             attributes: SpriteAttr(oam[(index * SPRITE_ATTR) + 2]),
+            low_byte: 0,
+            high_byte: 0,
         }
     }
 
@@ -40,27 +44,18 @@ impl Sprite {
         || y >= 240 - 8)
     }
 
-    // TODO: There is a bug somewhere in here that has to do with 16 pixel tall
-    // sprites
-    pub fn get_tile_values(&self, ctrl: &Ctrl, x: u8, y: u16) -> (u16, u8) {
+    pub fn get_pt_address(&self, ctrl: &Ctrl, y: u16) -> u16 {
         let pt_i = match ctrl.sprite_size() {
-            8 => (ctrl.sprite_pt_addr() + self.pt_index as u16),
+            8 => ctrl.sprite_pt_addr() + (16 * (self.pt_index as u16)),
             16 => {
-                let tile_num = self.pt_index & !1;
-                let offset = ((self.pt_index as u16) & 1) * 0x1000;
-                (tile_num as u16 + offset)
+                let offset = ((self.pt_index & !1) as u16) * 16;
+                let base = ((self.pt_index & 1) as u16) * 0x1000;
+                base + offset
             }
             _ => panic!("No other sprite sizes"),
-        } * 16;
-
-        let x = if self.attributes.flip_x() {
-            7 - (x.wrapping_sub(self.x))
-        } else {
-            x.wrapping_sub(self.x)
         };
 
-        //TODO: No idea why the - 1 is necassary here, it's a complete hack
-        let tmp = ((y - 1 - self.y as u16) % ctrl.sprite_size() as u16) as u16;
+        let tmp = (y - self.y as u16);
 
         let y = if self.attributes.flip_y() {
             ctrl.sprite_size() as u16 - 1 - tmp
@@ -68,7 +63,15 @@ impl Sprite {
             tmp
         };
 
-        ((pt_i + y + if y < 8 { 0 } else { 8 }), x)
+        // Grabs the adjacent tile if this is a 16 bit sprite and the y value
+        // is greater than 7
+        let y_offset = if y < 8 {
+            0
+        } else {
+            8
+        };
+
+        pt_i + y + y_offset
     }
 }
 
