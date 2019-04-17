@@ -36,7 +36,8 @@ impl Unrom {
             0
         // Bank switched using 3 bits
         } else if address < 0xC000 {
-            self.rom.prg_rom[(self.bank_select as usize * SIXTEEN_KB) + (address as usize - 0x8000)]
+            self.rom.prg_rom[(self.bank_select as usize * SIXTEEN_KB)
+                + (address as usize - 0x8000)]
         // Hard wired to last 16KB
         } else {
             self.rom.prg_rom[(7 * SIXTEEN_KB) + (address as usize - 0xC000)]
@@ -99,7 +100,7 @@ impl Mapper {
         match rom.header.mapper {
             0 => Mapper::Nrom(Nrom::new(rom)),
             2 => Mapper::Unrom(Unrom::new(rom)),
-            _ => panic!(),
+            m => panic!("Mapper {} not supported", m),
         }
     }
 

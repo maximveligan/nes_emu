@@ -40,7 +40,8 @@ impl Sprite {
         || y >= 240 - 8)
     }
 
-    // TODO: There is a bug somewhere in here that has to do with 16 pixel tall sprites
+    // TODO: There is a bug somewhere in here that has to do with 16 pixel tall
+    // sprites
     pub fn get_tile_values(&self, ctrl: &Ctrl, x: u8, y: u16) -> (u16, u8) {
         let pt_i = match ctrl.sprite_size() {
             8 => (ctrl.sprite_pt_addr() + self.pt_index as u16),
@@ -66,7 +67,7 @@ impl Sprite {
         } else {
             tmp
         };
-        
+
         ((pt_i + y + if y < 8 { 0 } else { 8 }), x)
     }
 }

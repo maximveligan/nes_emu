@@ -88,16 +88,17 @@ impl VramAddr {
     }
 
     pub fn at_addr(&self) -> u16 {
-    //The 10 bit shift to the left OR'ed with self.nt() gives the base
-    //attribute table offset. Each byte controls a 4x4 tile (32x32 pixel)
-    //size, hence the division by 4. 32/4 = 8, therefore we need to multiply
-    //coarse_y by 8, functionally equivalent to << 3. Thus, the attribute table
-    //address is: 0010 nn bbbb yyy xxx
-    //b = at_base bit
-    //n = nametable bit (or at_base bit depending on what is 0 and 1)
-    //y = coarse y / 4
-    //x = coarse_x / 4
-        let at_index =  ((self.coarse_y() as u16) / 4) << 3 | ((self.coarse_x() as u16) / 4);
+        //The 10 bit shift to the left OR'ed with self.nt() gives the base
+        //attribute table offset. Each byte controls a 4x4 tile (32x32 pixel)
+        //size, hence the division by 4. 32/4 = 8, therefore we need to
+        // multiply coarse_y by 8, functionally equivalent to << 3.
+        // Thus, the attribute table address is: 0010 nn bbbb yyy xxx
+        //b = at_base bit
+        //n = nametable bit (or at_base bit depending on what is 0 and 1)
+        //y = coarse y / 4
+        //x = coarse_x / 4
+        let at_index = ((self.coarse_y() as u16) / 4) << 3
+            | ((self.coarse_x() as u16) / 4);
         let nt_offset = (self.nt() as u16) << 10;
         0x2000 | AT_BASE | nt_offset | at_index
     }
@@ -122,7 +123,6 @@ impl VramAddr {
         let fine_y = self.fine_y();
         if fine_y < 7 {
             self.set_fine_y(fine_y + 1);
-
         } else {
             self.set_fine_y(0);
             let coarse_y = self.coarse_y();
@@ -130,10 +130,8 @@ impl VramAddr {
             if coarse_y == 29 {
                 self.set_coarse_y(0);
                 self.0 ^= 0x0800
-
             } else if coarse_y == 31 {
                 self.set_coarse_y(0);
-
             } else {
                 self.set_coarse_y(coarse_y + 1);
             }
