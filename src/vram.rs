@@ -52,7 +52,9 @@ impl Vram {
 
     pub fn store(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000...0x1FFF => println!("Warning! Can't store to chr rom"),
+            0x0000...0x1FFF => {
+                self.mapper.borrow_mut().store_chr(addr, val);
+            }
             0x2000...0x3EFF => {
                 self.vram[self.nt_mirror(addr & 0xFFF)] = val;
             }

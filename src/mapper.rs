@@ -5,10 +5,51 @@ const UNMIRRORED_MASK: usize = 0x7FFF;
 const MIRRORED_MASK: usize = 0x3FFF;
 const NROM_PRG_ROM_START: u16 = 0x8000;
 
-const SIXTEEN_KB: usize = 16384;
+const SIXTEEN_KB: usize = 0x4000;
 
 pub enum Mapper {
     Nrom(Nrom),
+    Unrom(Unrom),
+}
+
+pub struct Unrom {
+    bank_select: u8,
+    rom: Rom,
+}
+
+impl Unrom {
+    fn new(rom: Rom) -> Unrom {
+        Unrom {
+            bank_select: 0,
+            rom: rom,
+        }
+    }
+
+    fn store_prg(&mut self, address: u16, val: u8) {
+        if address >= 0x8000 {
+            self.bank_select = val & 0b111;
+        }
+    }
+
+    fn ld_prg(&self, address: u16) -> u8 {
+        if address < 0x8000 {
+            0
+        // Bank switched using 3 bits
+        } else if address < 0xC000 {
+            self.rom.prg_rom[(self.bank_select as usize * SIXTEEN_KB) + (address as usize - 0x8000)]
+        // Hard wired to last 16KB
+        } else {
+            self.rom.prg_rom[(7 * SIXTEEN_KB) + (address as usize - 0xC000)]
+        }
+    }
+
+    fn ld_chr(&self, address: u16) -> u8 {
+        self.rom.chr_ram[address as usize]
+    }
+
+    fn store_chr(&mut self, address: u16, val: u8) {
+        self.rom.chr_ram[address as usize] = val;
+    }
 }
 
 pub struct Nrom {
@@ -57,37 +98,43 @@ impl Mapper {
     pub fn from_rom(rom: Rom) -> Mapper {
         match rom.header.mapper {
             0 => Mapper::Nrom(Nrom::new(rom)),
-            _ => unimplemented!("Other mappers not supported"),
+            2 => Mapper::Unrom(Unrom::new(rom)),
+            _ => panic!(),
         }
     }
 
     pub fn ld_prg(&self, address: u16) -> u8 {
         match *self {
             Mapper::Nrom(ref nrom) => nrom.ld_prg(address),
+            Mapper::Unrom(ref unrom) => unrom.ld_prg(address),
         }
     }
 
     pub fn ld_chr(&self, address: u16) -> u8 {
         match *self {
             Mapper::Nrom(ref nrom) => nrom.ld_chr(address),
+            Mapper::Unrom(ref unrom) => unrom.ld_chr(address),
         }
     }
 
     pub fn store_prg(&mut self, address: u16, val: u8) {
         match *self {
             Mapper::Nrom(ref mut nrom) => nrom.store_prg(address, val),
+            Mapper::Unrom(ref mut unrom) => unrom.store_prg(address, val),
         }
     }
 
     pub fn store_chr(&mut self, address: u16, val: u8) {
         match *self {
             Mapper::Nrom(ref mut nrom) => nrom.store_chr(address, val),
+            Mapper::Unrom(ref mut unrom) => unrom.store_chr(address, val),
         }
     }
 
     pub fn get_mirroring(&self) -> &ScreenMode {
         match *self {
             Mapper::Nrom(ref nrom) => &nrom.rom.header.screen,
+            Mapper::Unrom(ref unrom) => &unrom.rom.header.screen,
         }
     }
 }

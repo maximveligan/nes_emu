@@ -5,6 +5,7 @@ use std::fmt;
 const PRG_ROM_PAGE_SIZE: usize = 16384;
 const PRG_RAM_PAGE_SIZE: usize = 8192;
 const CHR_ROM_PAGE_SIZE: usize = 8192;
+const CHR_RAM_PAGE_SIZE: usize = 8192;
 const TRAINER_LEN: usize = 512;
 
 pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
@@ -51,10 +52,15 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
                 },
                 prg_rom: prg_rom.into(),
                 chr_rom: chr_rom.into(),
-                prg_ram_size: if prg_ram_pgs == 0 {
-                    PRG_RAM_PAGE_SIZE
-                } else {
+                prg_ram_size: if prg_ram_pgs != 0 {
                     PRG_RAM_PAGE_SIZE * prg_ram_pgs as usize
+                } else {
+                    0
+                },
+                chr_ram: if chr_pgs == 0 {
+                    vec![0; CHR_RAM_PAGE_SIZE]
+                } else {
+                    Vec::new()
                 },
             })
     )
@@ -94,6 +100,7 @@ impl fmt::Debug for Header {
 pub struct Rom {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
+    pub chr_ram: Vec<u8>,
     prg_ram_size: usize,
     pub header: Header,
 }
@@ -104,12 +111,14 @@ impl fmt::Debug for Rom {
             f,
             "{:?}\
              Prg Rom Size (kb) {}\n\
+             Prg Ram Size (kb) {}\n\
              Chr Rom Size (kb) {}\n\
-             Prg Ram Size (kb) {}",
+             Chr Ram Size (kb) {}",
             self.header,
             self.prg_rom.len() / 1024,
+            self.prg_ram_size / 1024,
             self.chr_rom.len() / 1024,
-            self.prg_ram_size / 1024
+            self.chr_ram.len() / 1024,
         )
     }
 }
