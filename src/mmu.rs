@@ -9,8 +9,6 @@ const WRAM_START: u16 = 0x0000;
 const WRAM_END: u16 = 0x1FFF;
 const PPU_START: u16 = 0x2000;
 const PPU_END: u16 = 0x3FFF;
-const APU_START: u16 = 0x4000;
-const APU_END: u16 = 0x401F;
 const ROM_START: u16 = 0x4020;
 const ROM_END: u16 = 0xFFFF;
 
@@ -64,8 +62,8 @@ impl Mmu {
                 self.ctrl0.store(val);
                 self.ctrl1.store(val);
             }
-            0x4017 => self.apu.store(address - 0x4000, val),
-            APU_START...APU_END => self.apu.store(address - 0x4000, val),
+            0x4000...0x4017 => self.apu.store(address - 0x4000, val),
+            0x4018...0x401F => println!("disabled normally"),
             ROM_START...ROM_END => {
                 self.mapper.borrow_mut().store_prg(address, val)
             }
@@ -76,9 +74,13 @@ impl Mmu {
         match address {
             WRAM_START...WRAM_END => self.ram.load(address & 0x7FF),
             PPU_START...PPU_END => self.ppu.ld((address - 0x2000) & 7),
+            0x4015 => self.apu.load(address - 0x4000),
             0x4016 => self.ctrl0.ld8(),
             0x4017 => self.ctrl1.ld8(),
-            APU_START...APU_END => self.apu.load(address - 0x4000),
+            0x4000...0x4014 | 0x4018...0x401F => {
+                println!("disabled normally");
+                0
+            }
             ROM_START...ROM_END => {
                 let mapper = self.mapper.borrow();
                 mapper.ld_prg(address)

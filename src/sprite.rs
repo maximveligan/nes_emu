@@ -55,7 +55,7 @@ impl Sprite {
             _ => panic!("No other sprite sizes"),
         };
 
-        let tmp = (y - self.y as u16);
+        let tmp = y - self.y as u16;
 
         let y = if self.attributes.flip_y() {
             ctrl.sprite_size() as u16 - 1 - tmp
