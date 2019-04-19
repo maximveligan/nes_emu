@@ -65,9 +65,9 @@ bitfield! {
     pub u8, fine_y, set_fine_y:    14, 12;
     pub u8, l_byte, set_l_byte:     7,  0;
     pub u8, h_byte, set_h_byte:    13,  8;
-    pub u16, addr,           _:    13,  0;
-    pub u16, cur_tile,         _:  11,  0;
-    pub u8, _,    set_last_bit:        14;
+    pub u16, addr, _:              13,  0;
+    pub u16, cur_tile, _:          11,  0;
+    pub u8, _, set_last_bit:           14;
 }
 
 impl VramAddr {

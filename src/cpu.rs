@@ -9,7 +9,7 @@ pub struct Registers {
     pub y: u8,
     pub pc: ProgramCounter,
     pub sp: u8,
-    pub flags: u8,
+    pub flags: Flags,
 }
 
 impl fmt::Debug for Registers {
@@ -17,7 +17,7 @@ impl fmt::Debug for Registers {
         write!(
             f,
             "{:?} A:{:02X} X:{:02X} Y:{:02X} Flags:{:02X} SP:{:02X}",
-            self.pc, self.acc, self.x, self.y, self.flags, self.sp
+            self.pc, self.acc, self.x, self.y, self.flags.as_byte(), self.sp
         )
     }
 }
@@ -52,15 +52,18 @@ impl fmt::Debug for ProgramCounter {
     }
 }
 
-enum Flag {
-    Carry = 0b0000_0001,
-    Zero = 0b0000_0010,
-    Itr = 0b0000_0100,
-    Dec = 0b0000_1000,
-    Brk = 0b0001_0000,
-    Unused = 0b0010_0000,
-    Overflow = 0b0100_0000,
-    Neg = 0b1000_0000,
+bitfield! {
+    #[derive(Copy, Clone, Debug)]
+    pub struct Flags(u8);
+    carry, set_carry:       0;
+    zero, set_zero:         1;
+    itr, set_itr:           2;
+    dec, set_dec:           3;
+    brk, set_brk:           4;
+    unused, set_unused:     5;
+    overflow, set_overflow: 6;
+    neg, set_neg:           7;
+    pub as_byte, set_byte:      7, 0;
 }
 
 pub struct Cpu {
@@ -97,7 +100,7 @@ impl Cpu {
                 y: 0,
                 pc: ProgramCounter::new(0),
                 sp: 0xFD,
-                flags: 0b00100100,
+                flags: Flags(0b00100100),
             },
             mmu: mmu,
         };
@@ -201,7 +204,7 @@ impl Cpu {
     pub fn proc_nmi(&mut self) {
         let flags = self.regs.flags;
         self.push_pc();
-        self.push(flags);
+        self.push(flags.as_byte());
         self.regs.pc.set_addr(self.mmu.ld16(NMI_VEC));
     }
 
@@ -250,11 +253,10 @@ impl Cpu {
 
     fn adc_val(&mut self, val: u8) {
         let acc = self.regs.acc;
-        let tmp = acc as u16 + val as u16 + self.get_flag(Flag::Carry) as u16;
-        self.set_flag(Flag::Carry, tmp > 0xFF);
-        self.set_flag(
-            Flag::Overflow,
-            ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0,
+        let tmp = acc as u16 + val as u16 + self.regs.flags.carry() as u16;
+        self.regs.flags.set_carry(tmp > 0xFF);
+        self.regs.flags.set_overflow(
+            ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0
         );
         let tmp = tmp as u8;
         self.set_zero_neg(tmp);
@@ -291,8 +293,8 @@ impl Cpu {
 
     fn ror_acc(&mut self) {
         let (tmp, n_flag) =
-            Cpu::get_ror(self.get_flag(Flag::Carry), self.regs.acc);
-        self.set_flag(Flag::Carry, n_flag);
+            Cpu::get_ror(self.regs.flags.carry(), self.regs.acc);
+        self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
     }
@@ -300,8 +302,8 @@ impl Cpu {
     fn ror_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let (tmp, n_flag) =
-            Cpu::get_ror(self.get_flag(Flag::Carry), self.mmu.ld8(addr));
-        self.set_flag(Flag::Carry, n_flag);
+            Cpu::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr));
+        self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
     }
@@ -312,8 +314,8 @@ impl Cpu {
 
     fn rol_acc(&mut self) {
         let (tmp, n_flag) =
-            Cpu::get_rol(self.get_flag(Flag::Carry), self.regs.acc);
-        self.set_flag(Flag::Carry, n_flag);
+            Cpu::get_rol(self.regs.flags.carry(), self.regs.acc);
+        self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
     }
@@ -321,8 +323,8 @@ impl Cpu {
     fn rol_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let (tmp, n_flag) =
-            Cpu::get_rol(self.get_flag(Flag::Carry), self.mmu.ld8(addr));
-        self.set_flag(Flag::Carry, n_flag);
+            Cpu::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr));
+        self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
     }
@@ -333,7 +335,7 @@ impl Cpu {
 
     fn asl_acc(&mut self) {
         let acc = self.regs.acc;
-        self.set_flag(Flag::Carry, (acc >> 7) != 0);
+        self.regs.flags.set_carry((acc >> 7) != 0);
         let tmp = acc << 1;
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -342,7 +344,7 @@ impl Cpu {
     fn asl_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let val = self.mmu.ld8(addr);
-        self.set_flag(Flag::Carry, (val >> 7) != 0);
+        self.regs.flags.set_carry((val >> 7) != 0);
         let tmp = val << 1;
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -350,7 +352,7 @@ impl Cpu {
 
     fn lsr_acc(&mut self) {
         let acc = self.regs.acc;
-        self.set_flag(Flag::Carry, (acc & 0b01) != 0);
+        self.regs.flags.set_carry((acc & 0b01) != 0);
         let tmp = acc >> 1;
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -359,7 +361,7 @@ impl Cpu {
     fn lsr_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let val = self.mmu.ld8(addr);
-        self.set_flag(Flag::Carry, (val & 0b01) != 0);
+        self.regs.flags.set_carry((val & 0b01) != 0);
         let tmp = val >> 1;
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -368,21 +370,21 @@ impl Cpu {
     fn cpx(&mut self, mode: Mode) {
         let val = self.read_op(mode);
         let tmp = self.regs.x as i16 - val as i16;
-        self.set_flag(Flag::Carry, tmp >= 0);
+        self.regs.flags.set_carry(tmp >= 0);
         self.set_zero_neg(tmp as u8);
     }
 
     fn cpy(&mut self, mode: Mode) {
         let val = self.read_op(mode);
         let tmp = self.regs.y as i16 - val as i16;
-        self.set_flag(Flag::Carry, tmp >= 0);
+        self.regs.flags.set_carry(tmp >= 0);
         self.set_zero_neg(tmp as u8);
     }
 
     fn cmp(&mut self, mode: Mode) {
         let val = self.read_op(mode);
         let tmp = self.regs.acc as i16 - val as i16;
-        self.set_flag(Flag::Carry, tmp >= 0);
+        self.regs.flags.set_carry(tmp >= 0);
         self.set_zero_neg(tmp as u8);
     }
 
@@ -400,9 +402,9 @@ impl Cpu {
     fn bit(&mut self, mode: Mode) {
         let val = self.read_op(mode);
         let acc = self.regs.acc;
-        self.set_flag(Flag::Zero, (val & acc) == 0);
-        self.set_flag(Flag::Overflow, (val & 0x40) != 0);
-        self.set_flag(Flag::Neg, (val & 0x80) != 0);
+        self.regs.flags.set_zero((val & acc) == 0);
+        self.regs.flags.set_overflow((val & 0x40) != 0);
+        self.regs.flags.set_neg((val & 0x80) != 0);
     }
 
     fn dec(&mut self, mode: Mode) {
@@ -460,9 +462,10 @@ impl Cpu {
     }
 
     fn pull_status(&mut self) {
-        self.regs.flags = self.pop();
-        self.set_flag(Flag::Unused, true);
-        self.set_flag(Flag::Brk, false);
+        let tmp = self.pop();
+        self.regs.flags.set_byte(tmp);
+        self.regs.flags.set_unused(true);
+        self.regs.flags.set_brk(false);
     }
 
     fn push_pc(&mut self) {
@@ -473,20 +476,8 @@ impl Cpu {
     }
 
     fn set_zero_neg(&mut self, val: u8) {
-        self.set_flag(Flag::Neg, val >> 7 == 1);
-        self.set_flag(Flag::Zero, val == 0);
-    }
-
-    fn set_flag(&mut self, flag: Flag, val: bool) {
-        if val {
-            self.regs.flags |= flag as u8;
-        } else {
-            self.regs.flags &= !(flag as u8);
-        }
-    }
-
-    fn get_flag(&mut self, flag: Flag) -> bool {
-        (self.regs.flags & flag as u8) != 0
+        self.regs.flags.set_neg(val >> 7 == 1);
+        self.regs.flags.set_zero(val == 0);
     }
 
     pub fn step(&mut self, debug: bool) -> Result<u16, u8> {
@@ -641,13 +632,13 @@ impl Cpu {
                 self.pull_status();
                 self.pull_pc();
             }
-            SED => self.set_flag(Flag::Dec, true),
-            CLC => self.set_flag(Flag::Carry, false),
-            SEC => self.set_flag(Flag::Carry, true),
-            CLI => self.set_flag(Flag::Itr, false),
-            SEI => self.set_flag(Flag::Itr, true),
-            CLV => self.set_flag(Flag::Overflow, false),
-            CLD => self.set_flag(Flag::Dec, false),
+            SED => self.regs.flags.set_dec(true),
+            CLC => self.regs.flags.set_carry(false),
+            SEC => self.regs.flags.set_carry(true),
+            CLI => self.regs.flags.set_itr(false),
+            SEI => self.regs.flags.set_itr(true),
+            CLV => self.regs.flags.set_overflow(false),
+            CLD => self.regs.flags.set_dec(false),
 
             NOP | 0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => (),
 
@@ -668,9 +659,9 @@ impl Cpu {
             BRK => {
                 self.push_pc();
                 let flags = self.regs.flags;
-                self.push(flags);
+                self.push(flags.as_byte());
                 self.regs.pc.set_addr(IRQ_VEC);
-                self.set_flag(Flag::Brk, true);
+                self.regs.flags.set_brk(true);
             }
             TAX => {
                 let acc = self.regs.acc;
@@ -731,42 +722,43 @@ impl Cpu {
                 self.set_zero_neg(acc);
             }
             PHP => {
-                let flags = self.regs.flags;
-                self.push(flags | Flag::Brk as u8);
+                let mut flags = self.regs.flags.clone();
+                flags.set_brk(true);
+                self.push(flags.as_byte());
             }
             PLP => {
                 self.pull_status();
             }
             BVS => {
-                let flag = self.get_flag(Flag::Overflow);
+                let flag = self.regs.flags.overflow();
                 self.generic_branch(flag);
             }
             BVC => {
-                let flag = !self.get_flag(Flag::Overflow);
+                let flag = !self.regs.flags.overflow();
                 self.generic_branch(flag);
             }
             BMI => {
-                let flag = self.get_flag(Flag::Neg);
+                let flag = self.regs.flags.neg();
                 self.generic_branch(flag);
             }
             BPL => {
-                let flag = !self.get_flag(Flag::Neg);
+                let flag = !self.regs.flags.neg();
                 self.generic_branch(flag);
             }
             BNE => {
-                let flag = !self.get_flag(Flag::Zero);
+                let flag = !self.regs.flags.zero();
                 self.generic_branch(flag);
             }
             BEQ => {
-                let flag = self.get_flag(Flag::Zero);
+                let flag = self.regs.flags.zero();
                 self.generic_branch(flag);
             }
             BCS => {
-                let flag = self.get_flag(Flag::Carry);
+                let flag = self.regs.flags.carry();
                 self.generic_branch(flag);
             }
             BCC => {
-                let flag = !self.get_flag(Flag::Carry);
+                let flag = !self.regs.flags.carry();
                 self.generic_branch(flag);
             }
             JSR => {

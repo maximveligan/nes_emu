@@ -1,15 +1,10 @@
-extern crate nom;
-extern crate sdl2;
 extern crate nes_emu;
 
 use nes_emu::cpu::Cpu;
 use nes_emu::apu::Apu;
 use nes_emu::ppu::Ppu;
-use nes_emu::rom::RomType;
-use nes_emu::rom::Region;
 use nes_emu::rom::parse_rom;
 use std::fs::File;
-use std::env;
 use std::io::Read;
 use nes_emu::mapper::Mapper;
 use nes_emu::mmu::Mmu;
@@ -32,7 +27,7 @@ fn run_nestest() {
         }
     };
 
-    let mut mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
+    let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
     let mut cpu = Cpu::new(Mmu::new(
         Apu::new(),
         Ram::new(),
@@ -52,8 +47,9 @@ fn run_nestest() {
                     assert_eq!(cpu.regs.acc, 0x00);
                     assert_eq!(cpu.regs.x, 0x03);
                     assert_eq!(cpu.regs.y, 0x77);
-                    assert_eq!(cpu.regs.flags, 0x67);
+                    assert_eq!(cpu.regs.flags.as_byte(), 0x67);
                     assert_eq!(cpu.regs.sp, 0xFB);
+                    assert_eq!(cycle_count, 15269);
                     break;
                 }
             }
