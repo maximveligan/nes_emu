@@ -1,3 +1,7 @@
+use std::fs::File;
+use std::io::Read;
+use serde::Serialize;
+use serde::Deserialize;
 use nom::be_u8;
 use nom::IResult;
 use std::fmt;
@@ -8,7 +12,13 @@ const CHR_ROM_PAGE_SIZE: usize = 8192;
 const CHR_RAM_PAGE_SIZE: usize = 8192;
 const TRAINER_LEN: usize = 512;
 
-pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
+pub enum LoadRomError {
+    Unsupported(String),
+    FileError(std::io::Error),
+    ParseError(String),
+}
+
+fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
     do_parse!(
         src,
         tag!(b"NES\x1A")
@@ -64,6 +74,46 @@ pub fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
                 },
             })
     )
+}
+
+pub fn load_rom(path: String) -> Result<Rom, LoadRomError> {
+    let mut raw_bytes = Vec::new();
+    let mut raw_rom = match File::open(path) {
+        Ok(val) => val,
+        Err(e) => return Err(LoadRomError::FileError(e)),
+    };
+    match raw_rom.read_to_end(&mut raw_bytes) {
+        Ok(_) => (),
+        Err(e) => return Err(LoadRomError::FileError(e)),
+    }
+
+    let parsed_rom = parse_rom(&raw_bytes);
+
+    let rom = match parsed_rom {
+        Ok(out) => match out {
+            (_, rest) => rest,
+        },
+        Err(err) => return Err(LoadRomError::ParseError(err.to_string())),
+    };
+
+    match rom.header.rom_type {
+        RomType::Nes2 => {
+            return Err(LoadRomError::Unsupported(
+                "Unsupported rom type NES2.0!".to_string(),
+            ));
+        }
+        _ => (),
+    }
+
+    match rom.header.region {
+        Region::PAL => {
+            return Err(LoadRomError::Unsupported(
+                "Unsupported region PAL!".to_string(),
+            ));
+        }
+        _ => (),
+    }
+    Ok(rom)
 }
 
 // Almost no roms use flag10, as such pulled as u8
@@ -123,7 +173,7 @@ impl fmt::Debug for Rom {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum ScreenMode {
     FourScreen,
     Vertical,

@@ -31,6 +31,12 @@ impl Vram {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.vram.iter_mut().for_each(|val| *val = 0);
+        self.palette.iter_mut().for_each(|val| *val = 0);
+        self.mapper.borrow_mut().reset();
+    }
+
     pub fn ld8(&self, addr: u16) -> u8 {
         match addr {
             0x0000...0x1FFF => self.mapper.borrow_mut().ld_chr(addr),

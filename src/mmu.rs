@@ -21,6 +21,7 @@ pub struct Mmu {
     pub ctrl1: Controller,
 }
 
+//#[derive(Serialize, Deserialize)]
 pub struct Ram([u8; 0xFFF]);
 
 impl Ram {

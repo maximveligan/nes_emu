@@ -65,11 +65,7 @@ impl Sprite {
 
         // Grabs the adjacent tile if this is a 16 bit sprite and the y value
         // is greater than 7
-        let y_offset = if y < 8 {
-            0
-        } else {
-            8
-        };
+        let y_offset = if y < 8 { 0 } else { 8 };
 
         pt_i + y + y_offset
     }

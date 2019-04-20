@@ -1,8 +1,10 @@
+use serde::Serialize;
+use serde::Deserialize;
 use cpu_const::*;
 use std::fmt;
 use mmu::Mmu;
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Registers {
     pub acc: u8,
     pub x: u8,
@@ -17,12 +19,17 @@ impl fmt::Debug for Registers {
         write!(
             f,
             "{:?} A:{:02X} X:{:02X} Y:{:02X} Flags:{:02X} SP:{:02X}",
-            self.pc, self.acc, self.x, self.y, self.flags.as_byte(), self.sp
+            self.pc,
+            self.acc,
+            self.x,
+            self.y,
+            self.flags.as_byte(),
+            self.sp
         )
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
@@ -53,7 +60,7 @@ impl fmt::Debug for ProgramCounter {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Serialize, Deserialize, Copy, Clone, Debug)]
     pub struct Flags(u8);
     carry, set_carry:       0;
     zero, set_zero:         1;
@@ -256,7 +263,7 @@ impl Cpu {
         let tmp = acc as u16 + val as u16 + self.regs.flags.carry() as u16;
         self.regs.flags.set_carry(tmp > 0xFF);
         self.regs.flags.set_overflow(
-            ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0
+            ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0,
         );
         let tmp = tmp as u8;
         self.set_zero_neg(tmp);
@@ -480,7 +487,7 @@ impl Cpu {
         self.regs.flags.set_zero(val == 0);
     }
 
-    pub fn step(&mut self, debug: bool) -> Result<u16, u8> {
+    pub fn step(&mut self, debug: bool) -> u16 {
         let regs = self.regs.clone();
         let byte = self.ld8_pc_up();
         self.cycle_count += CYCLES[byte as usize] as u16;
@@ -491,7 +498,7 @@ impl Cpu {
             self.cc += tmp as usize;
         }
         self.cycle_count = 0;
-        Ok(tmp)
+        tmp
     }
 
     fn ld8_pc_up(&mut self) -> u8 {

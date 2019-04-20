@@ -1,8 +1,12 @@
+use serde::Serialize;
+use serde::Deserialize;
+
 const X_SCROLL_MASK: u16 = 0b000010000011111;
 const Y_SCROLL_MASK: u16 = 0b111101111100000;
 const AT_BASE: u16 = 0x3C0;
 
 bitfield! {
+    #[derive(Serialize, Deserialize)]
     pub struct Ctrl(u8);
     pub nmi_on,     _ : 7;
     pub ppu_master, _ : 6;
@@ -57,7 +61,7 @@ impl Ctrl {
 //Bit layouts follow the diagram above
 
 bitfield! {
-     #[derive(Copy, Clone, PartialEq)]
+     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq)]
     pub struct VramAddr(u16);
     pub u8, coarse_x, set_coarse_x: 4,  0;
     pub u8, coarse_y, set_coarse_y: 9,  5;
@@ -152,6 +156,7 @@ impl VramAddr {
 }
 
 bitfield! {
+    #[derive(Serialize, Deserialize)]
     pub struct Status(u8);
     pub vblank, set_vblank: 7;
     pub sprite_0_hit, set_sprite_0_hit: 6;
@@ -167,6 +172,7 @@ impl Status {
 }
 
 bitfield! {
+    #[derive(Serialize, Deserialize)]
     pub struct Mask(u8);
     pub is_grey_scale, _ : 0;
     pub left8_bg,      _ : 1;
@@ -184,6 +190,7 @@ impl Mask {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct PRegisters {
     pub ctrl: Ctrl,
     pub mask: Mask,

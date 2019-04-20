@@ -1,3 +1,5 @@
+const SIG_BYTE: u8 = 0x40;
+
 #[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum Button {
@@ -14,7 +16,7 @@ pub enum Button {
 pub struct Controller {
     ctrl_state: u8,
     strobe: bool,
-    index: usize,
+    shift: usize,
 }
 
 impl Controller {
@@ -22,34 +24,36 @@ impl Controller {
         Controller {
             ctrl_state: 0,
             strobe: false,
-            index: 0,
+            shift: 0,
         }
     }
 
     pub fn ld8(&mut self) -> u8 {
-        let val = if self.index < 8 {
-            self.ctrl_state >> self.index & 1
+        let val = if self.shift < 8 {
+            (self.ctrl_state >> self.shift) & 1
         } else {
             1
         };
 
         if !self.strobe {
-            self.index += 1;
+            self.shift += 1;
         }
-        0x40 | val
+        // Required by some games. Check nesdev controllers for more info
+        SIG_BYTE | val
     }
 
     pub fn store(&mut self, val: u8) {
         self.strobe = val & 1 != 0;
         if self.strobe {
-            self.index = 0;
+            self.shift = 0;
         }
     }
 
     pub fn set_button_state(&mut self, button: Button, pressed: bool) {
-        self.ctrl_state &= !(button as u8);
         if pressed {
             self.ctrl_state |= button as u8;
+        } else {
+            self.ctrl_state &= !(button as u8);
         }
     }
 }

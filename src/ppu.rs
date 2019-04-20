@@ -1,3 +1,5 @@
+use serde::Serialize;
+use serde::Deserialize;
 use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -38,14 +40,14 @@ pub const PALETTE: [u8; 192] = [
 //    84, 84, 84, 0, 30, 116, 8, 16, 144, 48, 0, 136, 68, 0, 100, 92, 0, 48, 84,
 //    4, 0, 60, 24, 0, 32, 42, 0, 8, 58, 0, 0, 64, 0, 0, 60, 0, 0, 50, 60, 0, 0,
 //    0, 0, 0, 0, 0, 0, 0, 152, 150, 152, 8, 76, 196, 48, 50, 236, 92, 30, 228,
-//    136, 20, 176, 160, 20, 100, 152, 34, 32, 120, 60, 0, 84, 90, 0, 40, 114, 0,
-//    8, 124, 0, 0, 118, 40, 0, 102, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 236, 238,
-//    236, 76, 154, 236, 120, 124, 236, 176, 98, 236, 228, 84, 236, 236, 88, 180,
-//    236, 106, 100, 212, 136, 32, 160, 170, 0, 116, 196, 0, 76, 208, 32, 56,
-//    204, 108, 56, 180, 204, 60, 60, 60, 0, 0, 0, 0, 0, 0, 236, 238, 236, 168,
-//    204, 236, 188, 188, 236, 212, 178, 236, 236, 174, 236, 236, 174, 212, 236,
-//    180, 176, 228, 196, 144, 204, 210, 120, 180, 222, 120, 168, 226, 144, 152,
-//    226, 180, 160, 214, 228, 160, 162, 160, 0, 0, 0, 0, 0, 0,
+//    136, 20, 176, 160, 20, 100, 152, 34, 32, 120, 60, 0, 84, 90, 0, 40, 114,
+// 0,    8, 124, 0, 0, 118, 40, 0, 102, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 236,
+// 238,    236, 76, 154, 236, 120, 124, 236, 176, 98, 236, 228, 84, 236, 236,
+// 88, 180,    236, 106, 100, 212, 136, 32, 160, 170, 0, 116, 196, 0, 76, 208,
+// 32, 56,    204, 108, 56, 180, 204, 60, 60, 60, 0, 0, 0, 0, 0, 0, 236, 238,
+// 236, 168,    204, 236, 188, 188, 236, 212, 178, 236, 236, 174, 236, 236, 174,
+// 212, 236,    180, 176, 228, 196, 144, 204, 210, 120, 180, 222, 120, 168, 226,
+// 144, 152,    226, 180, 160, 214, 228, 160, 162, 160, 0, 0, 0, 0, 0, 0,
 //];
 
 #[derive(Copy, Clone)]
@@ -59,30 +61,33 @@ pub enum PpuRes {
     Draw,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 //These are 1 bit latches, so I'm using booleans to store them
 struct AtLatch {
     low_b: bool,
     high_b: bool,
 }
 
+#[derive(Serialize, Deserialize)]
 struct AtShift {
     low_tile: u8,
     high_tile: u8,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 struct BgLatch {
     low_tile: u8,
     high_tile: u8,
 }
 
+#[derive(Serialize, Deserialize)]
 struct BgShift {
     low_tile: u16,
     high_tile: u16,
 }
 
-struct InternalRegs {
+#[derive(Serialize, Deserialize)]
+pub struct InternalRegs {
     at_latch: AtLatch,
     at_shift: AtShift,
     bg_latch: BgLatch,
@@ -184,6 +189,25 @@ impl Ppu {
             at_entry: 0,
             internal_regs: InternalRegs::new(),
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.trip_nmi = false;
+        self.vblank_off = false;
+        self.regs = PRegisters::new();
+        self.vram.reset();
+        self.screen_buff = [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT];
+        self.oam = [0; 256];
+        self.tmp_oam = Vec::with_capacity(8);
+        self.main_oam = Vec::with_capacity(8);
+        self.cc = 0;
+        self.scanline = 0;
+        self.write_latch = false;
+        self.ppudata_buff = 0;
+        self.fine_x = 0;
+        self.t_addr = VramAddr(0);
+        self.at_entry = 0;
+        self.internal_regs = InternalRegs::new();
     }
 
     pub fn pull_nt(&self, offset: u16) {
@@ -332,7 +356,8 @@ impl Ppu {
             321 => {
                 self.main_oam = self.tmp_oam.clone();
                 for sprite in self.main_oam.iter_mut() {
-                    let address = sprite.get_pt_address(&self.regs.ctrl, self.scanline);
+                    let address =
+                        sprite.get_pt_address(&self.regs.ctrl, self.scanline);
                     sprite.low_byte = self.vram.ld8(address);
                     sprite.high_byte = self.vram.ld8(address + 8);
                 }

@@ -9,6 +9,8 @@ name = "nes_emu"
 [dependencies]
 nom = "*"
 serde = { version = "*", features = ["derive"] }
+serde_bytes = "*"
 sdl2 = "0.32.*"
 toml = "*"
+bincode = "*"
 bitfield = "*"
