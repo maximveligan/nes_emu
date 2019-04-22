@@ -68,7 +68,7 @@ struct AtLatch {
     high_b: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 struct AtShift {
     low_tile: u8,
     high_tile: u8,
@@ -80,13 +80,13 @@ struct BgLatch {
     high_tile: u8,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 struct BgShift {
     low_tile: u16,
     high_tile: u16,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct InternalRegs {
     at_latch: AtLatch,
     at_shift: AtShift,
@@ -133,6 +133,22 @@ impl InternalRegs {
         self.bg_shift.low_tile <<= 1;
         self.bg_shift.high_tile <<= 1;
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PpuState {
+    vram: Box<[u8]>,
+    palette: [u8; 0x20],
+    ppu_regs: PRegisters,
+    ppu_render_regs: InternalRegs,
+    cc: u16,
+    scanline: u16,
+    write_latch: bool,
+    ppudata_buff: u8,
+    t_addr: VramAddr,
+    trip_nmi: bool,
+    vblank_off: bool,
+    at_entry: u8,
 }
 
 pub struct Ppu {
@@ -189,6 +205,38 @@ impl Ppu {
             at_entry: 0,
             internal_regs: InternalRegs::new(),
         }
+    }
+
+    pub fn get_state(&self) -> PpuState {
+        PpuState {
+            vram: self.vram.vram.clone(),
+            palette: self.vram.palette,
+            ppu_regs: self.regs,
+            ppu_render_regs: self.internal_regs,
+            cc: self.cc,
+            scanline: self.scanline,
+            write_latch: self.write_latch,
+            ppudata_buff: self.ppudata_buff,
+            t_addr: self.t_addr,
+            trip_nmi: self.trip_nmi,
+            vblank_off: self.vblank_off,
+            at_entry: self.at_entry,
+        }
+    }
+
+    pub fn set_state(&mut self, ppu_state: PpuState) {
+        self.vram.vram = ppu_state.vram;
+        self.vram.palette = ppu_state.palette;
+        self.regs = ppu_state.ppu_regs;
+        self.internal_regs = ppu_state.ppu_render_regs;
+        self.cc = ppu_state.cc;
+        self.scanline = ppu_state.scanline;
+        self.write_latch = ppu_state.write_latch;
+        self.ppudata_buff = ppu_state.ppudata_buff;
+        self.t_addr = ppu_state.t_addr;
+        self.trip_nmi = ppu_state.trip_nmi;
+        self.vblank_off = ppu_state.vblank_off;
+        self.at_entry = ppu_state.at_entry;
     }
 
     pub fn reset(&mut self) {

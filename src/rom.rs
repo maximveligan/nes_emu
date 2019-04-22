@@ -173,7 +173,7 @@ impl fmt::Debug for Rom {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum ScreenMode {
     FourScreen,
     Vertical,

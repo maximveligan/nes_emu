@@ -21,47 +21,78 @@ pub mod rom;
 pub mod sprite;
 pub mod vram;
 
+use std::io::Write;
+use std::fs::File;
+use std::io::Read;
 use serde::Serialize;
 use serde::Deserialize;
 use cpu::Cpu;
 use apu::Apu;
 use ppu::Ppu;
 use ppu::PpuRes;
+use ppu::PpuState;
 use rom::Rom;
 use mapper::Mapper;
 use mmu::Mmu;
 use mmu::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
-use pregisters::PRegisters;
-use ppu::InternalRegs;
 use cpu::Registers;
 use rom::ScreenMode;
 use mapper::MemType;
 
 const SCREEN_SIZE: usize = 256 * 240 * 3;
 
-// TODO: Figure out how to serialize arrays over 32 elements long
+#[derive(Serialize, Deserialize)]
 pub struct State {
-    vram: [u8; 0x800],
-    palette: [u8; 0x20],
+    ppu_state: PpuState,
     screen_mode: ScreenMode,
     chr_ram: Vec<u8>,
-    ppu_regs: PRegisters,
-    ppu_internal_regs: InternalRegs,
     cpu_regs: Registers,
     mapper: MemType,
+    ram: Ram,
+}
+
+pub enum StateFileError {
+    ParseError(std::boxed::Box<bincode::ErrorKind>),
+    FileError(std::io::Error),
 }
 
 impl State {
-    pub fn save_state(&self) -> Result<(), std::io::Error> {
-        unimplemented!("Writing the save state to a file isn't done yet");
+    pub fn save_state(&self) -> Result<(), StateFileError> {
+        match bincode::serialize(&self) {
+            Ok(bytes) => {
+                match File::create("save.bin") {
+                    Ok(mut buffer) => {
+                        match buffer.write(&bytes) {
+                            Ok(size) => {
+                                //println!("{} bytes written.", size);
+                                Ok(())
+                            }
+                            Err(e) => Err(StateFileError::FileError(e)),
+                        }
+                    }
+                    Err(e) => Err(StateFileError::FileError(e)),
+                }
+            }
+            Err(e) => Err(StateFileError::ParseError(e)),
+        }
     }
 
-    // TODO: The error type should not be string, it should be whatever bincode
-    // uses when it fails to parse a file
-    pub fn load_state(path: String) -> Result<State, String> {
-        unimplemented!("Loading state from a file isn't done yet");
+    pub fn load_state(path: String) -> Result<State, StateFileError> {
+        match File::open(path) {
+            Ok(mut f) => {
+                let mut buffer = Vec::new();
+                match f.read_to_end(&mut buffer) {
+                    Ok(_) => match bincode::deserialize(&buffer) {
+                        Ok(state) => Ok(state),
+                        Err(e) => Err(StateFileError::ParseError(e)),
+                    },
+                    Err(e) => Err(StateFileError::FileError(e)),
+                }
+            }
+            Err(e) => Err(StateFileError::FileError(e)),
+        }
     }
 }
 
@@ -86,27 +117,49 @@ impl NesEmulator {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.cpu.mmu.mapper.borrow_mut().reset();
+        self.cpu.mmu.ppu.reset();
+        self.cpu.reset();
+    }
+
     pub fn get_state(&self) -> State {
-        unimplemented!("Save states aren't done yet");
+        State {
+            ppu_state: self.cpu.mmu.ppu.get_state(),
+            screen_mode: self.cpu.mmu.mapper.borrow().rom.header.screen,
+            chr_ram: self.cpu.mmu.mapper.borrow().rom.chr_ram.clone(),
+            cpu_regs: self.cpu.regs.clone(),
+            mapper: self.cpu.mmu.mapper.borrow().mem_type,
+            ram: self.cpu.mmu.ram.clone(),
+        }
     }
 
-    // TODO: The error type here needs to be well thought out, since there are
-    // a lot of different ways to error
-    pub fn load_state(state: State) -> Result<(), String> {
-        unimplemented!("Loading in state isn't ready yet");
+    pub fn load_state(&mut self, state: State) -> Result<(), String> {
+        self.cpu.mmu.ppu.set_state(state.ppu_state);
+        self.cpu.mmu.mapper.borrow_mut().rom.header.screen = state.screen_mode;
+        self.cpu.mmu.mapper.borrow_mut().rom.chr_ram = state.chr_ram;
+        self.cpu.regs = state.cpu_regs;
+        self.cpu.mmu.mapper.borrow_mut().mem_type = state.mapper;
+        self.cpu.mmu.ram = state.ram;
+        Ok(())
     }
 
-    pub fn step(&mut self) -> Result<Option<&[u8; SCREEN_SIZE]>, String> {
+    pub fn step(&mut self) -> Result<bool, String> {
         let cc = self.cpu.step(self.debug);
         match self.cpu.mmu.ppu.emulate_cycles(cc) {
             Some(r) => match r {
                 PpuRes::Nmi => {
                     self.cpu.proc_nmi();
-                    Ok(None)
+                    Ok(false)
                 }
-                PpuRes::Draw => Ok(Some(self.cpu.mmu.ppu.get_buffer())),
+                PpuRes::Draw => Ok(true),
             },
-            None => Ok(None),
+            None => Ok(false),
         }
+    }
+
+    pub fn next_frame(&mut self) -> Result<&[u8; SCREEN_SIZE], String> {
+        while !self.step()? {}
+        Ok(self.cpu.mmu.ppu.get_buffer())
     }
 }

@@ -17,24 +17,23 @@ const NT_3: u16 = 0xC00;
 const NT_3_END: u16 = 0xFFF;
 
 pub struct Vram {
-    vram: [u8; VRAM_SIZE],
+    pub vram: Box<[u8]>,
     mapper: Rc<RefCell<Mapper>>,
-    palette: [u8; 0x20],
+    pub palette: [u8; 0x20],
 }
 
 impl Vram {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Vram {
         Vram {
-            vram: [0; VRAM_SIZE],
+            vram: Box::new([0; VRAM_SIZE]),
             mapper: mapper,
             palette: [0; 0x20],
         }
     }
 
     pub fn reset(&mut self) {
-        self.vram.iter_mut().for_each(|val| *val = 0);
-        self.palette.iter_mut().for_each(|val| *val = 0);
-        self.mapper.borrow_mut().reset();
+        self.vram = Box::new([0; VRAM_SIZE]);
+        self.palette = [0; 0x20];
     }
 
     pub fn ld8(&self, addr: u16) -> u8 {

@@ -1,3 +1,5 @@
+use serde::Serialize;
+use serde::Deserialize;
 use ppu::Ppu;
 use apu::Apu;
 use mapper::Mapper;
@@ -21,12 +23,14 @@ pub struct Mmu {
     pub ctrl1: Controller,
 }
 
-//#[derive(Serialize, Deserialize)]
-pub struct Ram([u8; 0xFFF]);
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Ram(Box<[u8]>);
 
 impl Ram {
     pub fn new() -> Ram {
-        Ram { 0: [0; 0xFFF] }
+        Ram {
+            0: Box::new([0; 0xFFF]),
+        }
     }
 
     fn load(&self, address: u16) -> u8 {

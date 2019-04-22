@@ -10,17 +10,17 @@ const NROM_PRG_ROM_START: u16 = 0x8000;
 const SIXTEEN_KB: usize = 0x4000;
 
 pub struct Mapper {
-    mem_type: MemType,
-    rom: Rom,
+    pub mem_type: MemType,
+    pub rom: Rom,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum MemType {
     Nrom(Nrom),
     Unrom(Unrom),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct Unrom {
     bank_select: u8,
 }
@@ -62,7 +62,7 @@ impl Unrom {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct Nrom {
     mirrored: bool,
 }

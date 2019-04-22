@@ -29,6 +29,17 @@ impl fmt::Debug for Registers {
     }
 }
 
+impl Registers {
+    fn reset(&mut self, address: u16) {
+        self.acc = 0;
+        self.x = 0;
+        self.y = 0;
+        self.pc.set_addr(address);
+        self.sp = 0xFD;
+        self.flags = Flags(0b00100100);
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ProgramCounter(u16);
 
@@ -113,6 +124,13 @@ impl Cpu {
         };
         cpu.regs.pc.set_addr(cpu.mmu.ld16(RESET_VEC));
         cpu
+    }
+
+    pub fn reset(&mut self) {
+        self.cycle_count = 0;
+        self.cc = 0;
+        let addr = self.mmu.ld16(RESET_VEC);
+        self.regs.reset(addr);
     }
 
     fn check_pb(&mut self, base: u16, base_offset: u16) {
