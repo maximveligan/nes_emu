@@ -13,7 +13,6 @@ use nes_emu::controller::Button;
 use nes_emu::controller::Controller;
 use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
-use nes_emu::State;
 
 use std::env;
 
@@ -177,8 +176,10 @@ fn start_emulator(path_in: String) {
                 } => {
                     let state = nes.get_state();
                     match state.save_state() {
-                        Ok(()) => (),
-                        Err(e) => panic!(),
+                        Ok(size) => {
+                            println!("Wrote {} bytes", size);
+                        }
+                        Err(_e) => panic!(),
                     }
                 }
                 Event::KeyDown {
@@ -187,9 +188,9 @@ fn start_emulator(path_in: String) {
                 } => match nes_emu::State::load_state("save.bin".to_string()) {
                     Ok(state) => match nes.load_state(state) {
                         Ok(()) => (),
-                        Err(e) => panic!("emulator didn't like the load state"),
+                        Err(_e) => panic!("emulator didn't like the load state"),
                     },
-                    Err(e) => panic!("loading state failed"),
+                    Err(_e) => panic!("loading state failed"),
                 },
                 Event::KeyDown {
                     keycode: Some(key), ..

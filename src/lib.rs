@@ -59,16 +59,13 @@ pub enum StateFileError {
 }
 
 impl State {
-    pub fn save_state(&self) -> Result<(), StateFileError> {
+    pub fn save_state(&self) -> Result<usize, StateFileError> {
         match bincode::serialize(&self) {
             Ok(bytes) => {
                 match File::create("save.bin") {
                     Ok(mut buffer) => {
                         match buffer.write(&bytes) {
-                            Ok(size) => {
-                                //println!("{} bytes written.", size);
-                                Ok(())
-                            }
+                            Ok(size) => Ok(size),
                             Err(e) => Err(StateFileError::FileError(e)),
                         }
                     }
