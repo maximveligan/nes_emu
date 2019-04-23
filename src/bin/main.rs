@@ -1,6 +1,7 @@
 extern crate nes_emu;
 extern crate sdl2;
 
+use std::path::Path;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::TextureAccess;
@@ -20,9 +21,20 @@ const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
 fn main() {
-    match env::args().nth(1) {
-        Some(path) => start_emulator(path),
-        None => println!("Did not recieve a rom path"),
+    if let Some(str_path) = env::args().nth(1) {
+        let path = Path::new(&str_path);
+        if path.is_file() {
+            let os_rom_name = path.file_name().unwrap();
+            if let Some(rom_name) = os_rom_name.to_str() {
+                start_emulator(str_path.clone(), rom_name.to_string());
+            } else {
+                println!("Failed to convert path to UTF-8");
+            }
+        } else {
+            println!("Did not recieve a rom file name!");
+        }
+    } else {
+        println!("Did not recieve a rom path");
     }
 }
 
@@ -80,7 +92,8 @@ fn set_ctrl_state(
     }
 }
 
-fn start_emulator(path_in: String) {
+fn start_emulator(path_in: String, rom_name: String) {
+    println!("{}", toml::to_string(&Config::generate_config()).unwrap());
     let config = match Config::load_config("./config.toml".to_string()) {
         Ok(config) => config,
         Err(_e) => {
@@ -133,7 +146,7 @@ fn start_emulator(path_in: String) {
         }
     };
 
-    let mut nes = NesEmulator::new(rom, false);
+    let mut nes = NesEmulator::new(rom);
 
     loop {
         if !pause {
@@ -175,7 +188,7 @@ fn start_emulator(path_in: String) {
                     ..
                 } => {
                     let state = nes.get_state();
-                    match state.save_state() {
+                    match state.save_state(&rom_name) {
                         Ok(size) => {
                             println!("Wrote {} bytes", size);
                         }
@@ -185,7 +198,7 @@ fn start_emulator(path_in: String) {
                 Event::KeyDown {
                     keycode: Some(Keycode::E),
                     ..
-                } => match nes_emu::State::load_state("save.bin".to_string()) {
+                } => match nes_emu::State::load_state(&rom_name) {
                     Ok(state) => match nes.load_state(state) {
                         Ok(()) => (),
                         Err(_e) => panic!("emulator didn't like the load state"),

@@ -9,8 +9,45 @@ use controller::Button;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub pixel_scale: usize,
+    pub sprites_per_scanline: u8,
     pub ctrl1_layout: ButtonLayout,
     pub ctrl2_layout: ButtonLayout,
+    pub emu_controls: EmulatorControls,
+    pub overscan: Overscan,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Overscan {
+    top: u8,
+    bottom: u8,
+    left: u8,
+    right: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EmulatorControls {
+    save_state: String,
+    load_state: String,
+    pause: String,
+    reset: String,
+}
+
+impl EmulatorControls {
+    pub fn make_emuctrl_map(&self) -> HashMap<String, EmuControl> {
+        let mut emu_map = HashMap::new();
+        emu_map.insert(self.save_state.clone(), EmuControl::SaveState);
+        emu_map.insert(self.load_state.clone(), EmuControl::LoadState);
+        emu_map.insert(self.pause.clone(), EmuControl::Pause);
+        emu_map.insert(self.reset.clone(), EmuControl::Reset);
+        emu_map
+    }
+}
+
+pub enum EmuControl {
+    SaveState,
+    LoadState,
+    Pause,
+    Reset,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -47,7 +84,7 @@ pub enum ConfigError {
 }
 
 impl Config {
-    fn generate_config() -> Config {
+    pub fn generate_config() -> Config {
         let layout1 = ButtonLayout {
             left: "A".to_string(),
             up: "W".to_string(),
@@ -70,10 +107,27 @@ impl Config {
             select: "B".to_string(),
         };
 
+        let overscan = Overscan {
+            top: 8,
+            bottom: 8,
+            left: 0,
+            right: 0,
+        };
+
+        let emulator_controls = EmulatorControls {
+            save_state: "Q".to_string(),
+            load_state: "E".to_string(),
+            pause: "P".to_string(),
+            reset: "R".to_string(),
+        };
+
         Config {
             pixel_scale: 3,
             ctrl1_layout: layout1,
             ctrl2_layout: layout2,
+            emu_controls: emulator_controls,
+            overscan: overscan,
+            sprites_per_scanline: 8,
         }
     }
 

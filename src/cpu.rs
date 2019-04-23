@@ -505,16 +505,15 @@ impl Cpu {
         self.regs.flags.set_zero(val == 0);
     }
 
-    pub fn step(&mut self, debug: bool) -> u16 {
-        let regs = self.regs.clone();
+    pub fn step(&mut self) -> u16 {
         let byte = self.ld8_pc_up();
         self.cycle_count += CYCLES[byte as usize] as u16;
         self.execute_op(byte);
         let tmp = self.cycle_count;
-        if debug {
-            println!("{:?} CYC:{}", regs, self.cc);
-            self.cc += tmp as usize;
-        }
+        // let regs = self.regs.clone();
+        // TODO: Use logging properly here
+        // println!("{:?} CYC:{}", regs, self.cc);
+        // self.cc += tmp as usize;
         self.cycle_count = 0;
         tmp
     }

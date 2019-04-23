@@ -59,10 +59,10 @@ pub enum StateFileError {
 }
 
 impl State {
-    pub fn save_state(&self) -> Result<usize, StateFileError> {
+    pub fn save_state(&self, save_name: &str) -> Result<usize, StateFileError> {
         match bincode::serialize(&self) {
             Ok(bytes) => {
-                match File::create("save.bin") {
+                match File::create(save_name.to_string()) {
                     Ok(mut buffer) => {
                         match buffer.write(&bytes) {
                             Ok(size) => Ok(size),
@@ -76,8 +76,8 @@ impl State {
         }
     }
 
-    pub fn load_state(path: String) -> Result<State, StateFileError> {
-        match File::open(path) {
+    pub fn load_state(path: &str) -> Result<State, StateFileError> {
+        match File::open(path.to_string()) {
             Ok(mut f) => {
                 let mut buffer = Vec::new();
                 match f.read_to_end(&mut buffer) {
@@ -95,11 +95,10 @@ impl State {
 
 pub struct NesEmulator {
     pub cpu: Cpu,
-    debug: bool,
 }
 
 impl NesEmulator {
-    pub fn new(rom: Rom, debug: bool) -> NesEmulator {
+    pub fn new(rom: Rom) -> NesEmulator {
         let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
         let cpu = Cpu::new(Mmu::new(
             Apu::new(),
@@ -110,7 +109,6 @@ impl NesEmulator {
 
         NesEmulator {
             cpu: cpu,
-            debug: debug,
         }
     }
 
@@ -142,7 +140,7 @@ impl NesEmulator {
     }
 
     pub fn step(&mut self) -> Result<bool, String> {
-        let cc = self.cpu.step(self.debug);
+        let cc = self.cpu.step();
         match self.cpu.mmu.ppu.emulate_cycles(cc) {
             Some(r) => match r {
                 PpuRes::Nmi => {
