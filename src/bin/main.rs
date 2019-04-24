@@ -109,7 +109,9 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
     let sdl_ctrl1_map = ButtonLayout::make_ctrl_map(&config.ctrl1_layout);
     let sdl_ctrl2_map = ButtonLayout::make_ctrl_map(&config.ctrl2_layout);
 
-    let screen_height = SCREEN_HEIGHT as u32 - config.overscan.bottom as u32 - config.overscan.top as u32;
+    let screen_height = SCREEN_HEIGHT as u32
+        - config.overscan.bottom as u32
+        - config.overscan.top as u32;
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -159,7 +161,16 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
             match nes.next_frame() {
                 Ok(framebuffer) => {
                     texture
-                        .update(None, &framebuffer[config.overscan.top as usize * 3 * SCREEN_WIDTH.. (SCREEN_WIDTH * SCREEN_HEIGHT - config.overscan.bottom as usize) * 3], SCREEN_WIDTH * 3)
+                        .update(
+                            None,
+                            &framebuffer[config.overscan.top as usize
+                                * 3
+                                * SCREEN_WIDTH
+                                ..(SCREEN_WIDTH * SCREEN_HEIGHT
+                                    - config.overscan.bottom as usize)
+                                    * 3],
+                            SCREEN_WIDTH * 3,
+                        )
                         .unwrap();
                     canvas.clear();
                     canvas.copy(&texture, None, None).unwrap();
@@ -206,10 +217,18 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
                     ..
                 } => match nes_emu::State::load_state(&state_name) {
                     Ok((state, size_read)) => match nes.load_state(state) {
-                        Ok(()) => println!("Loaded state successfully, {} bytes read", size_read),
-                        Err(e) => println!("Emulator could not load state: {}", e),
+                        Ok(()) => println!(
+                            "Loaded state successfully, {} bytes read",
+                            size_read
+                        ),
+                        Err(e) => {
+                            println!("Emulator could not load state: {}", e)
+                        }
                     },
-                    Err(e) => println!("Loading state from file failed: {}. Filename: {}", e, state_name),
+                    Err(e) => println!(
+                        "Loading state from file failed: {}. Filename: {}",
+                        e, state_name
+                    ),
                 },
                 Event::KeyDown {
                     keycode: Some(key), ..

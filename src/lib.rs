@@ -7,7 +7,8 @@ extern crate serde;
 extern crate toml;
 #[macro_use]
 extern crate bitfield;
-#[macro_use] extern crate failure;
+#[macro_use]
+extern crate failure;
 
 pub mod apu;
 pub mod config;
@@ -57,14 +58,10 @@ pub struct State {
 
 #[derive(Debug, Fail)]
 pub enum StateFileError {
-    #[fail(display = "Unable to parse state from file: {}", state)]
-    ParseError {
-        state: std::boxed::Box<bincode::ErrorKind>
-    },
-    #[fail(display = "File error: {}", file_error)]
-    FileError {
-        file_error: (std::io::Error)
-    },
+    #[fail(display = "Unable to parse state from file: {}", _0)]
+    ParseError(std::boxed::Box<bincode::ErrorKind>),
+    #[fail(display = "File error: {}", _0)]
+    FileError(std::io::Error),
 }
 
 impl State {
@@ -78,7 +75,7 @@ impl State {
         let mut file = File::open(path.to_string())?;
         let mut buffer = Vec::new();
         let byte_read = file.read_to_end(&mut buffer)?;
-        let state = bincode::deserialize(&buffer)?; 
+        let state = bincode::deserialize(&buffer)?;
         Ok((state, byte_read))
     }
 }
@@ -97,9 +94,7 @@ impl NesEmulator {
             mapper,
         ));
 
-        NesEmulator {
-            cpu: cpu,
-        }
+        NesEmulator { cpu: cpu }
     }
 
     pub fn reset(&mut self) {

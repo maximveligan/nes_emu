@@ -5,6 +5,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::Read;
 use controller::Button;
+use failure::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -77,10 +78,12 @@ impl ButtonLayout {
     }
 }
 
+#[derive(Debug, Fail)]
 pub enum ConfigError {
+    #[fail(display = "Unable to open config file: {}", _0)]
     FileError(std::io::Error),
+    #[fail(display = "Unable to parse config file: {}", _0)]
     ParseError(toml::de::Error),
-    UndefinedButton(String),
 }
 
 impl Config {
@@ -131,24 +134,14 @@ impl Config {
         }
     }
 
-    pub fn load_config(config_path: String) -> Result<Config, ConfigError> {
+    pub fn load_config(config_path: String) -> Result<Config, Error> {
         if Path::new(&config_path).exists() {
-            match File::open(config_path) {
-                Ok(mut file) => {
-                    let mut config_string = String::new();
-                    match file.read_to_string(&mut config_string) {
-                        Ok(_) => match toml::from_str(&config_string) {
-                            Ok(config) => {
-                                println!("Loading config: {:#?}", config);
-                                Ok(config)
-                            }
-                            Err(err) => Err(ConfigError::ParseError(err)),
-                        },
-                        Err(err) => Err(ConfigError::FileError(err)),
-                    }
-                }
-                Err(err) => Err(ConfigError::FileError(err)),
-            }
+            let mut file = File::open(config_path)?;
+            let mut config_string = String::new();
+            file.read_to_string(&mut config_string)?;
+            let config = toml::from_str(&config_string)?;
+            println!("Loading config: {:#?}", config);
+            Ok(config)
         } else {
             Ok(Config::generate_config())
         }

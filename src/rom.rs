@@ -5,6 +5,7 @@ use serde::Deserialize;
 use nom::be_u8;
 use nom::IResult;
 use std::fmt;
+use failure::Error;
 
 const PRG_ROM_PAGE_SIZE: usize = 16384;
 const PRG_RAM_PAGE_SIZE: usize = 8192;
@@ -12,9 +13,13 @@ const CHR_ROM_PAGE_SIZE: usize = 8192;
 const CHR_RAM_PAGE_SIZE: usize = 8192;
 const TRAINER_LEN: usize = 512;
 
+#[derive(Debug, Fail)]
 pub enum LoadRomError {
+    #[fail(display = "Rom not supported: {}", _0)]
     Unsupported(String),
+    #[fail(display = "File error: {}", _0)]
     FileError(std::io::Error),
+    #[fail(display = "Parse error: {}", _0)]
     ParseError(String),
 }
 
@@ -76,26 +81,7 @@ fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
     )
 }
 
-pub fn load_rom(path: &str) -> Result<Rom, LoadRomError> {
-    let mut raw_bytes = Vec::new();
-    let mut raw_rom = match File::open(path) {
-        Ok(val) => val,
-        Err(e) => return Err(LoadRomError::FileError(e)),
-    };
-    match raw_rom.read_to_end(&mut raw_bytes) {
-        Ok(_) => (),
-        Err(e) => return Err(LoadRomError::FileError(e)),
-    }
-
-    let parsed_rom = parse_rom(&raw_bytes);
-
-    let rom = match parsed_rom {
-        Ok(out) => match out {
-            (_, rest) => rest,
-        },
-        Err(err) => return Err(LoadRomError::ParseError(err.to_string())),
-    };
-
+fn check_invalid_rom(rom: &Rom) -> Result<(), LoadRomError> {
     match rom.header.rom_type {
         RomType::Nes2 => {
             return Err(LoadRomError::Unsupported(
@@ -113,6 +99,23 @@ pub fn load_rom(path: &str) -> Result<Rom, LoadRomError> {
         }
         _ => (),
     }
+
+    Ok(())
+}
+
+pub fn load_rom(path: &str) -> Result<Rom, Error> {
+    let mut raw_bytes = Vec::new();
+    let mut raw_rom = File::open(path)?;
+    raw_rom.read_to_end(&mut raw_bytes)?;
+
+    let rom = match parse_rom(&raw_bytes) {
+        Ok((_, rom)) => rom,
+        Err(e) => {
+            return Err(Error::from(LoadRomError::ParseError(e.to_string())))
+        }
+    };
+
+    check_invalid_rom(&rom)?;
     Ok(rom)
 }
 
