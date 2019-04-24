@@ -24,11 +24,14 @@ fn main() {
     if let Some(str_path) = env::args().nth(1) {
         let path = Path::new(&str_path);
         if path.is_file() {
-            let os_rom_name = path.file_name().unwrap();
-            if let Some(rom_name) = os_rom_name.to_str() {
-                start_emulator(str_path.clone(), rom_name.to_string());
+            if let Some(os_stem) = path.file_stem() {
+                if let Some(rom_stem) = os_stem.to_str() {
+                    start_emulator(&str_path, rom_stem);
+                } else {
+                    println!("Failed to convert path to UTF-8");
+                }
             } else {
-                println!("Failed to convert path to UTF-8");
+                println!("Rom file name did not have .nes extension");
             }
         } else {
             println!("Did not recieve a rom file name!");
@@ -92,7 +95,9 @@ fn set_ctrl_state(
     }
 }
 
-fn start_emulator(path_in: String, rom_name: String) {
+fn start_emulator(path_in: &str, rom_stem: &str) {
+    let mut state_name = rom_stem.to_string();
+    state_name.push_str(".sav");
     let config = match Config::load_config("./config.toml".to_string()) {
         Ok(config) => config,
         Err(_e) => {
@@ -189,7 +194,7 @@ fn start_emulator(path_in: String, rom_name: String) {
                     ..
                 } => {
                     let state = nes.get_state();
-                    match state.save_state(&rom_name) {
+                    match state.save_state(&state_name) {
                         Ok(size) => {
                             println!("Wrote {} bytes", size);
                         }
@@ -199,12 +204,12 @@ fn start_emulator(path_in: String, rom_name: String) {
                 Event::KeyDown {
                     keycode: Some(Keycode::E),
                     ..
-                } => match nes_emu::State::load_state(&rom_name) {
-                    Ok(state) => match nes.load_state(state) {
-                        Ok(()) => (),
-                        Err(_e) => panic!("emulator didn't like the load state"),
+                } => match nes_emu::State::load_state(&state_name) {
+                    Ok((state, size_read)) => match nes.load_state(state) {
+                        Ok(()) => println!("Loaded state successfully, {} bytes read", size_read),
+                        Err(e) => println!("Emulator could not load state: {}", e),
                     },
-                    Err(_e) => panic!("loading state failed"),
+                    Err(e) => println!("Loading state from file failed: {}. Filename: {}", e, state_name),
                 },
                 Event::KeyDown {
                     keycode: Some(key), ..

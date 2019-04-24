@@ -7,6 +7,7 @@ extern crate serde;
 extern crate toml;
 #[macro_use]
 extern crate bitfield;
+#[macro_use] extern crate failure;
 
 pub mod apu;
 pub mod config;
@@ -40,6 +41,7 @@ use std::rc::Rc;
 use cpu::Registers;
 use rom::ScreenMode;
 use mapper::MemType;
+use failure::Error;
 
 const SCREEN_SIZE: usize = 256 * 240 * 3;
 
@@ -53,43 +55,31 @@ pub struct State {
     ram: Ram,
 }
 
+#[derive(Debug, Fail)]
 pub enum StateFileError {
-    ParseError(std::boxed::Box<bincode::ErrorKind>),
-    FileError(std::io::Error),
+    #[fail(display = "Unable to parse state from file: {}", state)]
+    ParseError {
+        state: std::boxed::Box<bincode::ErrorKind>
+    },
+    #[fail(display = "File error: {}", file_error)]
+    FileError {
+        file_error: (std::io::Error)
+    },
 }
 
 impl State {
-    pub fn save_state(&self, save_name: &str) -> Result<usize, StateFileError> {
-        match bincode::serialize(&self) {
-            Ok(bytes) => {
-                match File::create(save_name.to_string()) {
-                    Ok(mut buffer) => {
-                        match buffer.write(&bytes) {
-                            Ok(size) => Ok(size),
-                            Err(e) => Err(StateFileError::FileError(e)),
-                        }
-                    }
-                    Err(e) => Err(StateFileError::FileError(e)),
-                }
-            }
-            Err(e) => Err(StateFileError::ParseError(e)),
-        }
+    pub fn save_state(&self, save_name: &str) -> Result<usize, Error> {
+        let bytes = bincode::serialize(&self)?;
+        let mut buffer = File::create(save_name.to_string())?;
+        Ok(buffer.write(&bytes)?)
     }
 
-    pub fn load_state(path: &str) -> Result<State, StateFileError> {
-        match File::open(path.to_string()) {
-            Ok(mut f) => {
-                let mut buffer = Vec::new();
-                match f.read_to_end(&mut buffer) {
-                    Ok(_) => match bincode::deserialize(&buffer) {
-                        Ok(state) => Ok(state),
-                        Err(e) => Err(StateFileError::ParseError(e)),
-                    },
-                    Err(e) => Err(StateFileError::FileError(e)),
-                }
-            }
-            Err(e) => Err(StateFileError::FileError(e)),
-        }
+    pub fn load_state(path: &str) -> Result<(State, usize), Error> {
+        let mut file = File::open(path.to_string())?;
+        let mut buffer = Vec::new();
+        let byte_read = file.read_to_end(&mut buffer)?;
+        let state = bincode::deserialize(&buffer)?; 
+        Ok((state, byte_read))
     }
 }
 

@@ -76,7 +76,7 @@ fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
     )
 }
 
-pub fn load_rom(path: String) -> Result<Rom, LoadRomError> {
+pub fn load_rom(path: &str) -> Result<Rom, LoadRomError> {
     let mut raw_bytes = Vec::new();
     let mut raw_rom = match File::open(path) {
         Ok(val) => val,
