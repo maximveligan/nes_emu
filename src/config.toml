@@ -1,4 +1,4 @@
-pixel_scale = 3
+pixel_scale = 5
 sprites_per_scanline = 8
 
 [ctrl1_layout]

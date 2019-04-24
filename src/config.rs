@@ -18,10 +18,10 @@ pub struct Config {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Overscan {
-    top: u8,
-    bottom: u8,
-    left: u8,
-    right: u8,
+    pub top: u8,
+    pub bottom: u8,
+    pub left: u8,
+    pub right: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

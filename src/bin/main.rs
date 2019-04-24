@@ -93,7 +93,6 @@ fn set_ctrl_state(
 }
 
 fn start_emulator(path_in: String, rom_name: String) {
-    println!("{}", toml::to_string(&Config::generate_config()).unwrap());
     let config = match Config::load_config("./config.toml".to_string()) {
         Ok(config) => config,
         Err(_e) => {
@@ -105,6 +104,8 @@ fn start_emulator(path_in: String, rom_name: String) {
     let sdl_ctrl1_map = ButtonLayout::make_ctrl_map(&config.ctrl1_layout);
     let sdl_ctrl2_map = ButtonLayout::make_ctrl_map(&config.ctrl2_layout);
 
+    let screen_height = SCREEN_HEIGHT as u32 - config.overscan.bottom as u32 - config.overscan.top as u32;
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -112,7 +113,7 @@ fn start_emulator(path_in: String, rom_name: String) {
         .window(
             "Nust",
             (SCREEN_WIDTH * config.pixel_scale) as u32,
-            (SCREEN_HEIGHT * config.pixel_scale) as u32,
+            screen_height * config.pixel_scale as u32,
         )
         .position_centered()
         .build()
@@ -131,7 +132,7 @@ fn start_emulator(path_in: String, rom_name: String) {
             PixelFormatEnum::RGB24,
             TextureAccess::Streaming,
             SCREEN_WIDTH as u32,
-            SCREEN_HEIGHT as u32,
+            screen_height,
         )
         .unwrap();
 
@@ -153,7 +154,7 @@ fn start_emulator(path_in: String, rom_name: String) {
             match nes.next_frame() {
                 Ok(framebuffer) => {
                     texture
-                        .update(None, framebuffer, SCREEN_WIDTH * 3)
+                        .update(None, &framebuffer[config.overscan.top as usize * 3 * SCREEN_WIDTH.. (SCREEN_WIDTH * SCREEN_HEIGHT - config.overscan.bottom as usize) * 3], SCREEN_WIDTH * 3)
                         .unwrap();
                     canvas.clear();
                     canvas.copy(&texture, None, None).unwrap();
