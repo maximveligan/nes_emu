@@ -106,10 +106,10 @@ impl NesEmulator {
     pub fn get_state(&self) -> State {
         State {
             ppu_state: self.cpu.mmu.ppu.get_state(),
-            screen_mode: self.cpu.mmu.mapper.borrow().rom.header.screen,
+            screen_mode: self.cpu.mmu.mapper.borrow().get_mirroring(),
             chr_ram: self.cpu.mmu.mapper.borrow().rom.chr_ram.clone(),
             cpu_regs: self.cpu.regs.clone(),
-            mapper: self.cpu.mmu.mapper.borrow().mem_type,
+            mapper: self.cpu.mmu.mapper.borrow().mem_type.clone(),
             ram: self.cpu.mmu.ram.clone(),
         }
     }

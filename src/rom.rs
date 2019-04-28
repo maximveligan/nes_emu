@@ -70,8 +70,9 @@ fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
                 prg_ram_size: if prg_ram_pgs != 0 {
                     PRG_RAM_PAGE_SIZE * prg_ram_pgs as usize
                 } else {
-                    0
+                    PRG_RAM_PAGE_SIZE as usize
                 },
+                prg_ram: Vec::new(),
                 chr_ram: if chr_pgs == 0 {
                     vec![0; CHR_RAM_PAGE_SIZE]
                 } else {
@@ -79,28 +80,6 @@ fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
                 },
             })
     )
-}
-
-fn check_invalid_rom(rom: &Rom) -> Result<(), LoadRomError> {
-    match rom.header.rom_type {
-        RomType::Nes2 => {
-            return Err(LoadRomError::Unsupported(
-                "Unsupported rom type NES2.0!".to_string(),
-            ));
-        }
-        _ => (),
-    }
-
-    match rom.header.region {
-        Region::PAL => {
-            return Err(LoadRomError::Unsupported(
-                "Unsupported region PAL!".to_string(),
-            ));
-        }
-        _ => (),
-    }
-
-    Ok(())
 }
 
 pub fn load_rom(path: &str) -> Result<Rom, Error> {
@@ -115,7 +94,7 @@ pub fn load_rom(path: &str) -> Result<Rom, Error> {
         }
     };
 
-    check_invalid_rom(&rom)?;
+    rom.check_invalid()?;
     Ok(rom)
 }
 
@@ -152,10 +131,39 @@ impl fmt::Debug for Header {
 
 pub struct Rom {
     pub prg_rom: Vec<u8>,
+    pub prg_ram: Vec<u8>,
     pub chr_rom: Vec<u8>,
     pub chr_ram: Vec<u8>,
     prg_ram_size: usize,
     pub header: Header,
+}
+
+impl Rom {
+    fn check_invalid(&self) -> Result<(), LoadRomError> {
+        match self.header.rom_type {
+            RomType::Nes2 => {
+                return Err(LoadRomError::Unsupported(
+                    "Unsupported rom type NES2.0!".to_string(),
+                ));
+            }
+            _ => (),
+        }
+
+        match self.header.region {
+            Region::PAL => {
+                return Err(LoadRomError::Unsupported(
+                    "Unsupported region PAL!".to_string(),
+                ));
+            }
+            _ => (),
+        }
+
+        Ok(())
+    }
+
+    pub fn fill_prg_ram(&mut self) {
+        self.prg_ram = vec![0u8; self.prg_ram_size];
+    }
 }
 
 impl fmt::Debug for Rom {
@@ -176,11 +184,18 @@ impl fmt::Debug for Rom {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ScreenMode {
     FourScreen,
     Vertical,
     Horizontal,
+    OneScreenSwap(ScreenBank),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ScreenBank {
+    Lower,
+    Upper,
 }
 
 #[derive(Debug)]

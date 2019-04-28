@@ -2,6 +2,7 @@ use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
 use rom::ScreenMode;
+use rom::ScreenBank;
 
 const VRAM_SIZE: usize = 0x800;
 const PALETTE_RAM_I: u16 = 0x3F00;
@@ -93,6 +94,13 @@ impl Vram {
                 NT_2...NT_3_END => (addr - 0x800) as usize,
                 _ => panic!("Vertical: addr outside of nt passed"),
             },
+            ScreenMode::OneScreenSwap(bank) => {
+                let addr = addr & 0x3FF;
+                match bank {
+                    ScreenBank::Lower => addr as usize,
+                    ScreenBank::Upper => addr as usize + 0x400,
+                }
+            }
             ScreenMode::FourScreen => {
                 unimplemented!("Four Screen mode not supported yet")
             }

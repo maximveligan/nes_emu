@@ -6,6 +6,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::TextureAccess;
 use sdl2::pixels::PixelFormatEnum;
+use sdl2::joystick::HatState;
 
 use std::collections::HashMap;
 use nes_emu::config::ButtonLayout;
@@ -114,6 +115,22 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
         - config.overscan.top as u32;
 
     let sdl_context = sdl2::init().unwrap();
+    //let joystick_subsystem = sdl_context.joystick().expect("Should work");
+
+    //let available = joystick_subsystem.num_joysticks()
+    //    .map_err(|e| format!("can't enumerate joysticks: {}", e)).expect("Should work");
+
+    //let _joystick = (0..available).find_map(|id| match joystick_subsystem.open(id) {
+    //    Ok(c) => {
+    //        println!("Success: opened \"{}\"", c.name());
+    //        Some(c)
+    //    },
+    //    Err(e) => {
+    //        println!("failed: {:?}", e);
+    //        None
+    //    },
+    //}).expect("Couldn't open any joystick");
+
     let video_subsystem = sdl_context.video().unwrap();
 
     let window = video_subsystem
@@ -209,7 +226,7 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
                         Ok(size) => {
                             println!("Wrote {} bytes", size);
                         }
-                        Err(_e) => panic!(),
+                        Err(e) => println!("Error saving state {}", e),
                     }
                 }
                 Event::KeyDown {
@@ -262,7 +279,83 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
                         false,
                     );
                 }
-                _ => {}
+                Event::JoyHatMotion{ state, .. } => {
+                    match state {
+                        HatState::Centered => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Up, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Down, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Left, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Right, false);
+                        }
+                        HatState::Up => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Left, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Right, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Up, true);
+                        }
+                        HatState::Right => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Down, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Up, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Right, true);
+                        }
+                        HatState::Down => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Left, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Right, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Down, true);
+                        }
+                        HatState::Left => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Down, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Up, false);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Left, true);
+                        }
+                        HatState::LeftUp => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Left, true);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Up, true);
+                        }
+                        HatState::LeftDown => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Left, true);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Down, true);
+                        }
+                        HatState::RightUp => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Right, true);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Up, true);
+                        }
+                        HatState::RightDown => {
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Right, true);
+                            nes.cpu.mmu.ctrl0.set_button_state(Button::Down, true);
+                        }
+                    }
+                }
+                Event::JoyButtonDown{ button_idx, .. } => {
+                    match button_idx {
+                        0 => println!("Y not bound"),
+                        1 => nes.cpu.mmu.ctrl0.set_button_state(Button::B, true),
+                        2 => nes.cpu.mmu.ctrl0.set_button_state(Button::A, true),
+                        3 => println!("X not bound"),
+                        4 => println!("not bound {}", 4),
+                        5 => println!("not bound {}", 5),
+                        6 => println!("not bound {}", 6),
+                        7 => println!("not bound {}", 7),
+                        8 => println!("not bound {}", 7),
+                        9 => println!("not bound {}", 7),
+                        _ => panic!("Can't get here"),
+                    }
+                }
+                Event::JoyButtonUp{ button_idx, .. } => {
+                    match button_idx {
+                        0 => println!("Y not bound"),
+                        1 => nes.cpu.mmu.ctrl0.set_button_state(Button::B, false),
+                        2 => nes.cpu.mmu.ctrl0.set_button_state(Button::A, false),
+                        3 => println!("X not bound"),
+                        4 => println!("not bound {}", 4),
+                        5 => println!("not bound {}", 5),
+                        6 => println!("not bound {}", 6),
+                        7 => println!("not bound {}", 7),
+                        8 => println!("not bound {}", 7),
+                        9 => println!("not bound {}", 7),
+                        _ => panic!("Can't get here"),
+                    }
+                }
+                _ => (),
             }
         }
     }
