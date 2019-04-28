@@ -3,12 +3,17 @@ use serde::Deserialize;
 use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
-use pregisters::PRegisters;
-use pregisters::VramAddr;
-use pregisters::Ctrl;
-use sprite::Sprite;
-use sprite::Priority;
-use vram::*;
+
+use ppu::pregisters::PRegisters;
+use ppu::pregisters::VramAddr;
+use ppu::pregisters::Ctrl;
+use ppu::sprite::Sprite;
+use ppu::sprite::Priority;
+use ppu::vram::*;
+
+pub mod sprite;
+pub mod vram;
+pub mod pregisters;
 
 const SPRITE_NUM: usize = 64;
 const SCREEN_WIDTH: usize = 256;

@@ -1,4 +1,4 @@
-use pregisters::Ctrl;
+use super::pregisters::Ctrl;
 
 const SPRITE_ATTR: usize = 4;
 

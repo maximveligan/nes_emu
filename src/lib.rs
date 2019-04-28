@@ -18,10 +18,7 @@ pub mod cpu_const;
 pub mod mapper;
 pub mod mmu;
 pub mod ppu;
-pub mod pregisters;
 pub mod rom;
-pub mod sprite;
-pub mod vram;
 
 use std::io::Write;
 use std::fs::File;

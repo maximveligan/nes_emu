@@ -3,3 +3,4 @@
 /nes_roms/
 /nes_rom_tests/
 Cargo.lock
+*.sav
