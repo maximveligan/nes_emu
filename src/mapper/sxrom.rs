@@ -129,7 +129,7 @@ impl Sxrom {
 
     fn get_chr_index(&self, addr: u16) -> usize {
         match self.ctrl.chr_rom_mode() as u8 {
-            0 => ((self.chr_bank_0 as u16 * 0x1000) + addr) as usize,
+            0 => (((self.chr_bank_0 & !1) as u16 * 0x1000) + addr) as usize,
             1 => match addr {
                 0x0000...0x0FFF => {
                     (self.chr_bank_0 as usize * 0x1000) + addr as usize

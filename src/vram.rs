@@ -95,7 +95,7 @@ impl Vram {
                 _ => panic!("Vertical: addr outside of nt passed"),
             },
             ScreenMode::OneScreenSwap(bank) => {
-                let addr = addr & 0x3FF;
+                let addr = addr % 0x400;
                 match bank {
                     ScreenBank::Lower => addr as usize,
                     ScreenBank::Upper => addr as usize + 0x400,

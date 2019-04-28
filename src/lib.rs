@@ -86,6 +86,7 @@ pub struct NesEmulator {
 
 impl NesEmulator {
     pub fn new(rom: Rom) -> NesEmulator {
+        println!("{:?}", rom);
         let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
         let cpu = Cpu::new(Mmu::new(
             Apu::new(),
