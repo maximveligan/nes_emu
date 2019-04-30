@@ -286,15 +286,15 @@ impl Ppu {
         }
     }
 
-    pub fn ld(&mut self, address: u16) -> u8 {
+    pub fn ld(&mut self, address: u16, open_bus: u8) -> u8 {
         match address {
-            0 => 0,
-            1 => 0,
+            0 => open_bus,
+            1 => open_bus,
             2 => self.read_ppustatus(),
-            3 => 0,
+            3 => open_bus,
             4 => self.oam[self.regs.oam_addr as usize],
-            5 => 0,
-            6 => 0,
+            5 => open_bus,
+            6 => open_bus,
             7 => self.read_ppudata(),
             _ => panic!("Somehow got to invalid register"),
         }

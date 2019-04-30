@@ -21,6 +21,7 @@ pub struct Mmu {
     pub mapper: Rc<RefCell<Mapper>>,
     pub ctrl0: Controller,
     pub ctrl1: Controller,
+    open_bus: u8,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -56,13 +57,17 @@ impl Mmu {
             mapper: mapper,
             ctrl0: Controller::new(),
             ctrl1: Controller::new(),
+            open_bus: 0,
         }
     }
 
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
             WRAM_START...WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START...PPU_END => self.ppu.store((address - 0x2000) & 7, val),
+            PPU_START...PPU_END => {
+                self.open_bus = val;
+                self.ppu.store((address - 0x2000) & 7, val);
+            }
             0x4016 => {
                 self.ctrl0.store(val);
                 self.ctrl1.store(val);
@@ -75,10 +80,23 @@ impl Mmu {
         }
     }
 
+    fn update_bus(&mut self, ppu_reg: u16, val: u8) {
+        match ppu_reg {
+            2 => self.open_bus = (self.open_bus & 0b11100000) | val,
+            7 => self.open_bus = val,
+            _ => (),
+        }
+    }
+
     pub fn ld8(&mut self, address: u16) -> u8 {
         match address {
             WRAM_START...WRAM_END => self.ram.load(address & 0x7FF),
-            PPU_START...PPU_END => self.ppu.ld((address - 0x2000) & 7),
+            PPU_START...PPU_END => {
+                let ppu_reg = (address - 0x2000) & 7;
+                let val = self.ppu.ld(ppu_reg, self.open_bus);
+                self.update_bus(ppu_reg, val);
+                val
+            }
             0x4015 => self.apu.load(address - 0x4000),
             0x4016 => self.ctrl0.ld8(),
             0x4017 => self.ctrl1.ld8(),
