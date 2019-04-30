@@ -164,9 +164,9 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
 
     let rom = match load_rom(path_in) {
         Ok(rom) => rom,
-        Err(_e) => {
+        Err(e) => {
             // TODO: This guy needs a proper formatter to print it
-            // println!("Error during rom parsing {}", e),
+            println!("Error during rom parsing {}", e);
             return;
         }
     };
