@@ -91,6 +91,7 @@ pub struct Cpu {
     cc: usize,
 }
 
+#[derive(Clone)]
 pub enum Mode {
     Imm,
     ZP,
@@ -469,6 +470,130 @@ impl Cpu {
         self.regs.pc.set_addr(addr);
     }
 
+    fn aac(&mut self, mode: Mode) {
+        let val = self.read_op(mode);
+        let acc = self.regs.acc;
+        self.regs.acc = acc & val;
+        self.set_zero_neg(self.regs.acc);
+        self.regs.flags.set_carry(self.regs.flags.neg());
+    }
+
+    fn aax(&mut self, mode: Mode) {
+        let addr = self.address_mem(mode);
+        let tmp = self.regs.acc & self.regs.x;
+        self.store(addr, tmp);
+    }
+
+    fn arr(&mut self, mode: Mode) {
+        let val = self.read_op(mode);
+        let mut new_acc = self.regs.acc & val;
+        new_acc >>= 1;
+        match (new_acc >> 5) & 0b11 {
+            0b00 => {
+                self.regs.flags.set_carry(false);
+                self.regs.flags.set_overflow(false);
+            }
+            0b01 => {
+                self.regs.flags.set_overflow(true);
+                self.regs.flags.set_carry(false);
+            }
+            0b10 => {
+                self.regs.flags.set_overflow(true);
+                self.regs.flags.set_carry(true);
+            }
+            0b11 => {
+                self.regs.flags.set_carry(true);
+                self.regs.flags.set_overflow(false);
+            }
+            _ => panic!("Matching on 2 bits, can't get other values"),
+        }
+        self.set_zero_neg(new_acc);
+        self.regs.acc = new_acc;
+    }
+
+    fn lax(&mut self, mode: Mode) {
+        let val = self.read_op(mode);
+        self.regs.acc = val;
+        self.regs.x = val;
+        self.set_zero_neg(val);
+    }
+
+    fn axs(&mut self, mode: Mode) {
+        let val = self.read_op(mode);
+        let tmp = self.regs.x & self.regs.acc;
+        let (tmp, carry) = tmp.overflowing_sub(val);
+        self.regs.flags.set_carry(carry);
+        self.regs.x = tmp;
+        self.set_zero_neg(tmp);
+    }
+
+    //TODO this is dec followed by cmp, refactor this to use those functions
+    fn dcp(&mut self, mode: Mode) {
+        let addr = self.address_mem(mode);
+        let val: u8 = self.mmu.ld8(addr).wrapping_sub(1);
+        self.set_zero_neg(val);
+        self.store(addr, val);
+        let tmp = self.regs.acc as i16 - val as i16;
+        self.regs.flags.set_carry(tmp >= 0);
+        self.set_zero_neg(tmp as u8);
+    }
+
+    //TODO This one can also probably be refactored
+    fn isc(&mut self, mode: Mode) {
+        let addr = self.address_mem(mode);
+        let val: u8 = self.mmu.ld8(addr).wrapping_add(1);
+        self.set_zero_neg(val);
+        self.store(addr, val);
+        self.adc_val(val ^ 0xFF);
+    }
+
+    //TODO same as this one
+    fn slo(&mut self, mode: Mode) {
+        let addr = self.address_mem(mode);
+        let val = self.mmu.ld8(addr);
+        self.regs.flags.set_carry((val >> 7) != 0);
+        let tmp = val << 1;
+        self.store(addr, tmp);
+
+        let tmp = self.regs.acc | tmp;
+        self.set_zero_neg(tmp);
+        self.regs.acc = tmp;
+    }
+
+    fn rla(&mut self, mode: Mode) {
+        let addr = self.address_mem(mode);
+        let (tmp, n_flag) =
+            Cpu::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr));
+        self.regs.flags.set_carry(n_flag);
+        self.store(addr, tmp);
+
+        let tmp = self.regs.acc & tmp;
+        self.set_zero_neg(tmp);
+        self.regs.acc = tmp;
+    }
+
+    fn sre(&mut self, mode: Mode) {
+        let addr = self.address_mem(mode);
+        let val = self.mmu.ld8(addr);
+        self.regs.flags.set_carry((val & 0b01) != 0);
+        let tmp = val >> 1;
+        self.store(addr, tmp);
+
+        let tmp = self.regs.acc ^ tmp;
+        self.set_zero_neg(tmp);
+        self.regs.acc = tmp;
+    }
+
+    fn rra(&mut self, mode: Mode) {
+        let addr = self.address_mem(mode);
+        let (tmp, n_flag) =
+            Cpu::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr));
+        self.regs.flags.set_carry(n_flag);
+        self.set_zero_neg(tmp);
+        self.store(addr, tmp);
+        self.adc_val(tmp);
+    }
+
     fn push(&mut self, val: u8) {
         let addr = self.regs.sp as u16 | 0x100;
         self.store(addr, val);
@@ -510,10 +635,10 @@ impl Cpu {
         self.cycle_count += CYCLES[byte as usize] as u16;
         self.execute_op(byte);
         let tmp = self.cycle_count;
-        // let regs = self.regs.clone();
+        //let regs = self.regs.clone();
         // TODO: Use logging properly here
-        // println!("{:?} CYC:{}", regs, self.cc);
-        // self.cc += tmp as usize;
+        //println!("{:?} CYC:{}", regs, self.cc);
+        //self.cc += tmp as usize;
         self.cycle_count = 0;
         tmp
     }
@@ -536,7 +661,7 @@ impl Cpu {
             INC_ZPX => self.inc(Mode::ZPX),
             INC_ABS => self.inc(Mode::Abs),
             INC_ZP => self.inc(Mode::ZP),
-            SBC_IMM => self.sbc(Mode::Imm),
+            SBC_IMM | 0xEB => self.sbc(Mode::Imm),
             SBC_ABSX => self.sbc(Mode::AbsX),
             SBC_ABSY => self.sbc(Mode::AbsY),
             SBC_ABS => self.sbc(Mode::Abs),
@@ -648,6 +773,62 @@ impl Cpu {
             ASL_ZP => self.asl_addr(Mode::ZP),
             ASL_ZPX => self.asl_addr(Mode::ZPX),
             ASL_ACC => self.asl_acc(),
+            0x0B | 0x2B => self.aac(Mode::Imm),
+            0x87 => self.aax(Mode::ZP),
+            0x97 => self.aax(Mode::ZPY),
+            0x83 => self.aax(Mode::IndX),
+            0x8F => self.aax(Mode::Abs),
+            0x6B => self.arr(Mode::Imm),
+            0xA7 => self.lax(Mode::ZP),
+            0xB7 => self.lax(Mode::ZPY),
+            0xAF => self.lax(Mode::Abs),
+            0xBF => self.lax(Mode::AbsY),
+            0xA3 => self.lax(Mode::IndX),
+            0xB3 => self.lax(Mode::IndY),
+            0xCB => self.axs(Mode::Imm),
+            0xC7 => self.dcp(Mode::ZP),
+            0xD7 => self.dcp(Mode::ZPX),
+            0xCF => self.dcp(Mode::Abs),
+            0xDF => self.dcp(Mode::NoPBAbsX),
+            0xDB => self.dcp(Mode::NoPBAbsY),
+            0xC3 => self.dcp(Mode::IndX),
+            0xD3 => self.dcp(Mode::NoPBIndY),
+            0xE7 => self.isc(Mode::ZP),
+            0xF7 => self.isc(Mode::ZPX),
+            0xEF => self.isc(Mode::Abs),
+            0xFF => self.isc(Mode::NoPBAbsX),
+            0xFB => self.isc(Mode::NoPBAbsY),
+            0xE3 => self.isc(Mode::IndX),
+            0xF3 => self.isc(Mode::NoPBIndY),
+            0x07 => self.slo(Mode::ZP),
+            0x17 => self.slo(Mode::ZPX),
+            0x0F => self.slo(Mode::Abs),
+            0x1F => self.slo(Mode::NoPBAbsX),
+            0x1B => self.slo(Mode::NoPBAbsY),
+            0x03 => self.slo(Mode::IndX),
+            0x13 => self.slo(Mode::NoPBIndY),
+            0x27 => self.rla(Mode::ZP),
+            0x37 => self.rla(Mode::ZPX),
+            0x2F => self.rla(Mode::Abs),
+            0x3F => self.rla(Mode::NoPBAbsX),
+            0x3B => self.rla(Mode::NoPBAbsY),
+            0x23 => self.rla(Mode::IndX),
+            0x33 => self.rla(Mode::NoPBIndY),
+            0x47 => self.sre(Mode::ZP),
+            0x57 => self.sre(Mode::ZPX),
+            0x4F => self.sre(Mode::Abs),
+            0x5F => self.sre(Mode::NoPBAbsX),
+            0x5B => self.sre(Mode::NoPBAbsY),
+            0x53 => self.sre(Mode::NoPBIndY),
+            0x43 => self.sre(Mode::IndX),
+            0x67 => self.rra(Mode::ZP),
+            0x77 => self.rra(Mode::ZPX),
+            0x6F => self.rra(Mode::Abs),
+            0x7F => self.rra(Mode::NoPBAbsX),
+            0x7B => self.rra(Mode::NoPBAbsY),
+            0x63 => self.rra(Mode::IndX),
+            0x73 => self.rra(Mode::NoPBIndY),
+
             RTS => {
                 self.pull_pc();
                 self.regs.pc.add_unsigned(1);
@@ -792,7 +973,7 @@ impl Cpu {
                 self.regs.pc.set_addr(addr);
             }
             JMP_IND => self.jmp(Mode::JmpIndir),
-            _ => panic!("Unsupported op {:X}", op),
+            _ => panic!("Unsupported op {:X} {:?}", op, self.regs),
         }
     }
 }

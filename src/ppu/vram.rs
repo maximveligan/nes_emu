@@ -5,8 +5,6 @@ use rom::ScreenMode;
 use rom::ScreenBank;
 
 const VRAM_SIZE: usize = 0x800;
-const PALETTE_RAM_I: u16 = 0x3F00;
-const PALETTE_MIRROR_END: u16 = 0x3FFF;
 
 const NT_0: u16 = 0x000;
 const NT_0_END: u16 = 0x3FF;
@@ -41,40 +39,16 @@ impl Vram {
         match addr {
             0x0000...0x1FFF => self.mapper.borrow_mut().ld_chr(addr),
             0x2000...0x3EFF => self.vram[self.nt_mirror(addr & 0xFFF)],
-            PALETTE_RAM_I...PALETTE_MIRROR_END => {
-                if addr == 0x3F10
-                    || addr == 0x3F14
-                    || addr == 0x3F18
-                    || addr == 0x3F1C
-                {
-                    self.palette[(addr & 0x0F) as usize]
-                } else {
-                    self.palette[(addr & 0x1F) as usize]
-                }
-            }
+            0x3F00...0x3FFF => self.palette[self.palette_mirror(addr)],
             _ => panic!(),
         }
     }
 
     pub fn store(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000...0x1FFF => {
-                self.mapper.borrow_mut().store_chr(addr, val);
-            }
-            0x2000...0x3EFF => {
-                self.vram[self.nt_mirror(addr & 0xFFF)] = val;
-            }
-            PALETTE_RAM_I...PALETTE_MIRROR_END => {
-                if addr == 0x3F10
-                    || addr == 0x3F14
-                    || addr == 0x3F18
-                    || addr == 0x3F1C
-                {
-                    self.palette[(addr & 0x0F) as usize] = val;
-                } else {
-                    self.palette[(addr & 0x1F) as usize] = val;
-                }
-            }
+            0x0000...0x1FFF => self.mapper.borrow_mut().store_chr(addr, val),
+            0x2000...0x3EFF => self.vram[self.nt_mirror(addr & 0xFFF)] = val,
+            0x3F00...0x3FFF => self.palette[self.palette_mirror(addr)] = val,
             _ => panic!(),
         }
     }
@@ -95,7 +69,7 @@ impl Vram {
                 _ => panic!("Vertical: addr outside of nt passed"),
             },
             ScreenMode::OneScreenSwap(bank) => {
-                let addr = addr % 0x400;
+                let addr = addr & 0x3FF;
                 match bank {
                     ScreenBank::Lower => addr as usize,
                     ScreenBank::Upper => addr as usize + 0x400,
@@ -104,6 +78,14 @@ impl Vram {
             ScreenMode::FourScreen => {
                 unimplemented!("Four Screen mode not supported yet")
             }
+        }
+    }
+
+    fn palette_mirror(&self, addr: u16) -> usize {
+        let addr = (addr as usize) & 0x1F;
+        match (addr as usize) % 32 {
+            0x10 | 0x14 | 0x18 | 0x1C => addr & 0xF,
+            _ => addr,
         }
     }
 }

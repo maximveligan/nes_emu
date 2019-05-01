@@ -276,7 +276,7 @@ impl Ppu {
     }
 
     fn get_palette_color(&self, vram_offset: u8) -> Rgb {
-        let pal_index = self.vram.ld8(0x3F00 + vram_offset as u16);
+        let pal_index = (self.vram.ld8(0x3F00 + vram_offset as u16)) & 0x3F;
         Rgb {
             data: [
                 PALETTE[pal_index as usize * 3],
@@ -448,7 +448,6 @@ impl Ppu {
             if !sprite.in_bounding_box(
                 x,
                 self.scanline as u8,
-                self.regs.mask.left8_bg(),
             ) {
                 continue;
             }
@@ -467,8 +466,13 @@ impl Ppu {
                 continue;
             }
 
-            if sprite.index == 0 && bg_opaque {
+            if sprite.index == 0 && bg_opaque && sprite.x != 255 && !(
+                (sprite.x == 0) && (!self.regs.mask.left8_sprite())) {
                 self.regs.status.set_sprite_0_hit(true);
+            }
+
+            if sprite.x < 8 && !self.regs.mask.left8_sprite() {
+                continue;
             }
 
             let sprite_color =

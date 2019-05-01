@@ -86,10 +86,10 @@ impl Sxrom {
                     match address {
                         0x8000...0x9FFF => self.ctrl = Ctrl(val),
                         0xA000...0xBFFF => {
-                            self.chr_bank_0 = (val & 0b11111) as usize
+                            self.chr_bank_0 = (val & 0b11111) as usize % 8;
                         }
                         0xC000...0xDFFF => {
-                            self.chr_bank_1 = (val & 0b11111) as usize
+                            self.chr_bank_1 = (val & 0b11111) as usize % 8;
                         }
                         0xE000...0xFFFF => {
                             self.prg_bank = (val & 0b1111) as usize;

@@ -16,11 +16,14 @@ impl Unrom {
     pub fn store_prg(&mut self, address: u16, val: u8) {
         if address >= 0x8000 {
             self.bank_select = val & 0b111;
+        } else {
+            println!("Writing to unmapped prg_rom {:X}", address);
         }
     }
 
     pub fn ld_prg(&self, address: u16, prg_rom: &Vec<u8>) -> u8 {
         if address < 0x8000 {
+            println!("Reading from unmapped prg_rom {:X}", address);
             0
         // Bank switched using 3 bits
         } else if address < 0xC000 {
