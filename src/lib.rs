@@ -62,13 +62,13 @@ pub enum StateFileError {
 }
 
 impl State {
-    pub fn save_state(&self, save_name: &str) -> Result<usize, Error> {
+    pub fn save(&self, save_name: &str) -> Result<usize, Error> {
         let bytes = bincode::serialize(&self)?;
         let mut buffer = File::create(save_name.to_string())?;
         Ok(buffer.write(&bytes)?)
     }
 
-    pub fn load_state(path: &str) -> Result<(State, usize), Error> {
+    pub fn load(path: &str) -> Result<(State, usize), Error> {
         let mut file = File::open(path.to_string())?;
         let mut buffer = Vec::new();
         let byte_read = file.read_to_end(&mut buffer)?;
