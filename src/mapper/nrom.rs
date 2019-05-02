@@ -10,12 +10,14 @@ const SIXTEEN_KB: usize = 0x4000;
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct Nrom {
     mirrored: bool,
+    use_chr_ram: bool,
 }
 
 impl Nrom {
-    pub fn new(prg_rom_size: usize) -> Nrom {
+    pub fn new(prg_rom_size: usize, use_chr_ram: bool) -> Nrom {
         Nrom {
             mirrored: prg_rom_size <= SIXTEEN_KB,
+            use_chr_ram,
         }
     }
 
@@ -29,7 +31,17 @@ impl Nrom {
         }
     }
 
-    pub fn ld_chr(&self, address: u16, chr_rom: &Vec<u8>) -> u8 {
-        chr_rom[address as usize]
+    pub fn ld_chr(&self, address: u16, chr_rom: &Vec<u8>, chr_ram: &Vec<u8>) -> u8 {
+        if self.use_chr_ram {
+            chr_ram[address as usize]
+        } else {
+            chr_rom[address as usize]
+        }
+    }
+
+    pub fn store_chr(&mut self, address: u16, val: u8, chr_ram: &mut Vec<u8>) {
+        if self.use_chr_ram {
+            chr_ram[address as usize] = val;
+        }
     }
 }

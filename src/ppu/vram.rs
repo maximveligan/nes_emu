@@ -19,6 +19,7 @@ pub struct Vram {
     pub vram: Box<[u8]>,
     mapper: Rc<RefCell<Mapper>>,
     pub palette: [u8; 0x20],
+    ppudata_buff: u8,
 }
 
 impl Vram {
@@ -27,12 +28,24 @@ impl Vram {
             vram: Box::new([0; VRAM_SIZE]),
             mapper: mapper,
             palette: [0; 0x20],
+            ppudata_buff: 0,
         }
     }
 
     pub fn reset(&mut self) {
         self.vram = Box::new([0; VRAM_SIZE]);
         self.palette = [0; 0x20];
+    }
+
+    pub fn buffered_ld8(&mut self, addr: u16) -> u8 {
+        if addr < 0x3F00 {
+            let val = self.ppudata_buff;
+            self.ppudata_buff = self.ld8(addr);
+            val
+        } else {
+            self.ppudata_buff = self.vram[self.nt_mirror(addr & 0xFFF)];
+            self.ld8(addr)
+        }
     }
 
     pub fn ld8(&self, addr: u16) -> u8 {

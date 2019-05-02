@@ -25,7 +25,10 @@ pub enum MemType {
 impl Mapper {
     pub fn from_rom(mut rom: Rom) -> Mapper {
         let mem_type = match rom.header.mapper {
-            0 => MemType::Nrom(Nrom::new(rom.prg_rom.len())),
+            0 => {
+                let use_chr_ram = rom.chr_ram.len() != 0;
+                MemType::Nrom(Nrom::new(rom.prg_rom.len(), use_chr_ram))
+            }
             1 => {
                 rom.fill_prg_ram();
                 let use_chr_ram = rom.chr_ram.len() != 0;
@@ -51,7 +54,7 @@ impl Mapper {
 
     pub fn ld_chr(&self, addr: u16) -> u8 {
         match self.mem_type {
-            MemType::Nrom(ref nrom) => nrom.ld_chr(addr, &self.rom.chr_rom),
+            MemType::Nrom(ref nrom) => nrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram),
             MemType::Unrom(ref unrom) => unrom.ld_chr(addr, &self.rom.chr_ram),
             MemType::Sxrom(ref sxrom) => sxrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram),
         }
@@ -69,7 +72,7 @@ impl Mapper {
         match self.mem_type {
              MemType::Unrom(ref mut unrom) => unrom.store_chr(addr, val, &mut self.rom.chr_ram),
              MemType::Sxrom(ref mut sxrom) => sxrom.store_chr(addr, val, &mut self.rom.chr_ram),
-             _ => ()
+             MemType::Nrom(ref mut nrom) => nrom.store_chr(addr, val, &mut self.rom.chr_ram),
         }
     }
 

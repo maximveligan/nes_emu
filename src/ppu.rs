@@ -149,7 +149,6 @@ pub struct PpuState {
     cc: u16,
     scanline: u16,
     write_latch: bool,
-    ppudata_buff: u8,
     t_addr: VramAddr,
     trip_nmi: bool,
     vblank_off: bool,
@@ -172,7 +171,6 @@ pub struct Ppu {
     // are on
     write_latch: bool,
     // Data buff is used for the 1 byte delay when reading data from port 7
-    ppudata_buff: u8,
     // Temporary address used to reload x and y scroll values and also for
     // intermediary storage for writes to port 5
     t_addr: VramAddr,
@@ -204,7 +202,6 @@ impl Ppu {
             cc: 0,
             scanline: 0,
             write_latch: false,
-            ppudata_buff: 0,
             fine_x: 0,
             t_addr: VramAddr(0),
             at_entry: 0,
@@ -221,7 +218,6 @@ impl Ppu {
             cc: self.cc,
             scanline: self.scanline,
             write_latch: self.write_latch,
-            ppudata_buff: self.ppudata_buff,
             t_addr: self.t_addr,
             trip_nmi: self.trip_nmi,
             vblank_off: self.vblank_off,
@@ -237,7 +233,6 @@ impl Ppu {
         self.cc = ppu_state.cc;
         self.scanline = ppu_state.scanline;
         self.write_latch = ppu_state.write_latch;
-        self.ppudata_buff = ppu_state.ppudata_buff;
         self.t_addr = ppu_state.t_addr;
         self.trip_nmi = ppu_state.trip_nmi;
         self.vblank_off = ppu_state.vblank_off;
@@ -256,7 +251,6 @@ impl Ppu {
         self.cc = 0;
         self.scanline = 0;
         self.write_latch = false;
-        self.ppudata_buff = 0;
         self.fine_x = 0;
         self.t_addr = VramAddr(0);
         self.at_entry = 0;
@@ -310,15 +304,9 @@ impl Ppu {
 
     fn read_ppudata(&mut self) -> u8 {
         let addr = self.regs.addr.addr();
-        let val = self.vram.ld8(addr);
+        let val = self.vram.buffered_ld8(addr);
         self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
-        if addr < 0x3F00 {
-            let buff_val = self.ppudata_buff;
-            self.ppudata_buff = val;
-            buff_val
-        } else {
-            val
-        }
+        val
     }
 
     pub fn store(&mut self, address: u16, val: u8) {
