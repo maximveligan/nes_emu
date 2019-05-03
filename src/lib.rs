@@ -11,7 +11,6 @@ extern crate bitfield;
 extern crate failure;
 
 pub mod apu;
-pub mod config;
 pub mod controller;
 pub mod cpu;
 pub mod cpu_const;
@@ -19,6 +18,7 @@ pub mod mapper;
 pub mod mmu;
 pub mod ppu;
 pub mod rom;
+pub mod config;
 
 use std::io::Write;
 use std::fs::File;

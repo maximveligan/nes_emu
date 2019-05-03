@@ -6,16 +6,14 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::TextureAccess;
 use sdl2::pixels::PixelFormatEnum;
-use sdl2::joystick::HatState;
+// use sdl2::joystick::HatState;
 
 use std::collections::HashMap;
 use nes_emu::config::ButtonLayout;
 use nes_emu::config::Config;
 use nes_emu::controller::Button;
-use nes_emu::controller::Controller;
 use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
-use nes_emu::State;
 
 use std::env;
 
@@ -43,84 +41,154 @@ fn main() {
     }
 }
 
-fn keycode_to_str(keycode: Keycode) -> Option<String> {
-    match keycode {
-        Keycode::A => Some("A".to_string()),
-        Keycode::B => Some("B".to_string()),
-        Keycode::C => Some("C".to_string()),
-        Keycode::D => Some("D".to_string()),
-        Keycode::E => Some("E".to_string()),
-        Keycode::F => Some("F".to_string()),
-        Keycode::G => Some("G".to_string()),
-        Keycode::H => Some("H".to_string()),
-        Keycode::I => Some("I".to_string()),
-        Keycode::J => Some("J".to_string()),
-        Keycode::K => Some("K".to_string()),
-        Keycode::L => Some("L".to_string()),
-        Keycode::M => Some("M".to_string()),
-        Keycode::N => Some("N".to_string()),
-        Keycode::O => Some("O".to_string()),
-        Keycode::P => Some("P".to_string()),
-        Keycode::Q => Some("Q".to_string()),
-        Keycode::R => Some("R".to_string()),
-        Keycode::S => Some("S".to_string()),
-        Keycode::T => Some("T".to_string()),
-        Keycode::U => Some("U".to_string()),
-        Keycode::V => Some("V".to_string()),
-        Keycode::W => Some("W".to_string()),
-        Keycode::X => Some("X".to_string()),
-        Keycode::Y => Some("Y".to_string()),
-        Keycode::Z => Some("Z".to_string()),
-        Keycode::Left => Some("Left".to_string()),
-        Keycode::Up => Some("Up".to_string()),
-        Keycode::Right => Some("Right".to_string()),
-        Keycode::Down => Some("Down".to_string()),
-        Keycode::LShift => Some("LShift".to_string()),
-        Keycode::RShift => Some("RShift".to_string()),
-        Keycode::Return => Some("Enter".to_string()),
-        _ => None,
-    }
+struct NesFrontEnd {
+    nes: NesEmulator,
+    pause: bool,
+    ctrl0: HashMap<Keycode, Button>,
+    ctrl1: HashMap<Keycode, Button>,
+    save_name: String,
 }
 
-fn set_ctrl_state(
-    key: Keycode,
-    ctrl: &mut Controller,
-    button_map: &HashMap<String, Button>,
-    state: bool,
-) {
-    match keycode_to_str(key) {
-        Some(key) => match button_map.get(&key) {
-            Some(button) => ctrl.set_button_state(*button, state),
-            None => (),
-        },
-        None => (),
-    }
+enum EventRes {
+    SaveState(String),
+    LoadState(String),
+    Quit,
 }
 
-fn save_state(state: &State, name: &str) -> String {
-    match state.save(&name) {
-        Ok(size) => format!("Wrote {} bytes", size),
-        Err(e) => format!("Error saving state {}", e),
-    }
-}
-
-fn load_state(nes: &mut NesEmulator, name: &str) -> String {
-    match nes_emu::State::load(&name) {
-        Ok((state, size_read)) => match nes.load_state(state) {
-            Ok(()) => {
-                format!("Loaded state successfully, {} bytes read", size_read)
+impl NesFrontEnd {
+    fn handle_event(&mut self, event: sdl2::event::Event) -> Option<EventRes> {
+        match event {
+            Event::Quit { .. }
+            | Event::KeyDown {
+                keycode: Some(Keycode::Escape),
+                ..
+            } => Some(EventRes::Quit),
+            Event::KeyDown {
+                keycode: Some(Keycode::P),
+                ..
+            } => {
+                self.switch_pause();
+                None
             }
-            Err(e) => format!("Emulator could not load state: {}", e),
-        },
-        Err(e) => {
-            format!("Loading state from file failed: {}. Filename: {}", e, name)
+            Event::KeyDown {
+                keycode: Some(Keycode::R),
+                ..
+            } => {
+                self.nes.reset();
+                None
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::Q),
+                ..
+            } => Some(EventRes::SaveState(self.save_state())),
+            Event::KeyDown {
+                keycode: Some(Keycode::E),
+                ..
+            } => Some(EventRes::LoadState(self.load_state())),
+            Event::KeyDown {
+                keycode: Some(key), ..
+            } => {
+                self.set_ctrl0_state(key, true);
+                self.set_ctrl1_state(key, true);
+                None
+            }
+            Event::KeyUp {
+                keycode: Some(key), ..
+            } => {
+                self.set_ctrl0_state(key, false);
+                self.set_ctrl1_state(key, false);
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn set_ctrl0_state(&mut self, key: Keycode, state: bool) {
+        if let Some(button) = self.ctrl0.get(&key) {
+            self.nes.cpu.mmu.ctrl0.set_button_state(*button, state);
+        }
+    }
+
+    fn set_ctrl1_state(&mut self, key: Keycode, state: bool) {
+        if let Some(button) = self.ctrl1.get(&key) {
+            self.nes.cpu.mmu.ctrl1.set_button_state(*button, state);
+        }
+    }
+
+    fn switch_pause(&mut self) {
+        self.pause = !self.pause;
+    }
+
+    fn save_state(&mut self) -> String {
+        match self.nes.get_state().save(&self.save_name) {
+            Ok(size) => format!("Wrote {} bytes", size),
+            Err(e) => format!("Error saving state {}", e),
+        }
+    }
+
+    fn load_state(&mut self) -> String {
+        match nes_emu::State::load(&self.save_name) {
+            Ok((state, size_read)) => match self.nes.load_state(state) {
+                Ok(()) => format!(
+                    "Loaded state successfully, {} bytes read",
+                    size_read
+                ),
+                Err(e) => format!("Emulator could not load state: {}", e),
+            },
+            Err(e) => format!(
+                "Loading state from file failed: {}. Filename: {}",
+                e, self.save_name
+            ),
         }
     }
 }
 
-fn switch_pause(pause: &mut bool) {
-    *pause = !*pause;
-}
+// fn hatstate_handler(ctrl: &mut Controller, state: HatState) {
+//     match state {
+//         HatState::Centered => {
+//             ctrl.set_button_state(Button::Up, false);
+//             ctrl.set_button_state(Button::Down, false);
+//             ctrl.set_button_state(Button::Left, false);
+//             ctrl.set_button_state(Button::Right, false);
+//         }
+//         HatState::Up => {
+//             ctrl.set_button_state(Button::Left, false);
+//             ctrl.set_button_state(Button::Right, false);
+//             ctrl.set_button_state(Button::Up, true);
+//         }
+//         HatState::Right => {
+//             ctrl.set_button_state(Button::Down, false);
+//             ctrl.set_button_state(Button::Up, false);
+//             ctrl.set_button_state(Button::Right, true);
+//         }
+//         HatState::Down => {
+//             ctrl.set_button_state(Button::Left, false);
+//             ctrl.set_button_state(Button::Right, false);
+//             ctrl.set_button_state(Button::Down, true);
+//         }
+//         HatState::Left => {
+//             ctrl.set_button_state(Button::Down, false);
+//             ctrl.set_button_state(Button::Up, false);
+//             ctrl.set_button_state(Button::Left, true);
+//         }
+//         HatState::LeftUp => {
+//             ctrl.set_button_state(Button::Left, true);
+//             ctrl.set_button_state(Button::Up, true);
+//         }
+//         HatState::LeftDown => {
+//             ctrl.set_button_state(Button::Left, true);
+//             ctrl.set_button_state(Button::Down, true);
+//         }
+//         HatState::RightUp => {
+//             ctrl.set_button_state(Button::Right, true);
+//             ctrl.set_button_state(Button::Up, true);
+//         }
+//         HatState::RightDown => {
+//             ctrl.set_button_state(Button::Right, true);
+//             ctrl.set_button_state(Button::Down, true);
+//         }
+//     }
+// }
 
 fn start_emulator(path_in: &str, rom_stem: &str) {
     let mut state_name = rom_stem.to_string();
@@ -132,40 +200,60 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
             return;
         }
     };
-    let mut pause = false;
-    let sdl_ctrl1_map = ButtonLayout::make_ctrl_map(&config.ctrl1_layout);
-    let sdl_ctrl2_map = ButtonLayout::make_ctrl_map(&config.ctrl2_layout);
+    let sdl_ctrl0_map = match ButtonLayout::make_ctrl_map(&config.ctrl1_layout)
+    {
+        Ok(map) => map,
+        Err(e) => {
+            println!("Error occured while generating controller map 1 {}", e);
+            return;
+        }
+    };
+
+    let sdl_ctrl1_map = match ButtonLayout::make_ctrl_map(&config.ctrl2_layout)
+    {
+        Ok(map) => map,
+        Err(e) => {
+            println!("Error occured while generating controller map 2 {}", e);
+            return;
+        }
+    };
 
     let screen_height = SCREEN_HEIGHT as u32
         - config.overscan.bottom as u32
         - config.overscan.top as u32;
 
     let sdl_context = sdl2::init().unwrap();
-    let joystick_subsystem = sdl_context.joystick().expect("Should work");
+    //let joystick_subsystem = sdl_context.joystick().expect("Should work");
 
-    let available = joystick_subsystem
-        .num_joysticks()
-        .map_err(|e| format!("can't enumerate joysticks: {}", e))
-        .expect("Should work");
+    //let joystick0 = match joystick_subsystem.open(0) {
+    //    Ok(c) => {
+    //        println!("Success: opened \"{}\"", c.name());
+    //        Some(c)
+    //    }
+    //    Err(e) => {
+    //        println!("failed: {:?}", e);
+    //        None
+    //    }
+    //}
+    //.expect("Couldn't open any joystick");
 
-    (0..available)
-        .find_map(|id| match joystick_subsystem.open(id) {
-            Ok(c) => {
-                println!("Success: opened \"{}\"", c.name());
-                Some(c)
-            }
-            Err(e) => {
-                println!("failed: {:?}", e);
-                None
-            }
-        })
-        .expect("Couldn't open any joystick");
+    //let joystick1 = match joystick_subsystem.open(1) {
+    //    Ok(c) => {
+    //        println!("Success: opened \"{}\"", c.name());
+    //        Some(c)
+    //    }
+    //    Err(e) => {
+    //        println!("failed: {:?}", e);
+    //        None
+    //    }
+    //}
+    //.expect("Couldn't open any joystick");
 
     let video_subsystem = sdl_context.video().unwrap();
 
     let window = video_subsystem
         .window(
-            "Nust",
+            "Res",
             (SCREEN_WIDTH * config.pixel_scale) as u32,
             screen_height * config.pixel_scale as u32,
         )
@@ -195,17 +283,22 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
     let rom = match load_rom(path_in) {
         Ok(rom) => rom,
         Err(e) => {
-            // TODO: This guy needs a proper formatter to print it
             println!("Error during rom parsing {}", e);
             return;
         }
     };
 
-    let mut nes = NesEmulator::new(rom);
+    let mut nes_frontend = NesFrontEnd {
+        nes: NesEmulator::new(rom),
+        pause: false,
+        ctrl0: sdl_ctrl0_map,
+        ctrl1: sdl_ctrl1_map,
+        save_name: state_name,
+    };
 
     loop {
-        if !pause {
-            match nes.next_frame() {
+        if !nes_frontend.pause {
+            match nes_frontend.nes.next_frame() {
                 Ok(framebuffer) => {
                     texture
                         .update(
@@ -228,161 +321,121 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
         }
 
         for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. } => return,
-
-                Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => return,
-                Event::KeyDown {
-                    keycode: Some(Keycode::P),
-                    ..
-                } => switch_pause(&mut pause),
-                Event::KeyDown {
-                    keycode: Some(Keycode::R),
-                    ..
-                } => {
-                    nes.reset();
+            if let Some(result) = nes_frontend.handle_event(event) {
+                match result {
+                    EventRes::SaveState(r) | EventRes::LoadState(r) => {
+                        println!("{}", r)
+                    }
+                    EventRes::Quit => return,
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Q),
-                    ..
-                } => {
-                    println!("{}", save_state(&nes.get_state(), &state_name));
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::E),
-                    ..
-                } => {
-                    println!("{}", load_state(&mut nes, &state_name));
-                }
-                Event::KeyDown {
-                    keycode: Some(key), ..
-                } => {
-                    set_ctrl_state(
-                        key,
-                        &mut nes.cpu.mmu.ctrl0,
-                        &sdl_ctrl1_map,
-                        true,
-                    );
-                    set_ctrl_state(
-                        key,
-                        &mut nes.cpu.mmu.ctrl1,
-                        &sdl_ctrl2_map,
-                        true,
-                    );
-                }
-                Event::KeyUp {
-                    keycode: Some(key), ..
-                } => {
-                    set_ctrl_state(
-                        key,
-                        &mut nes.cpu.mmu.ctrl0,
-                        &sdl_ctrl1_map,
-                        false,
-                    );
-                    set_ctrl_state(
-                        key,
-                        &mut nes.cpu.mmu.ctrl1,
-                        &sdl_ctrl2_map,
-                        false,
-                    );
-                }
-                Event::JoyHatMotion { state, .. } => match state {
-                    HatState::Centered => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Up, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Down, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Left, false);
-                        nes.cpu
-                            .mmu
-                            .ctrl0
-                            .set_button_state(Button::Right, false);
-                    }
-                    HatState::Up => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Left, false);
-                        nes.cpu
-                            .mmu
-                            .ctrl0
-                            .set_button_state(Button::Right, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Up, true);
-                    }
-                    HatState::Right => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Down, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Up, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Right, true);
-                    }
-                    HatState::Down => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Left, false);
-                        nes.cpu
-                            .mmu
-                            .ctrl0
-                            .set_button_state(Button::Right, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Down, true);
-                    }
-                    HatState::Left => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Down, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Up, false);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Left, true);
-                    }
-                    HatState::LeftUp => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Left, true);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Up, true);
-                    }
-                    HatState::LeftDown => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Left, true);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Down, true);
-                    }
-                    HatState::RightUp => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Right, true);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Up, true);
-                    }
-                    HatState::RightDown => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Right, true);
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Down, true);
-                    }
-                },
-                Event::JoyButtonDown { button_idx, .. } => match button_idx {
-                    0 => println!("Y not bound"),
-                    1 => nes.cpu.mmu.ctrl0.set_button_state(Button::B, true),
-                    2 => nes.cpu.mmu.ctrl0.set_button_state(Button::A, true),
-                    3 => println!("X not bound"),
-                    4 => println!(
-                        "{}",
-                        save_state(&nes.get_state(), &state_name)
-                    ),
-                    5 => println!("{}", load_state(&mut nes, &state_name)),
-                    6 => nes.reset(),
-                    7 => switch_pause(&mut pause),
-                    8 => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Select, true)
-                    }
-                    9 => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Start, true)
-                    }
-                    b => panic!("Can't get here {}", b),
-                },
-                Event::JoyButtonUp { button_idx, .. } => match button_idx {
-                    0 => println!("Y not bound"),
-                    1 => nes.cpu.mmu.ctrl0.set_button_state(Button::B, false),
-                    2 => nes.cpu.mmu.ctrl0.set_button_state(Button::A, false),
-                    3 => (),
-                    4 => (),
-                    5 => (),
-                    6 => (),
-                    7 => (),
-                    8 => nes
-                        .cpu
-                        .mmu
-                        .ctrl0
-                        .set_button_state(Button::Select, false),
-                    9 => {
-                        nes.cpu.mmu.ctrl0.set_button_state(Button::Start, false)
-                    }
-                    _ => panic!("Can't get here"),
-                },
-                _ => (),
             }
         }
     }
 }
+
+// Event::JoyHatMotion { state, which, .. } => match which {
+//     0 => hatstate_handler(&mut self.nes.cpu.mmu.ctrl1, state),
+//     1 => hatstate_handler(&mut self.nes.cpu.mmu.ctrl0, state),
+//     _ => (),
+// },
+// Event::JoyButtonDown {
+//     button_idx, which, ..
+// } => match which {
+//     0 => match button_idx {
+//         1 => {
+//             nes.cpu.mmu.ctrl1.set_button_state(Button::B, true)
+//         }
+//         0 => {
+//             nes.cpu.mmu.ctrl1.set_button_state(Button::A, true)
+//         }
+//         6 => nes
+//             .cpu
+//             .mmu
+//             .ctrl1
+//             .set_button_state(Button::Select, true),
+//         7 => nes
+//             .cpu
+//             .mmu
+//             .ctrl1
+//             .set_button_state(Button::Start, true),
+//         _ => (),
+//     },
+//     1 => match button_idx {
+//         0 => println!("{}", which),
+//         1 => {
+//             nes.cpu.mmu.ctrl0.set_button_state(Button::B, true)
+//         }
+//         2 => {
+//             nes.cpu.mmu.ctrl0.set_button_state(Button::A, true)
+//         }
+//         3 => println!("X not bound"),
+//         4 => println!(
+//             "{}",
+//             save_state(&nes.get_state(), &state_name)
+//         ),
+//         5 => println!("{}", load_state(&mut nes, &state_name)),
+//         6 => nes.reset(),
+//         7 => switch_pause(&mut pause),
+//         8 => nes
+//             .cpu
+//             .mmu
+//             .ctrl0
+//             .set_button_state(Button::Select, true),
+//         9 => nes
+//             .cpu
+//             .mmu
+//             .ctrl0
+//             .set_button_state(Button::Start, true),
+//         b => panic!("Can't get here {}", b),
+//     },
+//     _ => (),
+// },
+// Event::JoyButtonUp {
+//     button_idx, which, ..
+// } => match which {
+//     0 => match button_idx {
+//         1 => {
+//             nes.cpu.mmu.ctrl1.set_button_state(Button::B, false)
+//         }
+//         0 => {
+//             nes.cpu.mmu.ctrl1.set_button_state(Button::A, false)
+//         }
+//         6 => nes
+//             .cpu
+//             .mmu
+//             .ctrl1
+//             .set_button_state(Button::Select, false),
+//         7 => nes
+//             .cpu
+//             .mmu
+//             .ctrl1
+//             .set_button_state(Button::Start, false),
+//         _ => (),
+//     },
+//     1 => match button_idx {
+//         0 => println!("Y not bound"),
+//         1 => {
+//             nes.cpu.mmu.ctrl0.set_button_state(Button::B, false)
+//         }
+//         2 => {
+//             nes.cpu.mmu.ctrl0.set_button_state(Button::A, false)
+//         }
+//         3 => (),
+//         4 => (),
+//         5 => (),
+//         6 => (),
+//         7 => (),
+//         8 => nes
+//             .cpu
+//             .mmu
+//             .ctrl0
+//             .set_button_state(Button::Select, false),
+//         9 => nes
+//             .cpu
+//             .mmu
+//             .ctrl0
+//             .set_button_state(Button::Start, false),
+//         _ => panic!("Can't get here"),
+//     },
+//     _ => (),
+// },

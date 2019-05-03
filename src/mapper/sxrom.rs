@@ -173,7 +173,7 @@ impl Sxrom {
 
     pub fn reset(&mut self) {
         self.shift.reset();
-        self.ctrl = Ctrl(0);
+        self.ctrl = Ctrl(0x0C);
         self.chr_bank_0 = 0;
         self.chr_bank_1 = 0;
         self.prg_bank = 0;

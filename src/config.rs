@@ -6,23 +6,30 @@ use std::fs::File;
 use std::io::Read;
 use controller::Button;
 use failure::Error;
+use sdl2::keyboard::Keycode;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub pixel_scale: usize,
     pub sprites_per_scanline: u8,
+//    pub ctrl1_type: CtrlType,
+//    pub ctrl2_type: CtrlType,
     pub ctrl1_layout: ButtonLayout,
     pub ctrl2_layout: ButtonLayout,
     pub emu_controls: EmulatorControls,
     pub overscan: Overscan,
 }
 
+//#[derive(Serialize, Deserialize, Debug)]
+//pub enum CtrlType {
+//    Keyboard,
+//    Joypad,
+//}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Overscan {
     pub top: u8,
     pub bottom: u8,
-    pub left: u8,
-    pub right: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -63,18 +70,57 @@ pub struct ButtonLayout {
     select: String,
 }
 
+fn str_to_keycode(input: &str) -> Result<Keycode, String> {
+    match input {
+        "A" => Ok(Keycode::A),
+        "B" => Ok(Keycode::B),
+        "C" => Ok(Keycode::C),
+        "D" => Ok(Keycode::D),
+        "E" => Ok(Keycode::E),
+        "F" => Ok(Keycode::F),
+        "G" => Ok(Keycode::G),
+        "H" => Ok(Keycode::H),
+        "I" => Ok(Keycode::I),
+        "J" => Ok(Keycode::J),
+        "K" => Ok(Keycode::K),
+        "L" => Ok(Keycode::L),
+        "M" => Ok(Keycode::M),
+        "N" => Ok(Keycode::N),
+        "O" => Ok(Keycode::O),
+        "P" => Ok(Keycode::P),
+        "Q" => Ok(Keycode::Q),
+        "R" => Ok(Keycode::R),
+        "S" => Ok(Keycode::S),
+        "T" => Ok(Keycode::T),
+        "U" => Ok(Keycode::U),
+        "V" => Ok(Keycode::V),
+        "W" => Ok(Keycode::W),
+        "X" => Ok(Keycode::X),
+        "Y" => Ok(Keycode::Y),
+        "Z" => Ok(Keycode::Z),
+        "Left" => Ok(Keycode::Left),
+        "Down" => Ok(Keycode::Down),
+        "Up" => Ok(Keycode::Up),
+        "Right" => Ok(Keycode::Right),
+        "LShift" => Ok(Keycode::LShift),
+        "RShift" => Ok(Keycode::RShift),
+        "Enter"  => Ok(Keycode::Return),
+        k => Err(format!("Unsupported character {}", k)),
+    }
+}
+
 impl ButtonLayout {
-    pub fn make_ctrl_map(&self) -> HashMap<String, Button> {
+    pub fn make_ctrl_map(&self) -> Result<HashMap<Keycode, Button>, String> {
         let mut button_map = HashMap::new();
-        button_map.insert(self.left.clone(), Button::Left);
-        button_map.insert(self.right.clone(), Button::Right);
-        button_map.insert(self.down.clone(), Button::Down);
-        button_map.insert(self.up.clone(), Button::Up);
-        button_map.insert(self.a.clone(), Button::A);
-        button_map.insert(self.b.clone(), Button::B);
-        button_map.insert(self.start.clone(), Button::Start);
-        button_map.insert(self.select.clone(), Button::Select);
-        button_map
+        button_map.insert(str_to_keycode(&self.left)?, Button::Left);
+        button_map.insert(str_to_keycode(&self.right)?, Button::Right);
+        button_map.insert(str_to_keycode(&self.down)?, Button::Down);
+        button_map.insert(str_to_keycode(&self.up)?, Button::Up);
+        button_map.insert(str_to_keycode(&self.a)?, Button::A);
+        button_map.insert(str_to_keycode(&self.b)?, Button::B);
+        button_map.insert(str_to_keycode(&self.start)?, Button::Start);
+        button_map.insert(str_to_keycode(&self.select)?, Button::Select);
+        Ok(button_map)
     }
 }
 
@@ -113,8 +159,6 @@ impl Config {
         let overscan = Overscan {
             top: 8,
             bottom: 8,
-            left: 0,
-            right: 0,
         };
 
         let emulator_controls = EmulatorControls {

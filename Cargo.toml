@@ -5,6 +5,7 @@ authors = ["maximveligan <maximveligan@gmail.com>"]
 
 [lib]
 name = "nes_emu"
+path = "src/lib.rs"
 
 [dependencies]
 nom = "*"
