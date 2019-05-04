@@ -35,7 +35,7 @@ Currently, the emulator passes a variety of tests but fails at some of the more 
 ## Config
 The default config can be found under config.toml.
 - pixel_scale: This field choses how many actual on screen pixels should be used per NES pixel
-- sprites_per_scanline: This is essentially a graphics hack that allows more than 8 sprites to be shown on a scanline. The sprite overflow flag is still set at 8 sprites, increasing this number above 8 just stops the flicker. Increasing the number over 64 or below 8 will not do anything.
+- (Future plan) sprites_per_scanline: This is essentially a graphics hack that allows more than 8 sprites to be shown on a scanline. The sprite overflow flag is still set at 8 sprites, increasing this number above 8 just stops the flicker. Increasing the number over 64 or below 8 will not do anything.
 - The [ctrl_layout] sections provide bindings for controllers 1 and 2. Currently, all alpha-numeric keys are supported on standard keyboards. Controller support is in the process of being added.
 - The [emu_controls] section provide controls over the actual emulator itself. Save and load state create a snapshot of the system at some point in time, allowing users to reload from that state at any time. Save states follow the naming convention of: `<ROM_NAME>.sav`. Pause stops the emulator, and reset preforms a "soft reset", which is equivalent to closing and reopening the emulator.
 - The [overscan] section defines how many pixels off of the border of the screen should be removed. Numbers higher than 30 are known to cause undefined behaviour. Generally, leaving this at 8 for both the top and bottom is the safest bet, but there are some games that allow them to be set to 0 without having any weird graphical glitches at the top and bottom of the screen. Set it to 0, and if there is something weird going on at the top and bottom borders, set it back to 8.
@@ -49,4 +49,5 @@ The following sources were used and are extremely valuable for any emulator deve
 - http://obelisk.me.uk/6502/reference.html#BNE
 - http://forums.nesdev.com/viewtopic.php?t=664
 - http://forums.nesdev.com/
+#### Test roms
 Along with these resources, the nes test roms were invaluable to testing some of the more obscure features of the emulator. They have been linked here as another git repository.
