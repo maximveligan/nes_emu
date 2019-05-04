@@ -11,7 +11,6 @@ use sdl2::keyboard::Keycode;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub pixel_scale: usize,
-    pub sprites_per_scanline: u8,
     pub ctrl1_layout: ButtonLayout,
     pub ctrl2_layout: ButtonLayout,
     pub overscan: Overscan,
@@ -131,7 +130,6 @@ impl Config {
             ctrl1_layout: layout1,
             ctrl2_layout: layout2,
             overscan: overscan,
-            sprites_per_scanline: 8,
         }
     }
 

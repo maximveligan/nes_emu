@@ -1,5 +1,4 @@
 pixel_scale = 6
-sprites_per_scanline = 8
 
 [ctrl1_layout]
 left = "A"
@@ -21,14 +20,6 @@ b = "Enter"
 start = "B"
 select = "B"
 
-[emu_controls]
-save_state = "Q"
-load_state = "E"
-pause = "P"
-reset = "R"
-
 [overscan]
 top = 8
 bottom = 8
-left = 0
-right = 0
