@@ -29,6 +29,9 @@ The CPU of the NES has a 16 bit addressing range. Most games are larger than tha
 ## Usage
 To run the emulator, install cargo and the rust compiler. SDL2 is also required to use my frontend. To start the emulator, go into the NES directory and run `cargo run --release <PATH TO ROM>`.
 
+### Tests
+Currently, the emulator passes a variety of tests but fails at some of the more accurate tests. Most notable, it passes nestest, and most of the PPU tests. It fails at the vblank and nmi timing tests by a few cycles, and fails at some of the more obscure sprite 0 hit behaviours. Currently, you can run `cargo test` to run nestest, assuming you have nestest.nes in the correct directory. Place it under `./nes_test_roms/others/nestest.nes` to have it configured correctly.
+
 ## Config
 The default config can be found under config.toml.
 - pixel_scale: This field choses how many actual on screen pixels should be used per NES pixel
@@ -46,3 +49,4 @@ The following sources were used and are extremely valuable for any emulator deve
 - http://obelisk.me.uk/6502/reference.html#BNE
 - http://forums.nesdev.com/viewtopic.php?t=664
 - http://forums.nesdev.com/
+Along with these resources, the nes test roms were invaluable to testing some of the more obscure features of the emulator. They have been linked here as another git repository.
