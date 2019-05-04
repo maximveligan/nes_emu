@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 #[test]
 fn run_nestest() {
-    let rom = load_rom("./nestest.nes").expect("This is a hard coded good rom");
+    let rom = load_rom("./nes_test_roms/other/nestest.nes").expect("This is a hard coded good rom");
 
     let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
     let mut cpu = Cpu::new(Mmu::new(
