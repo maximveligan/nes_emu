@@ -23,12 +23,17 @@ impl Nrom {
 
     pub fn ld_prg(&self, address: u16, prg_rom: &Vec<u8>) -> u8 {
         if address < NROM_PRG_ROM_START {
+            info!("Attempt to read from nrom {:X}", address);
             0
         } else if self.mirrored {
             prg_rom[address as usize & MIRRORED_MASK]
         } else {
             prg_rom[address as usize & UNMIRRORED_MASK]
         }
+    }
+
+    pub fn store_prg(&self, address: u16, val: u8) {
+        info!("Attempt to write to nrom address {:X}, val {}", address, val);
     }
 
     pub fn ld_chr(&self, address: u16, chr_rom: &Vec<u8>, chr_ram: &Vec<u8>) -> u8 {
@@ -42,6 +47,8 @@ impl Nrom {
     pub fn store_chr(&mut self, address: u16, val: u8, chr_ram: &mut Vec<u8>) {
         if self.use_chr_ram {
             chr_ram[address as usize] = val;
+        } else {
+            info!("Attempt to store to nrom address {:X} val {}", address, val);
         }
     }
 }

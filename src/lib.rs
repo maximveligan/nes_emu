@@ -94,7 +94,6 @@ impl NesEmulator {
             Ppu::new(mapper.clone()),
             mapper,
         ));
-
         NesEmulator { cpu: cpu }
     }
 

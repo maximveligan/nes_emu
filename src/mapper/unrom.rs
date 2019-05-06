@@ -6,24 +6,28 @@ const SIXTEEN_KB: usize = 0x4000;
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct Unrom {
     bank_select: u8,
+    last_page_start: usize,
 }
 
 impl Unrom {
-    pub fn new() -> Unrom {
-        Unrom { bank_select: 0 }
+    pub fn new(last_page_start: usize) -> Unrom {
+        Unrom {
+            bank_select: 0,
+            last_page_start
+        }
     }
 
     pub fn store_prg(&mut self, address: u16, val: u8) {
         if address >= 0x8000 {
             self.bank_select = val & 0b111;
         } else {
-            println!("Writing to unmapped prg_rom {:X}", address);
+            info!("Writing to unmapped prg_rom address: {:X} val: {}", address, val);
         }
     }
 
     pub fn ld_prg(&self, address: u16, prg_rom: &Vec<u8>) -> u8 {
         if address < 0x8000 {
-            println!("Reading from unmapped prg_rom {:X}", address);
+            info!("Reading from unmapped prg_rom address: {:X}", address);
             0
         // Bank switched using 3 bits
         } else if address < 0xC000 {

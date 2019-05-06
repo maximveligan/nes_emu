@@ -35,7 +35,10 @@ impl Mapper {
                 let last_page_start = rom.prg_rom.len() - 0x4000;
                 MemType::Sxrom(Sxrom::new(use_chr_ram, last_page_start))
             }
-            2 => MemType::Unrom(Unrom::new()),
+            2 => {
+                let last_page_start = rom.prg_rom.len() - 0x4000;
+                MemType::Unrom(Unrom::new(last_page_start))
+            }
             m => panic!("Mapper {} not supported", m),
         };
         Mapper {
@@ -64,7 +67,7 @@ impl Mapper {
         match self.mem_type {
              MemType::Unrom(ref mut unrom) => unrom.store_prg(addr, val),
              MemType::Sxrom(ref mut sxrom) => sxrom.store_prg(addr, val, &mut self.rom.prg_ram),
-             _ => ()
+             MemType::Nrom(ref nrom) => nrom.store_prg(addr, val),
         }
     }
 

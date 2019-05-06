@@ -845,23 +845,17 @@ impl Cpu {
             SEI => self.regs.flags.set_itr(true),
             CLV => self.regs.flags.set_overflow(false),
             CLD => self.regs.flags.set_dec(false),
-
             NOP | 0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => (),
-
             // DOP: Double NOP
             0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89
             | 0xC2 | 0xD4 | 0xE2 | 0xF4 | 0x04 => {
                 self.regs.pc.add_signed(1);
             }
-
             // TOP: Triple NOP
-            0x0C => {
-                let _ = self.address_mem(Mode::Abs);
-            }
+            0x0C => self.regs.pc.add_signed(2),
             0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
                 let _ = self.address_mem(Mode::AbsX);
             }
-
             BRK => {
                 self.push_pc();
                 let flags = self.regs.flags;
@@ -932,9 +926,7 @@ impl Cpu {
                 flags.set_brk(true);
                 self.push(flags.as_byte());
             }
-            PLP => {
-                self.pull_status();
-            }
+            PLP => self.pull_status(),
             BVS => {
                 let flag = self.regs.flags.overflow();
                 self.generic_branch(flag);

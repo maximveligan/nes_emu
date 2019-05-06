@@ -75,6 +75,7 @@ impl Sxrom {
 
     pub fn store_prg(&mut self, address: u16, val: u8, prg_ram: &mut Vec<u8>) {
         if address < 0x6000 {
+            info!("Storing to unmapped prg mem {:X}", address);
         } else if address < 0x8000 {
             prg_ram[address as usize - 0x6000] = val;
         } else {
@@ -111,7 +112,10 @@ impl Sxrom {
         match address {
             0x6000...0x7FFF => prg_ram[address as usize - 0x6000],
             0x8000...0xFFFF => prg_rom[self.get_prg_index(address)],
-            _ => 0,
+            addr => {
+                info!("Reading from unmapped memory {:X}", addr);
+                0
+            }
         }
     }
 
@@ -131,6 +135,8 @@ impl Sxrom {
     pub fn store_chr(&mut self, address: u16, val: u8, chr_ram: &mut Vec<u8>) {
         if self.use_chr_ram {
             chr_ram[self.get_chr_index(address)] = val;
+        } else {
+            info!("Attempting to write to chr rom {:X}", address);
         }
     }
 
@@ -167,7 +173,7 @@ impl Sxrom {
                 }
                 a => panic!("addr can't be anything else {:X}", a),
             },
-            _ => panic!("Can't get anything else"),
+            b => panic!("Can't get anything else {:b}", b),
         }
     }
 
