@@ -29,6 +29,9 @@ The CPU of the NES has a 16 bit addressing range. Most games are larger than tha
 ## Usage
 To run the emulator, install cargo and the rust compiler. SDL2 is also required to use my frontend. To start the emulator, go into the NES directory and run `cargo run --release <PATH TO ROM>`.
 
+## Debugging
+By default, debugging is disabled. To enable debugging, run `RUST_LOG=debug cargo run --release <PATH_TO_ROM>`. Please note that debugging slows the emulator down considerably, and should only be used when actually needed. The output is similar to that found in nestest.
+
 ### Tests
 Currently, the emulator passes a variety of tests but fails at some of the more accurate tests. Most notable, it passes nestest, and most of the PPU tests. It fails at the vblank and nmi timing tests by a few cycles, and fails at some of the more obscure sprite 0 hit behaviours. Currently, you can run `cargo test` to run nestest, assuming you have nestest.nes in the correct directory. Place it under `./nes_test_roms/others/nestest.nes` to have it configured correctly.
 
