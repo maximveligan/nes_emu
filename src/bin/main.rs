@@ -13,6 +13,8 @@ use nes_emu::config::Config;
 use nes_emu::controller::Button;
 use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
+use std::fs::File;
+use std::io::Read;
 
 use std::env;
 
@@ -207,7 +209,25 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let rom = match load_rom(path_in) {
+
+    let mut raw_bytes = Vec::new();
+    match File::open(path_in) {
+        Ok(mut raw_rom) => {
+            match raw_rom.read_to_end(&mut raw_bytes) {
+                Ok(_) => (),
+                Err(e) => {
+                    println!("Error while loading in rom {}", e);
+                    return;
+                }
+            }
+        }
+        Err(e) => {
+            println!("Error while opening file {}", e);
+            return;
+        }
+    }
+
+    let rom = match load_rom(&raw_bytes) {
         Ok(rom) => rom,
         Err(e) => {
             println!("Error during rom parsing {}", e);

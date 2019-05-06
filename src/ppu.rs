@@ -581,8 +581,8 @@ impl Ppu {
         }
     }
 
-    pub fn get_buffer(&self) -> &[u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3] {
-        &self.screen_buff
+    pub fn get_buffer(&self) -> Box<[u8]> {
+        Box::new(self.screen_buff)
     }
 
     fn step_cc(&mut self) {

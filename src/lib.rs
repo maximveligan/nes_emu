@@ -44,8 +44,6 @@ use rom::ScreenMode;
 use mapper::MemType;
 use failure::Error;
 
-const SCREEN_SIZE: usize = 256 * 240 * 3;
-
 #[derive(Serialize, Deserialize)]
 pub struct State {
     ppu_state: PpuState,
@@ -138,7 +136,7 @@ impl NesEmulator {
         }
     }
 
-    pub fn next_frame(&mut self) -> Result<&[u8; SCREEN_SIZE], String> {
+    pub fn next_frame(&mut self) -> Result<Box<[u8]>, String> {
         while !self.step()? {}
         Ok(self.cpu.mmu.ppu.get_buffer())
     }

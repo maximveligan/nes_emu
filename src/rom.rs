@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::Read;
 use serde::Serialize;
 use serde::Deserialize;
 use nom::be_u8;
@@ -17,8 +15,6 @@ const TRAINER_LEN: usize = 512;
 pub enum LoadRomError {
     #[fail(display = "Rom not supported: {}", _0)]
     Unsupported(String),
-    #[fail(display = "File error: {}", _0)]
-    FileError(std::io::Error),
     #[fail(display = "Parse error: {}", _0)]
     ParseError(String),
 }
@@ -82,12 +78,8 @@ fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
     )
 }
 
-pub fn load_rom(path: &str) -> Result<Rom, Error> {
-    let mut raw_bytes = Vec::new();
-    let mut raw_rom = File::open(path)?;
-    raw_rom.read_to_end(&mut raw_bytes)?;
-
-    let rom = match parse_rom(&raw_bytes) {
+pub fn load_rom(rom_bytes: &[u8]) -> Result<Rom, Error> {
+    let rom = match parse_rom(rom_bytes) {
         Ok((_, rom)) => rom,
         Err(e) => {
             return Err(Error::from(LoadRomError::ParseError(e.to_string())))
