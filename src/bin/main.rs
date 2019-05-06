@@ -20,6 +20,7 @@ const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
 fn main() {
+    env_logger::init();
     if let Some(str_path) = env::args().nth(1) {
         let path = Path::new(&str_path);
         if path.is_file() {

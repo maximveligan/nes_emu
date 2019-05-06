@@ -5,10 +5,13 @@ extern crate bincode;
 extern crate sdl2;
 extern crate serde;
 extern crate toml;
+extern crate env_logger;
 #[macro_use]
 extern crate bitfield;
 #[macro_use]
 extern crate failure;
+#[macro_use]
+extern crate log;
 
 pub mod apu;
 pub mod controller;
