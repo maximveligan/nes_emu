@@ -487,27 +487,11 @@ impl Cpu {
 
     fn arr(&mut self, mode: Mode) {
         let val = self.read_op(mode);
-        let mut new_acc = self.regs.acc & val;
-        new_acc >>= 1;
-        match (new_acc >> 5) & 0b11 {
-            0b00 => {
-                self.regs.flags.set_carry(false);
-                self.regs.flags.set_overflow(false);
-            }
-            0b01 => {
-                self.regs.flags.set_overflow(true);
-                self.regs.flags.set_carry(false);
-            }
-            0b10 => {
-                self.regs.flags.set_overflow(true);
-                self.regs.flags.set_carry(true);
-            }
-            0b11 => {
-                self.regs.flags.set_carry(true);
-                self.regs.flags.set_overflow(false);
-            }
-            _ => panic!("Matching on 2 bits, can't get other values"),
-        }
+        let new_acc = ((self.regs.acc & val) >> 1) | ((self.regs.flags.carry() as u8) << 7);
+        let b6 = (new_acc >> 6) & 1;
+        let b5 = (new_acc >> 5) & 1;
+        self.regs.flags.set_carry(b6 == 1);
+        self.regs.flags.set_overflow(b6 ^ b5 == 1);
         self.set_zero_neg(new_acc);
         self.regs.acc = new_acc;
     }
@@ -519,13 +503,13 @@ impl Cpu {
         self.set_zero_neg(val);
     }
 
-    fn axs(&mut self, mode: Mode) {
-        let val = self.read_op(mode);
+    fn axs(&mut self) {
+        let val = self.read_op(Mode::Imm);
         let tmp = self.regs.x & self.regs.acc;
-        let (tmp, carry) = tmp.overflowing_sub(val);
-        self.regs.flags.set_carry(carry);
-        self.regs.x = tmp;
-        self.set_zero_neg(tmp);
+        let res = tmp.wrapping_sub(val);
+        self.regs.flags.set_carry(tmp >= val);
+        self.set_zero_neg(res);
+        self.regs.x = res;
     }
 
     //TODO this is dec followed by cmp, refactor this to use those functions
@@ -593,6 +577,44 @@ impl Cpu {
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
         self.adc_val(tmp);
+    }
+
+    fn alr(&mut self, mode: Mode) {
+        let val = self.read_op(mode);
+        let acc = self.regs.acc & val;
+        self.regs.flags.set_carry((acc & 0b01) != 0);
+        let tmp = acc >> 1;
+        self.set_zero_neg(tmp);
+        self.regs.acc = tmp;
+    }
+
+    fn atx(&mut self) {
+        self.lda(Mode::Imm);
+        self.tax();
+    }
+
+    fn tax(&mut self) {
+        let acc = self.regs.acc;
+        self.regs.x = acc;
+        self.set_zero_neg(acc);
+    }
+
+    fn sya(&mut self, mode: Mode) {
+        let mut addr = self.address_mem(mode);
+        if (addr & 0xFF00) != (addr - self.regs.x as u16) & 0xFF00 {
+            addr &= (self.regs.y as u16) << 8;
+        }
+        let tmp = self.regs.y & ((addr >> 8) as u8 + 1);
+        self.store(addr, tmp);
+    }
+
+    fn sxa(&mut self, mode: Mode) {
+        let mut addr = self.address_mem(mode);
+        if (addr & 0xFF00) != (addr - self.regs.y as u16) & 0xFF00 {
+            addr &= (self.regs.x as u16) << 8;
+        }
+        let tmp = self.regs.x & ((addr >> 8) as u8 + 1);
+        self.store(addr, tmp);
     }
 
     fn push(&mut self, val: u8) {
@@ -786,7 +808,6 @@ impl Cpu {
             0xBF => self.lax(Mode::AbsY),
             0xA3 => self.lax(Mode::IndX),
             0xB3 => self.lax(Mode::IndY),
-            0xCB => self.axs(Mode::Imm),
             0xC7 => self.dcp(Mode::ZP),
             0xD7 => self.dcp(Mode::ZPX),
             0xCF => self.dcp(Mode::Abs),
@@ -829,7 +850,11 @@ impl Cpu {
             0x7B => self.rra(Mode::NoPBAbsY),
             0x63 => self.rra(Mode::IndX),
             0x73 => self.rra(Mode::NoPBIndY),
-
+            0x4B => self.alr(Mode::Imm),
+            0x9C => self.sya(Mode::NoPBAbsX),
+            0x9E => self.sxa(Mode::NoPBAbsY),
+            0xAB => self.atx(),
+            0xCB => self.axs(),
             RTS => {
                 self.pull_pc();
                 self.regs.pc.add_unsigned(1);
@@ -863,11 +888,7 @@ impl Cpu {
                 self.regs.flags.set_itr(true);
                 self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC));
             }
-            TAX => {
-                let acc = self.regs.acc;
-                self.regs.x = acc;
-                self.set_zero_neg(acc);
-            }
+            TAX => self.tax(),
             TXA => {
                 let x = self.regs.x;
                 self.regs.acc = x;
