@@ -857,11 +857,11 @@ impl Cpu {
                 let _ = self.address_mem(Mode::AbsX);
             }
             BRK => {
+                self.regs.pc.add_signed(1);
                 self.push_pc();
-                let flags = self.regs.flags;
-                self.push(flags.as_byte());
-                self.regs.pc.set_addr(IRQ_VEC);
-                self.regs.flags.set_brk(true);
+                self.push(self.regs.flags.as_byte() | 0b10000);
+                self.regs.flags.set_itr(true);
+                self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC));
             }
             TAX => {
                 let acc = self.regs.acc;
@@ -922,9 +922,7 @@ impl Cpu {
                 self.set_zero_neg(acc);
             }
             PHP => {
-                let mut flags = self.regs.flags.clone();
-                flags.set_brk(true);
-                self.push(flags.as_byte());
+                self.push(self.regs.flags.as_byte() | 0b10000);
             }
             PLP => self.pull_status(),
             BVS => {
