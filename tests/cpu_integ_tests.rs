@@ -1,18 +1,26 @@
 extern crate nes_emu;
 
-use nes_emu::cpu::Cpu;
 use nes_emu::apu::Apu;
-use nes_emu::ppu::Ppu;
-use nes_emu::rom::load_rom;
+use nes_emu::cpu::Cpu;
 use nes_emu::mapper::Mapper;
 use nes_emu::mmu::Mmu;
 use nes_emu::mmu::Ram;
+use nes_emu::ppu::Ppu;
+use nes_emu::rom::load_rom;
 use std::cell::RefCell;
+use std::fs::File;
+use std::io::Read;
 use std::rc::Rc;
 
 #[test]
+
 fn run_nestest() {
-    let rom = load_rom("./nes_test_roms/other/nestest.nes").expect("This is a hard coded good rom");
+    let mut raw_bytes = Vec::new();
+    File::open("./nes_test_roms/other/nestest.nes")
+        .expect("This path is correct")
+        .read_to_end(&mut raw_bytes)
+        .expect("Should be able to read to end");
+    let rom = load_rom(&raw_bytes).expect("This is a good rom");
 
     let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
     let mut cpu = Cpu::new(Mmu::new(
