@@ -487,7 +487,8 @@ impl Cpu {
 
     fn arr(&mut self, mode: Mode) {
         let val = self.read_op(mode);
-        let new_acc = ((self.regs.acc & val) >> 1) | ((self.regs.flags.carry() as u8) << 7);
+        let new_acc = ((self.regs.acc & val) >> 1)
+            | ((self.regs.flags.carry() as u8) << 7);
         let b6 = (new_acc >> 6) & 1;
         let b5 = (new_acc >> 5) & 1;
         self.regs.flags.set_carry(b6 == 1);

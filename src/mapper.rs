@@ -6,8 +6,8 @@ use mapper::sxrom::*;
 use mapper::unrom::*;
 use mapper::nrom::*;
 
-pub mod sxrom;
 pub mod nrom;
+pub mod sxrom;
 pub mod unrom;
 
 pub struct Mapper {
@@ -51,38 +51,54 @@ impl Mapper {
         match self.mem_type {
             MemType::Nrom(ref nrom) => nrom.ld_prg(addr, &self.rom.prg_rom),
             MemType::Unrom(ref unrom) => unrom.ld_prg(addr, &self.rom.prg_rom),
-            MemType::Sxrom(ref sxrom) => sxrom.ld_prg(addr, &self.rom.prg_rom, &self.rom.prg_ram),
+            MemType::Sxrom(ref sxrom) => {
+                sxrom.ld_prg(addr, &self.rom.prg_rom, &self.rom.prg_ram)
+            }
         }
     }
 
     pub fn ld_chr(&self, addr: u16) -> u8 {
         match self.mem_type {
-            MemType::Nrom(ref nrom) => nrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram),
+            MemType::Nrom(ref nrom) => {
+                nrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram)
+            }
             MemType::Unrom(ref unrom) => unrom.ld_chr(addr, &self.rom.chr_ram),
-            MemType::Sxrom(ref sxrom) => sxrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram),
+            MemType::Sxrom(ref sxrom) => {
+                sxrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram)
+            }
         }
     }
 
     pub fn store_prg(&mut self, addr: u16, val: u8) {
         match self.mem_type {
-             MemType::Unrom(ref mut unrom) => unrom.store_prg(addr, val),
-             MemType::Sxrom(ref mut sxrom) => sxrom.store_prg(addr, val, &mut self.rom.prg_ram),
-             MemType::Nrom(ref nrom) => nrom.store_prg(addr, val),
+            MemType::Unrom(ref mut unrom) => unrom.store_prg(addr, val),
+            MemType::Sxrom(ref mut sxrom) => {
+                sxrom.store_prg(addr, val, &mut self.rom.prg_ram)
+            }
+            MemType::Nrom(ref nrom) => nrom.store_prg(addr, val),
         }
     }
 
     pub fn store_chr(&mut self, addr: u16, val: u8) {
         match self.mem_type {
-             MemType::Unrom(ref mut unrom) => unrom.store_chr(addr, val, &mut self.rom.chr_ram),
-             MemType::Sxrom(ref mut sxrom) => sxrom.store_chr(addr, val, &mut self.rom.chr_ram),
-             MemType::Nrom(ref mut nrom) => nrom.store_chr(addr, val, &mut self.rom.chr_ram),
+            MemType::Unrom(ref mut unrom) => {
+                unrom.store_chr(addr, val, &mut self.rom.chr_ram)
+            }
+            MemType::Sxrom(ref mut sxrom) => {
+                sxrom.store_chr(addr, val, &mut self.rom.chr_ram)
+            }
+            MemType::Nrom(ref mut nrom) => {
+                nrom.store_chr(addr, val, &mut self.rom.chr_ram)
+            }
         }
     }
 
     pub fn get_mirroring(&self) -> ScreenMode {
         match self.mem_type {
-             MemType::Unrom(_) | MemType::Nrom(_) => self.rom.header.screen.clone(),
-             MemType::Sxrom(ref sxrom) => sxrom.get_mirroring(),
+            MemType::Unrom(_) | MemType::Nrom(_) => {
+                self.rom.header.screen.clone()
+            }
+            MemType::Sxrom(ref sxrom) => sxrom.get_mirroring(),
         }
     }
 

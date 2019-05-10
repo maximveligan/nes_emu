@@ -44,16 +44,11 @@ impl Ram {
 }
 
 impl Mmu {
-    pub fn new(
-        apu: Apu,
-        ram: Ram,
-        ppu: Ppu,
-        mapper: Rc<RefCell<Mapper>>,
-    ) -> Mmu {
+    pub fn new(apu: Apu, ppu: Ppu, mapper: Rc<RefCell<Mapper>>) -> Mmu {
         Mmu {
             ppu: ppu,
             apu: apu,
-            ram: ram,
+            ram: Ram::new(),
             mapper: mapper,
             ctrl0: Controller::new(),
             ctrl1: Controller::new(),

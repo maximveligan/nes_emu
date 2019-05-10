@@ -122,25 +122,28 @@ impl NesFrontEnd {
     }
 
     fn save_state(&mut self) -> String {
-        match self.nes.get_state().save(&self.save_name) {
-            Ok(size) => format!("Wrote {} bytes", size),
-            Err(e) => format!("Error saving state {}", e),
+        match File::create(&self.save_name) {
+            Ok(mut file) => match self.nes.get_state().save(&mut file) {
+                Ok(_) => format!("Wrote save state successfully"),
+                Err(e) => format!("Error saving state {}", e),
+            },
+            Err(e) => format!("Error occured when opening file {}", e),
         }
     }
 
     fn load_state(&mut self) -> String {
-        match nes_emu::State::load(&self.save_name) {
-            Ok((state, size_read)) => match self.nes.load_state(state) {
-                Ok(()) => format!(
-                    "Loaded state successfully, {} bytes read",
-                    size_read
+        match File::open(&self.save_name) {
+            Ok(mut file) => match nes_emu::state::State::load(&mut file) {
+                Ok(state) => match self.nes.load_state(state) {
+                    Ok(()) => "Loaded state successfully".to_string(),
+                    Err(e) => format!("Emulator could not load state: {}", e),
+                },
+                Err(e) => format!(
+                    "Loading state from file failed: {}. Filename: {}",
+                    e, self.save_name
                 ),
-                Err(e) => format!("Emulator could not load state: {}", e),
             },
-            Err(e) => format!(
-                "Loading state from file failed: {}. Filename: {}",
-                e, self.save_name
-            ),
+            Err(e) => format!("Could not open file {}", e),
         }
     }
 }
@@ -209,18 +212,15 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-
     let mut raw_bytes = Vec::new();
     match File::open(path_in) {
-        Ok(mut raw_rom) => {
-            match raw_rom.read_to_end(&mut raw_bytes) {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("Error while loading in rom {}", e);
-                    return;
-                }
+        Ok(mut raw_rom) => match raw_rom.read_to_end(&mut raw_bytes) {
+            Ok(_) => (),
+            Err(e) => {
+                println!("Error while loading in rom {}", e);
+                return;
             }
-        }
+        },
         Err(e) => {
             println!("Error while opening file {}", e);
             return;

@@ -33,10 +33,18 @@ impl Nrom {
     }
 
     pub fn store_prg(&self, address: u16, val: u8) {
-        info!("Attempt to write to nrom address {:X}, val {}", address, val);
+        info!(
+            "Attempt to write to nrom address {:X}, val {}",
+            address, val
+        );
     }
 
-    pub fn ld_chr(&self, address: u16, chr_rom: &Vec<u8>, chr_ram: &Vec<u8>) -> u8 {
+    pub fn ld_chr(
+        &self,
+        address: u16,
+        chr_rom: &Vec<u8>,
+        chr_ram: &Vec<u8>,
+    ) -> u8 {
         if self.use_chr_ram {
             chr_ram[address as usize]
         } else {

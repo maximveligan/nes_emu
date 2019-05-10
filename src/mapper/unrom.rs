@@ -13,7 +13,7 @@ impl Unrom {
     pub fn new(last_page_start: usize) -> Unrom {
         Unrom {
             bank_select: 0,
-            last_page_start
+            last_page_start,
         }
     }
 
@@ -21,7 +21,10 @@ impl Unrom {
         if address >= 0x8000 {
             self.bank_select = val & 0b111;
         } else {
-            info!("Writing to unmapped prg_rom address: {:X} val: {}", address, val);
+            info!(
+                "Writing to unmapped prg_rom address: {:X} val: {}",
+                address, val
+            );
         }
     }
 

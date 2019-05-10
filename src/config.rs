@@ -68,7 +68,7 @@ fn str_to_keycode(input: &str) -> Result<Keycode, String> {
         "Right" => Ok(Keycode::Right),
         "LShift" => Ok(Keycode::LShift),
         "RShift" => Ok(Keycode::RShift),
-        "Enter"  => Ok(Keycode::Return),
+        "Enter" => Ok(Keycode::Return),
         k => Err(format!("Unsupported character {}", k)),
     }
 }
@@ -120,10 +120,7 @@ impl Config {
             select: "B".to_string(),
         };
 
-        let overscan = Overscan {
-            top: 8,
-            bottom: 8,
-        };
+        let overscan = Overscan { top: 8, bottom: 8 };
 
         Config {
             pixel_scale: 3,

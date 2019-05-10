@@ -14,6 +14,7 @@ extern crate failure;
 extern crate log;
 
 pub mod apu;
+pub mod config;
 pub mod controller;
 pub mod cpu;
 pub mod cpu_const;
@@ -21,62 +22,18 @@ pub mod mapper;
 pub mod mmu;
 pub mod ppu;
 pub mod rom;
-pub mod config;
+pub mod state;
 
-use std::io::Write;
-use std::fs::File;
-use std::io::Read;
-use serde::Serialize;
-use serde::Deserialize;
+use state::State;
 use cpu::Cpu;
 use apu::Apu;
 use ppu::Ppu;
 use ppu::PpuRes;
-use ppu::PpuState;
 use rom::Rom;
 use mapper::Mapper;
 use mmu::Mmu;
-use mmu::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
-use cpu::Registers;
-use rom::ScreenMode;
-use mapper::MemType;
-use failure::Error;
-
-#[derive(Serialize, Deserialize)]
-pub struct State {
-    ppu_state: PpuState,
-    screen_mode: ScreenMode,
-    chr_ram: Vec<u8>,
-    cpu_regs: Registers,
-    mapper: MemType,
-    ram: Ram,
-}
-
-#[derive(Debug, Fail)]
-pub enum StateFileError {
-    #[fail(display = "Unable to parse state from file: {}", _0)]
-    ParseError(std::boxed::Box<bincode::ErrorKind>),
-    #[fail(display = "File error: {}", _0)]
-    FileError(std::io::Error),
-}
-
-impl State {
-    pub fn save(&self, save_name: &str) -> Result<usize, Error> {
-        let bytes = bincode::serialize(&self)?;
-        let mut buffer = File::create(save_name.to_string())?;
-        Ok(buffer.write(&bytes)?)
-    }
-
-    pub fn load(path: &str) -> Result<(State, usize), Error> {
-        let mut file = File::open(path.to_string())?;
-        let mut buffer = Vec::new();
-        let byte_read = file.read_to_end(&mut buffer)?;
-        let state = bincode::deserialize(&buffer)?;
-        Ok((state, byte_read))
-    }
-}
 
 pub struct NesEmulator {
     pub cpu: Cpu,
@@ -86,12 +43,8 @@ impl NesEmulator {
     pub fn new(rom: Rom) -> NesEmulator {
         println!("{:?}", rom);
         let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
-        let cpu = Cpu::new(Mmu::new(
-            Apu::new(),
-            Ram::new(),
-            Ppu::new(mapper.clone()),
-            mapper,
-        ));
+        let cpu =
+            Cpu::new(Mmu::new(Apu::new(), Ppu::new(mapper.clone()), mapper));
         NesEmulator { cpu: cpu }
     }
 
