@@ -34,7 +34,7 @@ pub struct ButtonLayout {
     select: String,
 }
 
-fn str_to_keycode(input: &str) -> Result<Keycode, String> {
+fn str_to_keycode(input: &str) -> Result<Keycode, Error> {
     match input {
         "A" => Ok(Keycode::A),
         "B" => Ok(Keycode::B),
@@ -69,12 +69,12 @@ fn str_to_keycode(input: &str) -> Result<Keycode, String> {
         "LShift" => Ok(Keycode::LShift),
         "RShift" => Ok(Keycode::RShift),
         "Enter" => Ok(Keycode::Return),
-        k => Err(format!("Unsupported character {}", k)),
+        k => Err(format_err!("Unsupported character {}", k)),
     }
 }
 
 impl ButtonLayout {
-    pub fn make_ctrl_map(&self) -> Result<HashMap<Keycode, Button>, String> {
+    pub fn make_ctrl_map(&self) -> Result<HashMap<Keycode, Button>, Error> {
         let mut button_map = HashMap::new();
         button_map.insert(str_to_keycode(&self.left)?, Button::Left);
         button_map.insert(str_to_keycode(&self.right)?, Button::Right);

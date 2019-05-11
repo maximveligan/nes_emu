@@ -15,8 +15,8 @@ const TRAINER_LEN: usize = 512;
 pub enum LoadRomError {
     #[fail(display = "Rom not supported: {}", _0)]
     Unsupported(String),
-    #[fail(display = "Parse error: {}", _0)]
-    ParseError(String),
+    #[fail(display = "Parse error: invalid rom")]
+    ParseError,
 }
 
 fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
@@ -82,7 +82,8 @@ pub fn load_rom(rom_bytes: &[u8]) -> Result<Rom, Error> {
     let rom = match parse_rom(rom_bytes) {
         Ok((_, rom)) => rom,
         Err(e) => {
-            return Err(Error::from(LoadRomError::ParseError(e.to_string())))
+            debug!("Nom parse error message {}", e.to_string());
+            return Err(Error::from(LoadRomError::ParseError))
         }
     };
 

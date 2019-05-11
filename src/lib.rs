@@ -65,32 +65,31 @@ impl NesEmulator {
         }
     }
 
-    pub fn load_state(&mut self, state: State) -> Result<(), String> {
+    pub fn load_state(&mut self, state: State) {
         self.cpu.mmu.ppu.set_state(state.ppu_state);
         self.cpu.mmu.mapper.borrow_mut().rom.header.screen = state.screen_mode;
         self.cpu.mmu.mapper.borrow_mut().rom.chr_ram = state.chr_ram;
         self.cpu.regs = state.cpu_regs;
         self.cpu.mmu.mapper.borrow_mut().mem_type = state.mapper;
         self.cpu.mmu.ram = state.ram;
-        Ok(())
     }
 
-    pub fn step(&mut self) -> Result<bool, String> {
+    pub fn step(&mut self) -> bool {
         let cc = self.cpu.step();
         match self.cpu.mmu.ppu.emulate_cycles(cc) {
             Some(r) => match r {
                 PpuRes::Nmi => {
                     self.cpu.proc_nmi();
-                    Ok(false)
+                    false
                 }
-                PpuRes::Draw => Ok(true),
+                PpuRes::Draw => true,
             },
-            None => Ok(false),
+            None => false,
         }
     }
 
-    pub fn next_frame(&mut self) -> Result<Box<[u8]>, String> {
-        while !self.step()? {}
-        Ok(self.cpu.mmu.ppu.get_buffer())
+    pub fn next_frame(&mut self) -> Box<[u8]> {
+        while !self.step() {}
+        self.cpu.mmu.ppu.get_buffer()
     }
 }

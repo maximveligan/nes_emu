@@ -1,7 +1,12 @@
+#[macro_use]
+extern crate log;
 extern crate nes_emu;
 extern crate sdl2;
 
+#[macro_use]
+extern crate failure;
 use std::path::Path;
+use failure::Error;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::TextureAccess;
@@ -21,25 +26,40 @@ use std::env;
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
-fn main() {
-    env_logger::init();
-    if let Some(str_path) = env::args().nth(1) {
-        let path = Path::new(&str_path);
-        if path.is_file() {
-            if let Some(os_stem) = path.file_stem() {
-                if let Some(rom_stem) = os_stem.to_str() {
-                    start_emulator(&str_path, rom_stem);
-                } else {
-                    println!("Failed to convert path to UTF-8");
-                }
-            } else {
-                println!("Rom file name did not have .nes extension");
-            }
+fn get_save_state_name<'a>(rom_path: &'a Path) -> Result<&'a str, Error> {
+    if let Some(os_stem) = rom_path.file_stem() {
+        if let Some(rom_stem) = os_stem.to_str() {
+            Ok(rom_stem)
         } else {
-            println!("Did not recieve a rom file name!");
+            bail!("Failed to convert path to UTF-8");
         }
     } else {
-        println!("Did not recieve a rom path");
+        warn!("Rom file name did not have an extension");
+        if let Some(rom_string) = rom_path.to_str() {
+            Ok(rom_string)
+        } else {
+            bail!("Failed to convert path to UTF-8");
+        }
+    }
+}
+
+fn main() -> Result<(), Error> {
+    env_logger::init();
+    if let Some(str_path) = env::args().nth(1) {
+        let rom_path = Path::new(&str_path);
+        if !rom_path.is_file() {
+            bail!("Given path is not a file");
+        } else {
+            let save_state_name = get_save_state_name(rom_path)?;
+            start_emulator(
+                rom_path
+                    .to_str()
+                    .expect("Checked for this in get_save_state_name"),
+                save_state_name,
+            )
+        }
+    } else {
+        bail!("No given path");
     }
 }
 
@@ -52,8 +72,7 @@ struct NesFrontEnd {
 }
 
 enum EventRes {
-    SaveState(String),
-    LoadState(String),
+    StateRes(String),
     Quit,
 }
 
@@ -82,11 +101,23 @@ impl NesFrontEnd {
             Event::KeyDown {
                 keycode: Some(Keycode::Q),
                 ..
-            } => Some(EventRes::SaveState(self.save_state())),
+            } => {
+                let state_res = match self.save_state() {
+                    Ok(res) => res,
+                    Err(e) => e.to_string(),
+                };
+                Some(EventRes::StateRes(state_res))
+            }
             Event::KeyDown {
                 keycode: Some(Keycode::E),
                 ..
-            } => Some(EventRes::LoadState(self.load_state())),
+            } => {
+                let state_res = match self.load_state() {
+                    Ok(res) => res,
+                    Err(e) => e.to_string(),
+                };
+                Some(EventRes::StateRes(state_res))
+            }
             Event::KeyDown {
                 keycode: Some(key), ..
             } => {
@@ -121,60 +152,26 @@ impl NesFrontEnd {
         self.pause = !self.pause;
     }
 
-    fn save_state(&mut self) -> String {
-        match File::create(&self.save_name) {
-            Ok(mut file) => match self.nes.get_state().save(&mut file) {
-                Ok(_) => format!("Wrote save state successfully"),
-                Err(e) => format!("Error saving state {}", e),
-            },
-            Err(e) => format!("Error occured when opening file {}", e),
-        }
+    fn save_state(&mut self) -> Result<String, Error> {
+        let mut file = File::create(&self.save_name)?;
+        self.nes.get_state().save(&mut file)?;
+        Ok(format!("Successfully saved state: {}", &self.save_name))
     }
 
-    fn load_state(&mut self) -> String {
-        match File::open(&self.save_name) {
-            Ok(mut file) => match nes_emu::state::State::load(&mut file) {
-                Ok(state) => match self.nes.load_state(state) {
-                    Ok(()) => "Loaded state successfully".to_string(),
-                    Err(e) => format!("Emulator could not load state: {}", e),
-                },
-                Err(e) => format!(
-                    "Loading state from file failed: {}. Filename: {}",
-                    e, self.save_name
-                ),
-            },
-            Err(e) => format!("Could not open file {}", e),
-        }
+    fn load_state(&mut self) -> Result<String, Error> {
+        let mut file = File::open(&self.save_name)?;
+        let state = nes_emu::state::State::load(&mut file)?;
+        self.nes.load_state(state);
+        Ok("Loaded state successfully".to_string())
     }
 }
 
-fn start_emulator(path_in: &str, rom_stem: &str) {
+fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
     let mut state_name = rom_stem.to_string();
     state_name.push_str(".sav");
-    let config = match Config::load_config("./config.toml".to_string()) {
-        Ok(config) => config,
-        Err(e) => {
-            println!("Error when loading config: {}", e);
-            return;
-        }
-    };
-    let sdl_ctrl0_map = match ButtonLayout::make_ctrl_map(&config.ctrl1_layout)
-    {
-        Ok(map) => map,
-        Err(e) => {
-            println!("Error occured while generating controller map 1 {}", e);
-            return;
-        }
-    };
-
-    let sdl_ctrl1_map = match ButtonLayout::make_ctrl_map(&config.ctrl2_layout)
-    {
-        Ok(map) => map,
-        Err(e) => {
-            println!("Error occured while generating controller map 2 {}", e);
-            return;
-        }
-    };
+    let config = Config::load_config("./config.toml".to_string())?;
+    let sdl_ctrl0_map = ButtonLayout::make_ctrl_map(&config.ctrl1_layout)?;
+    let sdl_ctrl1_map = ButtonLayout::make_ctrl_map(&config.ctrl2_layout)?;
 
     let screen_height = SCREEN_HEIGHT as u32
         - config.overscan.bottom as u32
@@ -213,27 +210,10 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let mut raw_bytes = Vec::new();
-    match File::open(path_in) {
-        Ok(mut raw_rom) => match raw_rom.read_to_end(&mut raw_bytes) {
-            Ok(_) => (),
-            Err(e) => {
-                println!("Error while loading in rom {}", e);
-                return;
-            }
-        },
-        Err(e) => {
-            println!("Error while opening file {}", e);
-            return;
-        }
-    }
+    let mut raw_rom = File::open(path_in)?;
+    raw_rom.read_to_end(&mut raw_bytes)?;
 
-    let rom = match load_rom(&raw_bytes) {
-        Ok(rom) => rom,
-        Err(e) => {
-            println!("Error during rom parsing {}", e);
-            return;
-        }
-    };
+    let rom = load_rom(&raw_bytes)?;
 
     let mut nes_frontend = NesFrontEnd {
         nes: NesEmulator::new(rom),
@@ -245,35 +225,29 @@ fn start_emulator(path_in: &str, rom_stem: &str) {
 
     loop {
         if !nes_frontend.pause {
-            match nes_frontend.nes.next_frame() {
-                Ok(framebuffer) => {
-                    texture
-                        .update(
-                            None,
-                            &framebuffer[config.overscan.top as usize
-                                * 3
-                                * SCREEN_WIDTH
-                                ..(SCREEN_WIDTH * SCREEN_HEIGHT
-                                    - config.overscan.bottom as usize)
-                                    * 3],
-                            SCREEN_WIDTH * 3,
-                        )
-                        .unwrap();
-                    canvas.clear();
-                    canvas.copy(&texture, None, None).unwrap();
-                    canvas.present();
-                }
-                Err(e) => println!("The following error has occured: {}", e),
-            }
+            let framebuffer = nes_frontend.nes.next_frame();
+            texture
+                .update(
+                    None,
+                    &framebuffer[config.overscan.top as usize * 3 * SCREEN_WIDTH
+                        ..(SCREEN_WIDTH * SCREEN_HEIGHT
+                            - config.overscan.bottom as usize)
+                            * 3],
+                    SCREEN_WIDTH * 3,
+                )
+                .unwrap();
+            canvas.clear();
+            canvas.copy(&texture, None, None).unwrap();
+            canvas.present();
         }
 
         for event in event_pump.poll_iter() {
             if let Some(result) = nes_frontend.handle_event(event) {
                 match result {
-                    EventRes::SaveState(r) | EventRes::LoadState(r) => {
+                    EventRes::StateRes(r) => {
                         println!("{}", r)
                     }
-                    EventRes::Quit => return,
+                    EventRes::Quit => return Ok(()),
                 }
             }
         }
