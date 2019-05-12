@@ -152,7 +152,7 @@ pub struct Ppu {
     pub regs: PRegisters,
     vram: Vram,
     // multiply by 3 to account for r g b
-    screen_buff: [u8; SCREEN_WIDTH * SCREEN_HEIGHT * 3],
+    screen_buff: Box<[u8]>,
     oam: [u8; 256],
     tmp_oam: Vec<Sprite>,
     main_oam: Vec<Sprite>,
@@ -188,7 +188,7 @@ impl Ppu {
             vblank_off: false,
             regs: PRegisters::new(),
             vram: Vram::new(mapper),
-            screen_buff: [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT],
+            screen_buff: Box::new([0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT]),
             oam: [0; 256],
             tmp_oam: Vec::with_capacity(8),
             main_oam: Vec::with_capacity(8),
@@ -237,7 +237,7 @@ impl Ppu {
         self.vblank_off = false;
         self.regs = PRegisters::new();
         self.vram.reset();
-        self.screen_buff = [0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT];
+        self.screen_buff = Box::new([0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT]);
         self.oam = [0; 256];
         self.tmp_oam = Vec::with_capacity(8);
         self.main_oam = Vec::with_capacity(8);
@@ -581,8 +581,8 @@ impl Ppu {
         }
     }
 
-    pub fn get_buffer(&self) -> Box<[u8]> {
-        Box::new(self.screen_buff)
+    pub fn get_buffer(&self) -> &[u8] {
+        &self.screen_buff
     }
 
     fn step_cc(&mut self) {

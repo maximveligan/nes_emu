@@ -88,7 +88,7 @@ impl NesEmulator {
         }
     }
 
-    pub fn next_frame(&mut self) -> Box<[u8]> {
+    pub fn next_frame(&mut self) -> &[u8] {
         while !self.step() {}
         self.cpu.mmu.ppu.get_buffer()
     }
