@@ -167,11 +167,7 @@ impl NesFrontEnd {
 }
 
 fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
-    let mut state_name = rom_stem.to_string();
-    state_name.push_str(".sav");
     let config = Config::load_config("./config.toml".to_string())?;
-    let sdl_ctrl0_map = ButtonLayout::make_ctrl_map(&config.ctrl1_layout)?;
-    let sdl_ctrl1_map = ButtonLayout::make_ctrl_map(&config.ctrl2_layout)?;
 
     let screen_height = SCREEN_HEIGHT as u32
         - config.overscan.bottom as u32
@@ -218,9 +214,9 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
     let mut nes_frontend = NesFrontEnd {
         nes: NesEmulator::new(rom),
         pause: false,
-        ctrl0: sdl_ctrl0_map,
-        ctrl1: sdl_ctrl1_map,
-        save_name: state_name,
+        ctrl0: ButtonLayout::make_ctrl_map(&config.ctrl1_layout)?,
+        ctrl1: ButtonLayout::make_ctrl_map(&config.ctrl2_layout)?,
+        save_name: rom_stem.to_string() + ".sav",
     };
 
     loop {
