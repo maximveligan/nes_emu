@@ -423,11 +423,13 @@ impl Ppu {
         bg_opaque: bool,
     ) -> (u8, Option<Priority>) {
         for sprite in self.main_oam.iter() {
-            if !self.regs.mask.show_sprites() {
-                return (0, None);
+            if !self.regs.mask.show_sprites()
+                || (sprite.x < 8 && !self.regs.mask.left8_sprite())
+            {
+                continue;
             }
 
-            if !sprite.in_bounding_box(x, self.scanline as u8) {
+            if !sprite.in_bounding_box(x) {
                 continue;
             }
 
@@ -445,16 +447,8 @@ impl Ppu {
                 continue;
             }
 
-            if sprite.index == 0
-                && bg_opaque
-                && x != 255
-                && !((sprite.x == 0) && (!self.regs.mask.left8_sprite()))
-            {
+            if sprite.index == 0 && bg_opaque && sprite.x != 255 {
                 self.regs.status.set_sprite_0_hit(true);
-            }
-
-            if sprite.x < 8 && !self.regs.mask.left8_sprite() {
-                continue;
             }
 
             let sprite_color =

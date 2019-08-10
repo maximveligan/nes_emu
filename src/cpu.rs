@@ -3,7 +3,6 @@ use serde::Deserialize;
 use cpu_const::*;
 use std::fmt;
 use mmu::Mmu;
-use log::Level;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Registers {
@@ -487,12 +486,27 @@ impl Cpu {
 
     fn arr(&mut self, mode: Mode) {
         let val = self.read_op(mode);
-        let new_acc = ((self.regs.acc & val) >> 1)
-            | ((self.regs.flags.carry() as u8) << 7);
-        let b6 = (new_acc >> 6) & 1;
-        let b5 = (new_acc >> 5) & 1;
-        self.regs.flags.set_carry(b6 == 1);
-        self.regs.flags.set_overflow(b6 ^ b5 == 1);
+        let mut new_acc = self.regs.acc & val;
+        new_acc >>= 1;
+        match (new_acc >> 5) & 0b11 {
+            0b00 => {
+                self.regs.flags.set_carry(false);
+                self.regs.flags.set_overflow(false);
+            }
+            0b01 => {
+                self.regs.flags.set_overflow(true);
+                self.regs.flags.set_carry(false);
+            }
+            0b10 => {
+                self.regs.flags.set_overflow(true);
+                self.regs.flags.set_carry(true);
+            }
+            0b11 => {
+                self.regs.flags.set_carry(true);
+                self.regs.flags.set_overflow(false);
+            }
+            _ => panic!("Matching on 2 bits, can't get other values"),
+        }
         self.set_zero_neg(new_acc);
         self.regs.acc = new_acc;
     }
@@ -504,13 +518,13 @@ impl Cpu {
         self.set_zero_neg(val);
     }
 
-    fn axs(&mut self) {
-        let val = self.read_op(Mode::Imm);
+    fn axs(&mut self, mode: Mode) {
+        let val = self.read_op(mode);
         let tmp = self.regs.x & self.regs.acc;
-        let res = tmp.wrapping_sub(val);
-        self.regs.flags.set_carry(tmp >= val);
-        self.set_zero_neg(res);
-        self.regs.x = res;
+        let (tmp, carry) = tmp.overflowing_sub(val);
+        self.regs.flags.set_carry(carry);
+        self.regs.x = tmp;
+        self.set_zero_neg(tmp);
     }
 
     //TODO this is dec followed by cmp, refactor this to use those functions
@@ -580,44 +594,6 @@ impl Cpu {
         self.adc_val(tmp);
     }
 
-    fn alr(&mut self, mode: Mode) {
-        let val = self.read_op(mode);
-        let acc = self.regs.acc & val;
-        self.regs.flags.set_carry((acc & 0b01) != 0);
-        let tmp = acc >> 1;
-        self.set_zero_neg(tmp);
-        self.regs.acc = tmp;
-    }
-
-    fn atx(&mut self) {
-        self.lda(Mode::Imm);
-        self.tax();
-    }
-
-    fn tax(&mut self) {
-        let acc = self.regs.acc;
-        self.regs.x = acc;
-        self.set_zero_neg(acc);
-    }
-
-    fn sya(&mut self, mode: Mode) {
-        let mut addr = self.address_mem(mode);
-        if (addr & 0xFF00) != (addr - self.regs.x as u16) & 0xFF00 {
-            addr &= (self.regs.y as u16) << 8;
-        }
-        let tmp = self.regs.y & ((addr >> 8) as u8 + 1);
-        self.store(addr, tmp);
-    }
-
-    fn sxa(&mut self, mode: Mode) {
-        let mut addr = self.address_mem(mode);
-        if (addr & 0xFF00) != (addr - self.regs.y as u16) & 0xFF00 {
-            addr &= (self.regs.x as u16) << 8;
-        }
-        let tmp = self.regs.x & ((addr >> 8) as u8 + 1);
-        self.store(addr, tmp);
-    }
-
     fn push(&mut self, val: u8) {
         let addr = self.regs.sp as u16 | 0x100;
         self.store(addr, val);
@@ -659,10 +635,10 @@ impl Cpu {
         self.cycle_count += CYCLES[byte as usize] as u16;
         self.execute_op(byte);
         let tmp = self.cycle_count;
-        if log_enabled!(Level::Debug) {
-            debug!("{:?} CYC:{}", self.regs.clone(), self.cc);
-            self.cc += tmp as usize;
-        }
+        //let regs = self.regs.clone();
+        // TODO: Use logging properly here
+        //println!("{:?} CYC:{}", regs, self.cc);
+        //self.cc += tmp as usize;
         self.cycle_count = 0;
         tmp
     }
@@ -809,6 +785,7 @@ impl Cpu {
             0xBF => self.lax(Mode::AbsY),
             0xA3 => self.lax(Mode::IndX),
             0xB3 => self.lax(Mode::IndY),
+            0xCB => self.axs(Mode::Imm),
             0xC7 => self.dcp(Mode::ZP),
             0xD7 => self.dcp(Mode::ZPX),
             0xCF => self.dcp(Mode::Abs),
@@ -851,11 +828,7 @@ impl Cpu {
             0x7B => self.rra(Mode::NoPBAbsY),
             0x63 => self.rra(Mode::IndX),
             0x73 => self.rra(Mode::NoPBIndY),
-            0x4B => self.alr(Mode::Imm),
-            0x9C => self.sya(Mode::NoPBAbsX),
-            0x9E => self.sxa(Mode::NoPBAbsY),
-            0xAB => self.atx(),
-            0xCB => self.axs(),
+
             RTS => {
                 self.pull_pc();
                 self.regs.pc.add_unsigned(1);
@@ -871,25 +844,35 @@ impl Cpu {
             SEI => self.regs.flags.set_itr(true),
             CLV => self.regs.flags.set_overflow(false),
             CLD => self.regs.flags.set_dec(false),
+
             NOP | 0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => (),
+
             // DOP: Double NOP
             0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89
             | 0xC2 | 0xD4 | 0xE2 | 0xF4 | 0x04 => {
                 self.regs.pc.add_signed(1);
             }
+
             // TOP: Triple NOP
-            0x0C => self.regs.pc.add_signed(2),
+            0x0C => {
+                let _ = self.address_mem(Mode::Abs);
+            }
             0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
                 let _ = self.address_mem(Mode::AbsX);
             }
+
             BRK => {
-                self.regs.pc.add_signed(1);
                 self.push_pc();
-                self.push(self.regs.flags.as_byte() | 0b10000);
-                self.regs.flags.set_itr(true);
-                self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC));
+                let flags = self.regs.flags;
+                self.push(flags.as_byte());
+                self.regs.pc.set_addr(IRQ_VEC);
+                self.regs.flags.set_brk(true);
             }
-            TAX => self.tax(),
+            TAX => {
+                let acc = self.regs.acc;
+                self.regs.x = acc;
+                self.set_zero_neg(acc);
+            }
             TXA => {
                 let x = self.regs.x;
                 self.regs.acc = x;
@@ -944,9 +927,13 @@ impl Cpu {
                 self.set_zero_neg(acc);
             }
             PHP => {
-                self.push(self.regs.flags.as_byte() | 0b10000);
+                let mut flags = self.regs.flags.clone();
+                flags.set_brk(true);
+                self.push(flags.as_byte());
             }
-            PLP => self.pull_status(),
+            PLP => {
+                self.pull_status();
+            }
             BVS => {
                 let flag = self.regs.flags.overflow();
                 self.generic_branch(flag);

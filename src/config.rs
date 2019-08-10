@@ -123,7 +123,7 @@ impl Config {
         let overscan = Overscan { top: 8, bottom: 8 };
 
         Config {
-            pixel_scale: 3,
+            pixel_scale: 6,
             ctrl1_layout: layout1,
             ctrl2_layout: layout2,
             overscan: overscan,

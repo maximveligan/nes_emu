@@ -188,8 +188,8 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
 
     let mut canvas = window
         .into_canvas()
-        .accelerated()
         .present_vsync()
+        .accelerated()
         .build()
         .unwrap();
 

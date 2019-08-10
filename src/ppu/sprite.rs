@@ -35,12 +35,8 @@ impl Sprite {
         }
     }
 
-    pub fn in_bounding_box(&self, x: u8, y: u8) -> bool {
-        !(self.x > x || self.x + 8 <= x
-        // These last 2 cases are for accounting for overscan
-        || y <= 8
-        // This is screenheight - 8
-        || y >= 240 - 8)
+    pub fn in_bounding_box(&self, x: u8) -> bool {
+        !(self.x > x || self.x + 8 <= x)
     }
 
     pub fn get_pt_address(&self, ctrl: &Ctrl, y: u16) -> u16 {
