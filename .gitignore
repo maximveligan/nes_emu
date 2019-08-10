@@ -4,3 +4,4 @@
 /nes_rom_tests/
 Cargo.lock
 *.sav
+config.toml
