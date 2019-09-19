@@ -3,6 +3,7 @@ use serde::Deserialize;
 use cpu_const::*;
 use std::fmt;
 use mmu::Mmu;
+use log::Level;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Registers {
@@ -635,10 +636,10 @@ impl Cpu {
         self.cycle_count += CYCLES[byte as usize] as u16;
         self.execute_op(byte);
         let tmp = self.cycle_count;
-        //let regs = self.regs.clone();
-        // TODO: Use logging properly here
-        //println!("{:?} CYC:{}", regs, self.cc);
-        //self.cc += tmp as usize;
+        if log_enabled!(Level::Debug) {
+            debug!("{:?} CYC:{}", self.regs.clone(), self.cc);
+            self.cc += tmp as usize;
+        }
         self.cycle_count = 0;
         tmp
     }
