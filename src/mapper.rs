@@ -5,10 +5,12 @@ use rom::ScreenMode;
 use mapper::sxrom::*;
 use mapper::unrom::*;
 use mapper::nrom::*;
+use mapper::axrom::*;
 
 pub mod nrom;
 pub mod sxrom;
 pub mod unrom;
+pub mod axrom;
 
 pub struct Mapper {
     pub mem_type: MemType,
@@ -20,6 +22,7 @@ pub enum MemType {
     Nrom(Nrom),
     Sxrom(Sxrom),
     Unrom(Unrom),
+    Axrom(Axrom),
 }
 
 impl Mapper {
@@ -39,6 +42,10 @@ impl Mapper {
                 let last_page_start = rom.prg_rom.len() - 0x4000;
                 MemType::Unrom(Unrom::new(last_page_start))
             }
+            7 => {
+                let last_page_start = rom.prg_rom.len() - 0x8000;
+                MemType::Axrom(Axrom::new(last_page_start))
+            }
             m => panic!("Mapper {} not supported", m),
         };
         Mapper {
@@ -53,7 +60,8 @@ impl Mapper {
             MemType::Unrom(ref unrom) => unrom.ld_prg(addr, &self.rom.prg_rom),
             MemType::Sxrom(ref sxrom) => {
                 sxrom.ld_prg(addr, &self.rom.prg_rom, &self.rom.prg_ram)
-            }
+            },
+            MemType::Axrom(ref axrom) => axrom.ld_prg(addr, &self.rom.prg_rom),
         }
     }
 
@@ -65,7 +73,8 @@ impl Mapper {
             MemType::Unrom(ref unrom) => unrom.ld_chr(addr, &self.rom.chr_ram),
             MemType::Sxrom(ref sxrom) => {
                 sxrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram)
-            }
+            },
+            MemType::Axrom(ref axrom) => axrom.ld_chr(addr, &self.rom.chr_ram),
         }
     }
 
@@ -76,6 +85,7 @@ impl Mapper {
                 sxrom.store_prg(addr, val, &mut self.rom.prg_ram)
             }
             MemType::Nrom(ref nrom) => nrom.store_prg(addr, val),
+            MemType::Axrom(ref mut axrom) => axrom.store_prg(addr, val),
         }
     }
 
@@ -89,6 +99,9 @@ impl Mapper {
             }
             MemType::Nrom(ref mut nrom) => {
                 nrom.store_chr(addr, val, &mut self.rom.chr_ram)
+            },
+            MemType::Axrom(ref mut axrom) => {
+                axrom.store_chr(addr, val, &mut self.rom.chr_ram)
             }
         }
     }
@@ -99,6 +112,7 @@ impl Mapper {
                 self.rom.header.screen.clone()
             }
             MemType::Sxrom(ref sxrom) => sxrom.get_mirroring(),
+            MemType::Axrom(ref axrom) => axrom.get_mirroring(),
         }
     }
 
@@ -107,6 +121,7 @@ impl Mapper {
             MemType::Nrom(_) => (),
             MemType::Unrom(ref mut unrom) => unrom.reset(),
             MemType::Sxrom(ref mut sxrom) => sxrom.reset(),
+            MemType::Axrom(ref mut axrom) => axrom.reset(),
         }
     }
 }
