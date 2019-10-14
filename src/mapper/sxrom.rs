@@ -85,14 +85,14 @@ impl Sxrom {
             } else {
                 if let Some(val) = self.shift.push(val) {
                     match address {
-                        0x8000...0x9FFF => self.ctrl = Ctrl(val),
-                        0xA000...0xBFFF => {
+                        0x8000..=0x9FFF => self.ctrl = Ctrl(val),
+                        0xA000..=0xBFFF => {
                             self.chr_bank_0 = (val & 0b11111) as usize % 8;
                         }
-                        0xC000...0xDFFF => {
+                        0xC000..=0xDFFF => {
                             self.chr_bank_1 = (val & 0b11111) as usize % 8;
                         }
-                        0xE000...0xFFFF => {
+                        0xE000..=0xFFFF => {
                             self.prg_bank = (val & 0b1111) as usize;
                             self.prg_ram_enabled = (val & 0b10000) == 0;
                         }
@@ -110,8 +110,8 @@ impl Sxrom {
         prg_ram: &Vec<u8>,
     ) -> u8 {
         match address {
-            0x6000...0x7FFF => prg_ram[address as usize - 0x6000],
-            0x8000...0xFFFF => prg_rom[self.get_prg_index(address)],
+            0x6000..=0x7FFF => prg_ram[address as usize - 0x6000],
+            0x8000..=0xFFFF => prg_rom[self.get_prg_index(address)],
             addr => {
                 info!("Reading from unmapped memory {:X}", addr);
                 0
@@ -144,8 +144,8 @@ impl Sxrom {
         match self.ctrl.chr_rom_mode() as u8 {
             0 => (((self.chr_bank_0 & 0xFE) * 0x1000) + addr as usize),
             1 => match addr {
-                0x0000...0x0FFF => (self.chr_bank_0 * 0x1000) + addr as usize,
-                0x1000...0x1FFF => {
+                0x0000..=0x0FFF => (self.chr_bank_0 * 0x1000) + addr as usize,
+                0x1000..=0x1FFF => {
                     (self.chr_bank_1 * 0x1000) + (addr as usize - 0x1000)
                 }
                 c => panic!("Chr indices are only 0000-1FFFF {:X}", c),
@@ -158,17 +158,17 @@ impl Sxrom {
         match self.ctrl.prg_rom_mode() {
             0 | 1 => ((self.prg_bank >> 1) * 0x4000) + (addr as usize - 0x8000),
             2 => match addr {
-                0x8000...0xBFFF => addr as usize - 0x8000,
-                0xC000...0xFFFF => {
+                0x8000..=0xBFFF => addr as usize - 0x8000,
+                0xC000..=0xFFFF => {
                     (self.prg_bank * 0x4000) + (addr as usize - 0xC000)
                 }
                 _ => panic!("addr can't be anything else"),
             },
             3 => match addr {
-                0x8000...0xBFFF => {
+                0x8000..=0xBFFF => {
                     (self.prg_bank * 0x4000) + (addr as usize - 0x8000)
                 }
-                0xC000...0xFFFF => {
+                0xC000..=0xFFFF => {
                     self.last_page_start + addr as usize - 0xC000
                 }
                 a => panic!("addr can't be anything else {:X}", a),

@@ -58,8 +58,8 @@ impl Mmu {
 
     pub fn store(&mut self, address: u16, val: u8) {
         match address {
-            WRAM_START...WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START...PPU_END => {
+            WRAM_START..=WRAM_END => self.ram.store(address & 0x7FF, val),
+            PPU_START..=PPU_END => {
                 self.open_bus = val;
                 self.ppu.store((address - 0x2000) & 7, val);
             }
@@ -67,9 +67,9 @@ impl Mmu {
                 self.ctrl0.store(val);
                 self.ctrl1.store(val);
             }
-            0x4000...0x4017 => self.apu.store(address - 0x4000, val),
-            0x4018...0x401F => println!("disabled normally"),
-            ROM_START...ROM_END => {
+            0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
+            0x4018..=0x401F => println!("disabled normally"),
+            ROM_START..=ROM_END => {
                 self.mapper.borrow_mut().store_prg(address, val)
             }
         }
@@ -85,8 +85,8 @@ impl Mmu {
 
     pub fn ld8(&mut self, address: u16) -> u8 {
         match address {
-            WRAM_START...WRAM_END => self.ram.load(address & 0x7FF),
-            PPU_START...PPU_END => {
+            WRAM_START..=WRAM_END => self.ram.load(address & 0x7FF),
+            PPU_START..=PPU_END => {
                 let ppu_reg = (address - 0x2000) & 7;
                 let val = self.ppu.ld(ppu_reg, self.open_bus);
                 self.update_bus(ppu_reg, val);
@@ -95,11 +95,11 @@ impl Mmu {
             0x4015 => self.apu.load(address - 0x4000),
             0x4016 => self.ctrl0.ld8(),
             0x4017 => self.ctrl1.ld8(),
-            0x4000...0x4014 | 0x4018...0x401F => {
+            0x4000..=0x4014 | 0x4018..=0x401F => {
                 println!("disabled normally");
                 0
             }
-            ROM_START...ROM_END => {
+            ROM_START..=ROM_END => {
                 let mapper = self.mapper.borrow();
                 mapper.ld_prg(address)
             }
