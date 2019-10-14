@@ -250,18 +250,6 @@ impl Ppu {
         self.internal_regs = InternalRegs::new();
     }
 
-    pub fn pull_nt(&self, offset: u16) {
-        for index in offset..(offset + 0x3C0) {
-            println!("{:02X}", self.vram.ld8(index as u16));
-        }
-    }
-
-    pub fn pull_at(&self, offset: u16) {
-        for index in offset..(offset + 0xC00) {
-            println!("{:02X}", self.vram.ld8(index as u16));
-        }
-    }
-
     fn get_palette_color(&self, vram_offset: u8) -> Rgb {
         let pal_index = (self.vram.ld8(0x3F00 + vram_offset as u16)) & 0x3F;
         let num = PALETTE[pal_index as usize];
@@ -385,7 +373,7 @@ impl Ppu {
                 self.get_sprites();
                 self.regs.oam_addr = 0;
             }
-            258...320 => {
+            258..=320 => {
                 self.regs.oam_addr = 0;
             }
             321 => {
@@ -463,7 +451,7 @@ impl Ppu {
 
     fn step_bg_regs(&mut self) {
         match self.cc {
-            2...256 | 322...337 => match self.cc % 8 {
+            2..=256 | 322..=337 => match self.cc % 8 {
                 1 => {
                     self.internal_regs.reload(self.at_entry);
                 }
@@ -505,7 +493,7 @@ impl Ppu {
                 }
             }
 
-            280...304 => {
+            280..=304 => {
                 if self.is_prerender() && self.regs.mask.show_bg() {
                     self.regs.addr.pull_y(self.t_addr);
                 }
@@ -544,7 +532,7 @@ impl Ppu {
     //it's not part of rendering pixels
     fn render_pixel(&mut self) {
         match self.cc {
-            2...257 | 322...337 => {
+            2..=257 | 322..=337 => {
                 let x = self.cc - 2;
                 if x < 256 && !self.is_prerender() {
                     let bg_color = self.bg_pixel(x as u8);
@@ -592,7 +580,7 @@ impl Ppu {
 
     fn step(&mut self) -> Option<PpuRes> {
         let mut res = match self.scanline {
-            0...239 => {
+            0..=239 => {
                 self.step_sprites();
                 self.render_pixel();
                 self.step_bg_regs();
@@ -617,7 +605,7 @@ impl Ppu {
                     None
                 }
             }
-            242...260 => None,
+            242..=260 => None,
             PRERENDER => {
                 if self.cc == 1 {
                     self.regs.status.set_vblank(false);

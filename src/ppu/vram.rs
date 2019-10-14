@@ -50,18 +50,18 @@ impl Vram {
 
     pub fn ld8(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x1FFF => self.mapper.borrow_mut().ld_chr(addr),
-            0x2000...0x3EFF => self.vram[self.nt_mirror(addr & 0xFFF)],
-            0x3F00...0x3FFF => self.palette[self.palette_mirror(addr)],
+            0x0000..=0x1FFF => self.mapper.borrow_mut().ld_chr(addr),
+            0x2000..=0x3EFF => self.vram[self.nt_mirror(addr & 0xFFF)],
+            0x3F00..=0x3FFF => self.palette[self.palette_mirror(addr)],
             _ => panic!(),
         }
     }
 
     pub fn store(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000...0x1FFF => self.mapper.borrow_mut().store_chr(addr, val),
-            0x2000...0x3EFF => self.vram[self.nt_mirror(addr & 0xFFF)] = val,
-            0x3F00...0x3FFF => self.palette[self.palette_mirror(addr)] = val,
+            0x0000..=0x1FFF => self.mapper.borrow_mut().store_chr(addr, val),
+            0x2000..=0x3EFF => self.vram[self.nt_mirror(addr & 0xFFF)] = val,
+            0x3F00..=0x3FFF => self.palette[self.palette_mirror(addr)] = val,
             _ => panic!(),
         }
     }
@@ -71,14 +71,14 @@ impl Vram {
     fn nt_mirror(&self, addr: u16) -> usize {
         match self.mapper.borrow().get_mirroring() {
             ScreenMode::Horizontal => match addr {
-                NT_0...NT_0_END => addr as usize,
-                NT_1...NT_2_END => (addr - 0x400) as usize,
-                NT_3...NT_3_END => (addr - 0x800) as usize,
+                NT_0..=NT_0_END => addr as usize,
+                NT_1..=NT_2_END => (addr - 0x400) as usize,
+                NT_3..=NT_3_END => (addr - 0x800) as usize,
                 _ => panic!("Horizontal: addr outside of nt passed"),
             },
             ScreenMode::Vertical => match addr {
-                NT_0...NT_1_END => addr as usize,
-                NT_2...NT_3_END => (addr - 0x800) as usize,
+                NT_0..=NT_1_END => addr as usize,
+                NT_2..=NT_3_END => (addr - 0x800) as usize,
                 _ => panic!("Vertical: addr outside of nt passed"),
             },
             ScreenMode::OneScreenSwap(bank) => {
