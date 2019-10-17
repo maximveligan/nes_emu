@@ -83,7 +83,7 @@ pub fn load_rom(rom_bytes: &[u8]) -> Result<Rom, Error> {
         Ok((_, rom)) => rom,
         Err(e) => {
             debug!("Nom parse error message {}", e.to_string());
-            return Err(Error::from(LoadRomError::ParseError))
+            return Err(Error::from(LoadRomError::ParseError));
         }
     };
 

@@ -6,11 +6,13 @@ use mapper::sxrom::*;
 use mapper::unrom::*;
 use mapper::nrom::*;
 use mapper::axrom::*;
+use mapper::txrom::*;
 
 pub mod nrom;
 pub mod sxrom;
 pub mod unrom;
 pub mod axrom;
+pub mod txrom;
 
 pub struct Mapper {
     pub mem_type: MemType,
@@ -23,6 +25,7 @@ pub enum MemType {
     Sxrom(Sxrom),
     Unrom(Unrom),
     Axrom(Axrom),
+    Txrom(Txrom),
 }
 
 impl Mapper {
@@ -41,6 +44,11 @@ impl Mapper {
             2 => {
                 let last_page_start = rom.prg_rom.len() - 0x4000;
                 MemType::Unrom(Unrom::new(last_page_start))
+            }
+            4 => {
+                let last_page_start = rom.prg_rom.len() - 0x4000;
+                let use_chr_ram = rom.chr_ram.len() != 0;
+                MemType::Txrom(Txrom::new(use_chr_ram, last_page_start))
             }
             7 => {
                 let last_page_start = rom.prg_rom.len() - 0x8000;
@@ -62,6 +70,7 @@ impl Mapper {
                 sxrom.ld_prg(addr, &self.rom.prg_rom, &self.rom.prg_ram)
             },
             MemType::Axrom(ref axrom) => axrom.ld_prg(addr, &self.rom.prg_rom),
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
         }
     }
 
@@ -75,6 +84,7 @@ impl Mapper {
                 sxrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram)
             },
             MemType::Axrom(ref axrom) => axrom.ld_chr(addr, &self.rom.chr_ram),
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
         }
     }
 
@@ -86,6 +96,7 @@ impl Mapper {
             }
             MemType::Nrom(ref nrom) => nrom.store_prg(addr, val),
             MemType::Axrom(ref mut axrom) => axrom.store_prg(addr, val),
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
         }
     }
 
@@ -103,6 +114,7 @@ impl Mapper {
             MemType::Axrom(ref mut axrom) => {
                 axrom.store_chr(addr, val, &mut self.rom.chr_ram)
             }
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
         }
     }
 
@@ -113,6 +125,7 @@ impl Mapper {
             }
             MemType::Sxrom(ref sxrom) => sxrom.get_mirroring(),
             MemType::Axrom(ref axrom) => axrom.get_mirroring(),
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
         }
     }
 
@@ -122,6 +135,7 @@ impl Mapper {
             MemType::Unrom(ref mut unrom) => unrom.reset(),
             MemType::Sxrom(ref mut sxrom) => sxrom.reset(),
             MemType::Axrom(ref mut axrom) => axrom.reset(),
+            MemType::Txrom(ref mut _txrom) => panic!("Txrom not ready yet"),
         }
     }
 }

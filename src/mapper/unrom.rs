@@ -5,21 +5,22 @@ const SIXTEEN_KB: usize = 0x4000;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct Unrom {
-    bank_select: u8,
     last_page_start: usize,
+    current_bank_offset: usize,
 }
 
 impl Unrom {
     pub fn new(last_page_start: usize) -> Unrom {
         Unrom {
-            bank_select: 0,
+            current_bank_offset: 0,
             last_page_start,
         }
     }
 
     pub fn store_prg(&mut self, address: u16, val: u8) {
         if address >= 0x8000 {
-            self.bank_select = val & 0b111;
+            let bank_select = (val & 0b111) as usize;
+            self.current_bank_offset = bank_select * SIXTEEN_KB;
         } else {
             info!(
                 "Writing to unmapped prg_rom address: {:X} val: {}",
@@ -34,8 +35,7 @@ impl Unrom {
             0
         // Bank switched using 3 bits
         } else if address < 0xC000 {
-            prg_rom[(self.bank_select as usize * SIXTEEN_KB)
-                + (address as usize - 0x8000)]
+            prg_rom[self.current_bank_offset + (address as usize - 0x8000)]
         // Hard wired to last 16KB
         } else {
             prg_rom[(7 * SIXTEEN_KB) + (address as usize - 0xC000)]
@@ -51,6 +51,6 @@ impl Unrom {
     }
 
     pub fn reset(&mut self) {
-        self.bank_select = 0;
+        self.current_bank_offset = 0;
     }
 }
