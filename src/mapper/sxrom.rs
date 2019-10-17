@@ -87,6 +87,8 @@ impl Sxrom {
                     match address {
                         0x8000..=0x9FFF => self.ctrl = Ctrl(val),
                         0xA000..=0xBFFF => {
+                            // Equivalent to multiplying by 0x1000 which is
+                            // the chr page size
                             let chr_bank_0 = (val & 0b11111) as usize % 8;
                             self.chr_bank_0_offset = chr_bank_0 << 12;
                         }
@@ -147,7 +149,7 @@ impl Sxrom {
 
     fn get_chr_index(&self, addr: u16) -> usize {
         match self.ctrl.chr_rom_mode() as u8 {
-            // & with 0xFE to ignore low bit in 8KB mode
+            // & with !0x1000 to ignore low bit in 8KB mode
             0 => ((self.chr_bank_0_offset & !0x1000) + addr as usize),
             1 => match addr {
                 0x0000..=0x0FFF => (self.chr_bank_0_offset) + addr as usize,
