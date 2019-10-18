@@ -87,8 +87,12 @@ impl Mmu {
         match address {
             WRAM_START..=WRAM_END => self.ram.load(address & 0x7FF),
             PPU_START..=PPU_END => {
-                let ppu_reg = (address - 0x2000) & 7;
-                let val = self.ppu.ld(ppu_reg, self.open_bus);
+                let ppu_reg = address & 0b111;
+
+                let val = match ppu_reg {
+                    0 | 1 | 3 | 5 | 6 => self.open_bus,
+                    reg => self.ppu.ld(reg),
+                };
                 self.update_bus(ppu_reg, val);
                 val
             }

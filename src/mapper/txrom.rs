@@ -1,11 +1,15 @@
 use serde::Serialize;
 use serde::Deserialize;
+use rom::ScreenMode;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Txrom {
     use_chr_ram: bool,
     bank_select: BankSelect,
-    last_page_start: usize
+    last_page_start: usize,
+    mirroring: ScreenMode,
+    ram_enabled: bool,
+    allow_writes: bool,
 }
 
 bitfield! {
@@ -23,7 +27,10 @@ impl Txrom {
         Txrom {
             use_chr_ram,
             bank_select: BankSelect(0),
-            last_page_start
+            last_page_start,
+            ram_enabled: false,
+            allow_writes: false,
+            mirroring: ScreenMode::Horizontal,
         }
     }
 
@@ -43,21 +50,42 @@ impl Txrom {
     pub fn store_prg(&mut self, addr: u16, val: u8, prg_ram: &mut Vec<u8>) {
         match (addr, addr & 1) {
             (0x0000..=0x7FFF, _) => {prg_ram[addr as usize] = val},
-            (0x8000..=0x9FFE, 0) => self.bank_select.set_byte(val),
-            (0x8000..=0x9FFE, 1) => {
-                match self.bank_select.bank_reg_select() {
-                    0b000 => unimplemented!(),
-                    0b001 => unimplemented!(),
-                    0b010 => unimplemented!(),
-                    0b011 => unimplemented!(),
-                    0b100 => unimplemented!(),
-                    0b101 => unimplemented!(),
-                    0b110 => unimplemented!(),
-                    0b111 => unimplemented!(),
-                    _ => panic!("Can't get here"),
-                }
-            }
+            (0x8000..=0x9FFF, even_odd) => self.bank_ops(even_odd == 0, val),
+            (0xA000..=0xBFFF, even_odd) => self.misc_ops(even_odd == 0, val),
             _ => panic!(),
+        }
+    }
+
+    fn bank_ops(&mut self, even: bool, val: u8) {
+        if even {
+            self.bank_select.set_byte(val);
+        } else {
+            match self.bank_select.bank_reg_select() {
+                0b000 => unimplemented!(),
+                0b001 => unimplemented!(),
+                0b010 => unimplemented!(),
+                0b011 => unimplemented!(),
+                0b100 => unimplemented!(),
+                0b101 => unimplemented!(),
+                0b110 => unimplemented!(),
+                0b111 => unimplemented!(),
+                _ => panic!("Can't get here"),
+            }
+        }
+    }
+
+    fn misc_ops(&mut self, even: bool, val: u8) {
+        if even {
+            self.mirroring = match val & 0b1 {
+                0 => ScreenMode::Vertical,
+                1 => ScreenMode::Horizontal,
+                _ => panic!("Impossible"),
+            }
+        } else {
+            // This should be >> 4 on MMC6, implement it at some point
+            let shifted_val = val >> 4;
+            self.allow_writes = shifted_val & 0b0100 == 0;
+            self.ram_enabled = shifted_val & 0b1000 == 1;
         }
     }
 
