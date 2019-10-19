@@ -60,10 +60,10 @@ impl Axrom {
         self.bank_select = 0;
     }
 
-    pub fn get_mirroring(&self) -> ScreenMode {
+    pub fn get_mirroring(&self) -> &ScreenMode {
         match self.mirror_select {
-            0 => ScreenMode::OneScreenSwap(ScreenBank::Lower),
-            1 => ScreenMode::OneScreenSwap(ScreenBank::Upper),
+            0 => &ScreenMode::OneScreenSwap(ScreenBank::Lower),
+            1 => &ScreenMode::OneScreenSwap(ScreenBank::Upper),
             _ => panic!("2 bit number can't be greater than 1"),
         }
     }

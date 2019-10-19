@@ -118,14 +118,14 @@ impl Mapper {
         }
     }
 
-    pub fn get_mirroring(&self) -> ScreenMode {
+    pub fn get_mirroring(&self) -> &ScreenMode {
         match self.mem_type {
             MemType::Unrom(_) | MemType::Nrom(_) => {
-                self.rom.header.screen.clone()
+                &self.rom.header.screen
             }
             MemType::Sxrom(ref sxrom) => sxrom.get_mirroring(),
             MemType::Axrom(ref axrom) => axrom.get_mirroring(),
-            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
+            MemType::Txrom(ref txrom) => txrom.get_mirroring(),
         }
     }
 

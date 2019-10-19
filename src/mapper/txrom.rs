@@ -10,6 +10,9 @@ pub struct Txrom {
     mirroring: ScreenMode,
     ram_enabled: bool,
     allow_writes: bool,
+    irq_latch: u8,
+    reload_irq_counter: bool,
+    irq_enabled: bool,
 }
 
 bitfield! {
@@ -31,28 +34,49 @@ impl Txrom {
             ram_enabled: false,
             allow_writes: false,
             mirroring: ScreenMode::Horizontal,
+            irq_latch: 0,
+            reload_irq_counter: false,
+            irq_enabled: false,
         }
     }
 
-    pub fn ld_prg(&self, address: u16, prg_rom: &Vec<u8>, prg_ram: &Vec<u8>) -> u8 {
+    pub fn ld_prg(
+        &self,
+        address: u16,
+        prg_rom: &Vec<u8>,
+        prg_ram: &Vec<u8>,
+    ) -> u8 {
         match address {
             // This is optional, check what that means
             0x6000..=0x7FFF => prg_ram[address as usize - 0x6000],
             // 0x8000..=0x9FFF => (or $C000-$DFFF): 8 KB switchable PRG ROM bank
             // 0xA000..=0xBFFF =>  8 KB switchable PRG ROM bank
             // This one sometimes switches, read register here
-            // 0xC000..=0xDFFF => prg_rom[last_page_start - 0x4000 + address as usize]
-            0xE000..=0xFFFF => prg_rom[self.last_page_start - 0x2000 + address as usize],
+            // 0xC000..=0xDFFF => prg_rom[last_page_start - 0x4000 + address as
+            // usize]
+            0xE000..=0xFFFF => {
+                prg_rom[self.last_page_start - 0x2000 + address as usize]
+            }
             _ => panic!(),
         }
     }
 
     pub fn store_prg(&mut self, addr: u16, val: u8, prg_ram: &mut Vec<u8>) {
         match (addr, addr & 1) {
-            (0x0000..=0x7FFF, _) => {prg_ram[addr as usize] = val},
+            (0x6000..=0x7FFF, _) => prg_ram[(addr - 0x6000) as usize] = val,
             (0x8000..=0x9FFF, even_odd) => self.bank_ops(even_odd == 0, val),
             (0xA000..=0xBFFF, even_odd) => self.misc_ops(even_odd == 0, val),
-            _ => panic!(),
+            (0xC000..=0xDFFF, even_odd) => self.irq_latch_reload(even_odd == 0, val),
+            (0xE000..=0xFFFF, even_odd) => self.irq_enabled = even_odd == 1,
+            (addr, _) => info!("Attempt to store to unmapped prg mem {:X}", addr),
+        }
+    }
+
+    fn irq_latch_reload(&mut self, even: bool, val: u8) {
+        if even {
+            self.irq_latch = val;
+        } else {
+            self.reload_irq_counter = true;
         }
     }
 
@@ -82,7 +106,7 @@ impl Txrom {
                 _ => panic!("Impossible"),
             }
         } else {
-            // This should be >> 4 on MMC6, implement it at some point
+            // Implemented bits 0 and 1 for MMC6 at some point
             let shifted_val = val >> 4;
             self.allow_writes = shifted_val & 0b0100 == 0;
             self.ram_enabled = shifted_val & 0b1000 == 1;
@@ -98,6 +122,20 @@ impl Txrom {
         0
     }
 
-    pub fn store_chr(&mut self, _address: u16, _val: u8, _chr_ram: &mut Vec<u8>) {
+    pub fn store_chr(
+        &mut self,
+        address: u16,
+        val: u8,
+        chr_ram: &mut Vec<u8>,
+    ) {
+        if self.use_chr_ram {
+            chr_ram[address as usize] = val;
+        } else {
+            info!("Tried to store to chr rom: addr {:X} val {:X}", address, val);
+        }
+    }
+
+    pub fn get_mirroring(&self) -> &ScreenMode {
+        &self.mirroring
     }
 }

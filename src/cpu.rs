@@ -637,7 +637,7 @@ impl Cpu {
         self.execute_op(byte);
         let tmp = self.cycle_count;
         if log_enabled!(Level::Debug) {
-            debug!("{:?} CYC:{}", self.regs.clone(), self.cc);
+            debug!("INST: {:X} {:?} CYC:{}", byte, self.regs.clone(), self.cc);
             self.cc += tmp as usize;
         }
         self.cycle_count = 0;
@@ -863,11 +863,11 @@ impl Cpu {
             }
 
             BRK => {
+                self.regs.pc.add_signed(1);
                 self.push_pc();
-                let flags = self.regs.flags;
-                self.push(flags.as_byte());
-                self.regs.pc.set_addr(IRQ_VEC);
-                self.regs.flags.set_brk(true);
+                self.push(self.regs.flags.as_byte() | 0b10000);
+                self.regs.flags.set_itr(true);
+                self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC));
             }
             TAX => {
                 let acc = self.regs.acc;
@@ -927,11 +927,7 @@ impl Cpu {
                 self.regs.acc = acc;
                 self.set_zero_neg(acc);
             }
-            PHP => {
-                let mut flags = self.regs.flags.clone();
-                flags.set_brk(true);
-                self.push(flags.as_byte());
-            }
+            PHP => self.push(self.regs.flags.as_byte() | 0b10000),
             PLP => {
                 self.pull_status();
             }

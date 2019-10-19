@@ -197,12 +197,12 @@ impl Sxrom {
         self.prg_ram_enabled = true;
     }
 
-    pub fn get_mirroring(&self) -> ScreenMode {
+    pub fn get_mirroring(&self) -> &ScreenMode {
         match self.ctrl.mirroring() {
-            0 => ScreenMode::OneScreenSwap(ScreenBank::Upper),
-            1 => ScreenMode::OneScreenSwap(ScreenBank::Lower),
-            2 => ScreenMode::Vertical,
-            3 => ScreenMode::Horizontal,
+            0 => &ScreenMode::OneScreenSwap(ScreenBank::Upper),
+            1 => &ScreenMode::OneScreenSwap(ScreenBank::Lower),
+            2 => &ScreenMode::Vertical,
+            3 => &ScreenMode::Horizontal,
             _ => panic!("2 bit number can't be greater than 3"),
         }
     }
