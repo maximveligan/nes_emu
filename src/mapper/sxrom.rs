@@ -167,7 +167,10 @@ impl Sxrom {
             // Normally this code shifts right by 1, then left by 14, ANDing
             // the base by !0x2000 pulls out the bit that would be set to 0 if
             // we shifted by 1 first
-            0 | 1 => ((self.prg_bank_offset & !0x2000) >> 1) + (addr as usize - 0x8000),
+            0 | 1 => {
+                ((self.prg_bank_offset & !0x2000) >> 1)
+                    + (addr as usize - 0x8000)
+            }
             2 => match addr {
                 0x8000..=0xBFFF => addr as usize - 0x8000,
                 0xC000..=0xFFFF => {

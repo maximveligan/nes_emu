@@ -66,9 +66,13 @@ impl Txrom {
             (0x6000..=0x7FFF, _) => prg_ram[(addr - 0x6000) as usize] = val,
             (0x8000..=0x9FFF, even_odd) => self.bank_ops(even_odd == 0, val),
             (0xA000..=0xBFFF, even_odd) => self.misc_ops(even_odd == 0, val),
-            (0xC000..=0xDFFF, even_odd) => self.irq_latch_reload(even_odd == 0, val),
+            (0xC000..=0xDFFF, even_odd) => {
+                self.irq_latch_reload(even_odd == 0, val)
+            }
             (0xE000..=0xFFFF, even_odd) => self.irq_enabled = even_odd == 1,
-            (addr, _) => info!("Attempt to store to unmapped prg mem {:X}", addr),
+            (addr, _) => {
+                info!("Attempt to store to unmapped prg mem {:X}", addr)
+            }
         }
     }
 
@@ -122,16 +126,14 @@ impl Txrom {
         0
     }
 
-    pub fn store_chr(
-        &mut self,
-        address: u16,
-        val: u8,
-        chr_ram: &mut Vec<u8>,
-    ) {
+    pub fn store_chr(&mut self, address: u16, val: u8, chr_ram: &mut Vec<u8>) {
         if self.use_chr_ram {
             chr_ram[address as usize] = val;
         } else {
-            info!("Tried to store to chr rom: addr {:X} val {:X}", address, val);
+            info!(
+                "Tried to store to chr rom: addr {:X} val {:X}",
+                address, val
+            );
         }
     }
 

@@ -8,11 +8,11 @@ use mapper::nrom::*;
 use mapper::axrom::*;
 use mapper::txrom::*;
 
+pub mod axrom;
 pub mod nrom;
 pub mod sxrom;
-pub mod unrom;
-pub mod axrom;
 pub mod txrom;
+pub mod unrom;
 
 pub struct Mapper {
     pub mem_type: MemType,
@@ -68,7 +68,7 @@ impl Mapper {
             MemType::Unrom(ref unrom) => unrom.ld_prg(addr, &self.rom.prg_rom),
             MemType::Sxrom(ref sxrom) => {
                 sxrom.ld_prg(addr, &self.rom.prg_rom, &self.rom.prg_ram)
-            },
+            }
             MemType::Axrom(ref axrom) => axrom.ld_prg(addr, &self.rom.prg_rom),
             MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
         }
@@ -82,7 +82,7 @@ impl Mapper {
             MemType::Unrom(ref unrom) => unrom.ld_chr(addr, &self.rom.chr_ram),
             MemType::Sxrom(ref sxrom) => {
                 sxrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram)
-            },
+            }
             MemType::Axrom(ref axrom) => axrom.ld_chr(addr, &self.rom.chr_ram),
             MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
         }
@@ -110,7 +110,7 @@ impl Mapper {
             }
             MemType::Nrom(ref mut nrom) => {
                 nrom.store_chr(addr, val, &mut self.rom.chr_ram)
-            },
+            }
             MemType::Axrom(ref mut axrom) => {
                 axrom.store_chr(addr, val, &mut self.rom.chr_ram)
             }
@@ -120,9 +120,7 @@ impl Mapper {
 
     pub fn get_mirroring(&self) -> &ScreenMode {
         match self.mem_type {
-            MemType::Unrom(_) | MemType::Nrom(_) => {
-                &self.rom.header.screen
-            }
+            MemType::Unrom(_) | MemType::Nrom(_) => &self.rom.header.screen,
             MemType::Sxrom(ref sxrom) => sxrom.get_mirroring(),
             MemType::Axrom(ref axrom) => axrom.get_mirroring(),
             MemType::Txrom(ref txrom) => txrom.get_mirroring(),

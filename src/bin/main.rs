@@ -240,9 +240,7 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
         for event in event_pump.poll_iter() {
             if let Some(result) = nes_frontend.handle_event(event) {
                 match result {
-                    EventRes::StateRes(r) => {
-                        println!("{}", r)
-                    }
+                    EventRes::StateRes(r) => println!("{}", r),
                     EventRes::Quit => return Ok(()),
                 }
             }

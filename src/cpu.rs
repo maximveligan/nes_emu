@@ -658,7 +658,7 @@ impl Cpu {
 
     pub fn execute_op(&mut self, op: u8) {
         match op {
-            INC_ABSX => self.inc(Mode::AbsX),
+            INC_ABSX => self.inc(Mode::NoPBAbsX),
             INC_ZPX => self.inc(Mode::ZPX),
             INC_ABS => self.inc(Mode::Abs),
             INC_ZP => self.inc(Mode::ZP),
@@ -680,7 +680,7 @@ impl Cpu {
             LDX_ZP => self.ldx(Mode::ZP),
             DEC_ZPX => self.dec(Mode::ZPX),
             DEC_ABS => self.dec(Mode::Abs),
-            DEC_ABSX => self.dec(Mode::AbsX),
+            DEC_ABSX => self.dec(Mode::NoPBAbsX),
             DEC_ZP => self.dec(Mode::ZP),
             CMP_IMM => self.cmp(Mode::Imm),
             CMP_ABSX => self.cmp(Mode::AbsX),
@@ -740,7 +740,7 @@ impl Cpu {
             EOR_ABS => self.eor(Mode::Abs),
             EOR_ZP => self.eor(Mode::ZP),
             EOR_INDX => self.eor(Mode::IndX),
-            LSR_ABSX => self.lsr_addr(Mode::AbsX),
+            LSR_ABSX => self.lsr_addr(Mode::NoPBAbsX),
             LSR_ZPX => self.lsr_addr(Mode::ZPX),
             LSR_ABS => self.lsr_addr(Mode::Abs),
             LSR_ZP => self.lsr_addr(Mode::ZP),
