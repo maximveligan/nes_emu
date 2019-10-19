@@ -486,30 +486,19 @@ impl Cpu {
     }
 
     fn arr(&mut self, mode: Mode) {
-        let val = self.read_op(mode);
-        let mut new_acc = self.regs.acc & val;
-        new_acc >>= 1;
-        match (new_acc >> 5) & 0b11 {
-            0b00 => {
-                self.regs.flags.set_carry(false);
-                self.regs.flags.set_overflow(false);
-            }
-            0b01 => {
-                self.regs.flags.set_overflow(true);
-                self.regs.flags.set_carry(false);
-            }
-            0b10 => {
-                self.regs.flags.set_overflow(true);
-                self.regs.flags.set_carry(true);
-            }
-            0b11 => {
-                self.regs.flags.set_carry(true);
-                self.regs.flags.set_overflow(false);
-            }
-            _ => panic!("Matching on 2 bits, can't get other values"),
-        }
-        self.set_zero_neg(new_acc);
-        self.regs.acc = new_acc;
+        self.and(mode);
+        let (acc, _) = Cpu::get_ror(self.regs.flags.carry(), self.regs.acc);
+        self.regs.acc = acc;
+        let b5 = ((acc >> 5) & 1) == 1;
+        let b6 = ((acc >> 6) & 1) == 1;
+        self.regs.flags.set_carry(b6);
+        self.regs.flags.set_overflow(b5 ^ b6);
+        self.set_zero_neg(self.regs.acc);
+    }
+
+    fn alr(&mut self, mode: Mode) {
+        self.and(mode);
+        self.lsr_acc();
     }
 
     fn lax(&mut self, mode: Mode) {
@@ -523,7 +512,8 @@ impl Cpu {
         let val = self.read_op(mode);
         let tmp = self.regs.x & self.regs.acc;
         let (tmp, carry) = tmp.overflowing_sub(val);
-        self.regs.flags.set_carry(carry);
+        // No idea why this is !carry
+        self.regs.flags.set_carry(!carry);
         self.regs.x = tmp;
         self.set_zero_neg(tmp);
     }
@@ -593,6 +583,17 @@ impl Cpu {
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
         self.adc_val(tmp);
+    }
+
+    fn tax(&mut self) {
+        let acc = self.regs.acc;
+        self.regs.x = acc;
+        self.set_zero_neg(acc);
+    }
+
+    fn atx(&mut self, mode: Mode) {
+        self.lda(mode);
+        self.tax();
     }
 
     fn push(&mut self, val: u8) {
@@ -829,6 +830,8 @@ impl Cpu {
             0x7B => self.rra(Mode::NoPBAbsY),
             0x63 => self.rra(Mode::IndX),
             0x73 => self.rra(Mode::NoPBIndY),
+            0x4B => self.alr(Mode::Imm),
+            0xAB => self.atx(Mode::Imm),
 
             RTS => {
                 self.pull_pc();
@@ -869,11 +872,7 @@ impl Cpu {
                 self.regs.flags.set_itr(true);
                 self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC));
             }
-            TAX => {
-                let acc = self.regs.acc;
-                self.regs.x = acc;
-                self.set_zero_neg(acc);
-            }
+            TAX => self.tax(),
             TXA => {
                 let x = self.regs.x;
                 self.regs.acc = x;

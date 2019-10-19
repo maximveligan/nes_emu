@@ -4,7 +4,6 @@ use nes_emu::apu::Apu;
 use nes_emu::cpu::Cpu;
 use nes_emu::mapper::Mapper;
 use nes_emu::mmu::Mmu;
-use nes_emu::mmu::Ram;
 use nes_emu::ppu::Ppu;
 use nes_emu::rom::load_rom;
 use std::cell::RefCell;
@@ -25,7 +24,6 @@ fn run_nestest() {
     let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
     let mut cpu = Cpu::new(Mmu::new(
         Apu::new(),
-        Ram::new(),
         Ppu::new(mapper.clone()),
         mapper,
     ));
