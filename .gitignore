@@ -5,3 +5,4 @@
 Cargo.lock
 *.sav
 config.toml
+/mapper_docs/
