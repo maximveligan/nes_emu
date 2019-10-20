@@ -262,11 +262,14 @@ impl Ppu {
         }
     }
 
-    pub fn ld(&mut self, address: u16) -> u8 {
+    pub fn ld(&mut self, address: u16) -> (u8, Option<bool>) {
         match address {
-            2 => self.read_ppustatus(),
-            4 => self.oam[self.regs.oam_addr as usize],
-            7 => self.read_ppudata(),
+            2 => (self.read_ppustatus(), None),
+            4 => (self.oam[self.regs.oam_addr as usize], None),
+            7 => {
+                let (val, pal_read) = self.read_ppudata();
+                (val, Some(pal_read))
+            }
             _ => panic!("Somehow got to invalid register"),
         }
     }
@@ -279,11 +282,12 @@ impl Ppu {
         tmp
     }
 
-    fn read_ppudata(&mut self) -> u8 {
+    // This bool tells us if this read was from a palette or not
+    fn read_ppudata(&mut self) -> (u8, bool) {
         let addr = self.regs.addr.addr();
         let val = self.vram.buffered_ld8(addr);
         self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
-        val
+        (val, (addr >= 0x3F00) && (addr <= 0x3FFF))
     }
 
     pub fn store(&mut self, address: u16, val: u8) {

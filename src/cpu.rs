@@ -32,12 +32,11 @@ impl fmt::Debug for Registers {
 
 impl Registers {
     fn reset(&mut self, address: u16) {
-        self.acc = 0;
-        self.x = 0;
-        self.y = 0;
+        // According to the cpu reset registers test, SP should decrement by 3
+        // and the interrupt flag should be set
         self.pc.set_addr(address);
-        self.sp = 0xFD;
-        self.flags = Flags(0b00100100);
+        self.sp -= 3;
+        self.flags.set_itr(true);
     }
 }
 
@@ -124,14 +123,14 @@ impl Cpu {
             },
             mmu: mmu,
         };
-        cpu.regs.pc.set_addr(cpu.mmu.ld16(RESET_VEC));
+        cpu.regs.pc.set_addr(cpu.mmu.ld16(RESET_VEC, 0));
         cpu
     }
 
     pub fn reset(&mut self) {
         self.cycle_count = 0;
         self.cc = 0;
-        let addr = self.mmu.ld16(RESET_VEC);
+        let addr = self.mmu.ld16(RESET_VEC, self.cc);
         self.regs.reset(addr);
     }
 
@@ -186,11 +185,11 @@ impl Cpu {
             }
             Mode::JmpIndir => {
                 let tmp = self.ld16_pc_up();
-                let low = self.mmu.ld8(tmp);
+                let low = self.mmu.ld8(tmp, self.cc);
                 let high: u8 = if tmp & 0xFF == 0xFF {
-                    self.mmu.ld8(tmp - 0xFF)
+                    self.mmu.ld8(tmp - 0xFF, self.cc)
                 } else {
-                    self.mmu.ld8(tmp + 1)
+                    self.mmu.ld8(tmp + 1, self.cc)
                 };
                 ((high as u16) << 8 | (low as u16))
             }
@@ -198,18 +197,18 @@ impl Cpu {
                 let tmp = self.ld8_pc_up();
                 let base_address = tmp.wrapping_add(self.regs.x) as u16;
                 if base_address == 0xFF {
-                    (self.mmu.ld8(0) as u16) << 8
-                        | (self.mmu.ld8(base_address) as u16)
+                    (self.mmu.ld8(0, self.cc) as u16) << 8
+                        | (self.mmu.ld8(base_address, self.cc) as u16)
                 } else {
-                    self.mmu.ld16(base_address)
+                    self.mmu.ld16(base_address, self.cc)
                 }
             }
             Mode::IndY => {
                 let base = self.ld8_pc_up();
                 let tmp = if base == 0xFF {
-                    (self.mmu.ld8(0) as u16) << 8 | (self.mmu.ld8(0xFF) as u16)
+                    (self.mmu.ld8(0, self.cc) as u16) << 8 | (self.mmu.ld8(0xFF, self.cc) as u16)
                 } else {
-                    self.mmu.ld16(base as u16)
+                    self.mmu.ld16(base as u16, self.cc)
                 };
                 let addr = tmp.wrapping_add(self.regs.y as u16);
                 self.check_pb(tmp, addr);
@@ -218,9 +217,9 @@ impl Cpu {
             Mode::NoPBIndY => {
                 let base = self.ld8_pc_up();
                 let tmp = if base == 0xFF {
-                    (self.mmu.ld8(0) as u16) << 8 | (self.mmu.ld8(0xFF) as u16)
+                    (self.mmu.ld8(0, self.cc) as u16) << 8 | (self.mmu.ld8(0xFF, self.cc) as u16)
                 } else {
-                    self.mmu.ld16(base as u16)
+                    self.mmu.ld16(base as u16, self.cc)
                 };
                 let addr = tmp.wrapping_add(self.regs.y as u16);
                 addr
@@ -232,20 +231,20 @@ impl Cpu {
         let flags = self.regs.flags;
         self.push_pc();
         self.push(flags.as_byte());
-        self.regs.pc.set_addr(self.mmu.ld16(NMI_VEC));
+        self.regs.pc.set_addr(self.mmu.ld16(NMI_VEC, self.cc));
     }
 
     fn read_op(&mut self, mode: Mode) -> u8 {
         let addr = self.address_mem(mode);
-        self.mmu.ld8(addr)
+        self.mmu.ld8(addr, self.cc)
     }
 
     fn write_dma(&mut self, high_nyb: u8) {
         self.cycle_count += 513 + (self.cycle_count % 2);
         let page_num = (high_nyb as u16) << 8;
         for address in page_num..=page_num + 0xFF {
-            let tmp = self.mmu.ld8(address);
-            self.mmu.store(OAM_DATA, tmp);
+            let tmp = self.mmu.ld8(address, self.cc);
+            self.mmu.store(OAM_DATA, tmp, self.cc);
         }
     }
 
@@ -253,7 +252,7 @@ impl Cpu {
         if addr == DMA_ADDR {
             self.write_dma(val);
         } else {
-            self.mmu.store(addr, val);
+            self.mmu.store(addr, val, self.cc);
         }
     }
 
@@ -329,7 +328,7 @@ impl Cpu {
     fn ror_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let (tmp, n_flag) =
-            Cpu::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr));
+            Cpu::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -350,7 +349,7 @@ impl Cpu {
     fn rol_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let (tmp, n_flag) =
-            Cpu::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr));
+            Cpu::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -370,7 +369,7 @@ impl Cpu {
 
     fn asl_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val = self.mmu.ld8(addr);
+        let val = self.mmu.ld8(addr, self.cc);
         self.regs.flags.set_carry((val >> 7) != 0);
         let tmp = val << 1;
         self.set_zero_neg(tmp);
@@ -387,7 +386,7 @@ impl Cpu {
 
     fn lsr_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val = self.mmu.ld8(addr);
+        let val = self.mmu.ld8(addr, self.cc);
         self.regs.flags.set_carry((val & 0b01) != 0);
         let tmp = val >> 1;
         self.set_zero_neg(tmp);
@@ -436,14 +435,14 @@ impl Cpu {
 
     fn dec(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val: u8 = self.mmu.ld8(addr).wrapping_sub(1);
+        let val: u8 = self.mmu.ld8(addr, self.cc).wrapping_sub(1);
         self.set_zero_neg(val);
         self.store(addr, val);
     }
 
     fn inc(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val: u8 = self.mmu.ld8(addr).wrapping_add(1);
+        let val: u8 = self.mmu.ld8(addr, self.cc).wrapping_add(1);
         self.set_zero_neg(val);
         self.store(addr, val);
     }
@@ -521,7 +520,7 @@ impl Cpu {
     //TODO this is dec followed by cmp, refactor this to use those functions
     fn dcp(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val: u8 = self.mmu.ld8(addr).wrapping_sub(1);
+        let val: u8 = self.mmu.ld8(addr, self.cc).wrapping_sub(1);
         self.set_zero_neg(val);
         self.store(addr, val);
         let tmp = self.regs.acc as i16 - val as i16;
@@ -532,7 +531,7 @@ impl Cpu {
     //TODO This one can also probably be refactored
     fn isc(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val: u8 = self.mmu.ld8(addr).wrapping_add(1);
+        let val: u8 = self.mmu.ld8(addr, self.cc).wrapping_add(1);
         self.set_zero_neg(val);
         self.store(addr, val);
         self.adc_val(val ^ 0xFF);
@@ -541,7 +540,7 @@ impl Cpu {
     //TODO same as this one
     fn slo(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val = self.mmu.ld8(addr);
+        let val = self.mmu.ld8(addr, self.cc);
         self.regs.flags.set_carry((val >> 7) != 0);
         let tmp = val << 1;
         self.store(addr, tmp);
@@ -554,7 +553,7 @@ impl Cpu {
     fn rla(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let (tmp, n_flag) =
-            Cpu::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr));
+            Cpu::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.store(addr, tmp);
 
@@ -565,7 +564,7 @@ impl Cpu {
 
     fn sre(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let val = self.mmu.ld8(addr);
+        let val = self.mmu.ld8(addr, self.cc);
         self.regs.flags.set_carry((val & 0b01) != 0);
         let tmp = val >> 1;
         self.store(addr, tmp);
@@ -578,7 +577,7 @@ impl Cpu {
     fn rra(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
         let (tmp, n_flag) =
-            Cpu::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr));
+            Cpu::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -596,6 +595,14 @@ impl Cpu {
         self.tax();
     }
 
+    fn sna(&mut self, mode: Mode, and_reg: u8, addr_mode_reg: u8) {
+        let mut addr = self.address_mem(mode);
+        if (addr - addr_mode_reg as u16) & 0xFF00 != addr & 0xFF00 {
+            addr &= (and_reg as u16) << 8;
+        }
+        self.store(addr, and_reg & (((addr >> 8) as u8).wrapping_add(1)));
+    }
+
     fn push(&mut self, val: u8) {
         let addr = self.regs.sp as u16 | 0x100;
         self.store(addr, val);
@@ -604,7 +611,7 @@ impl Cpu {
 
     fn pop(&mut self) -> u8 {
         self.regs.sp += 1;
-        self.mmu.ld8(self.regs.sp as u16 | 0x100)
+        self.mmu.ld8(self.regs.sp as u16 | 0x100, self.cc)
     }
 
     fn pull_pc(&mut self) {
@@ -639,8 +646,8 @@ impl Cpu {
         let tmp = self.cycle_count;
         if log_enabled!(Level::Debug) {
             debug!("INST: {:X} {:?} CYC:{}", byte, self.regs.clone(), self.cc);
-            self.cc += tmp as usize;
         }
+        self.cc += tmp as usize;
         self.cycle_count = 0;
         tmp
     }
@@ -648,13 +655,13 @@ impl Cpu {
     fn ld8_pc_up(&mut self) -> u8 {
         let ram_ptr = self.regs.pc.get_addr();
         self.regs.pc.add_unsigned(1);
-        self.mmu.ld8(ram_ptr)
+        self.mmu.ld8(ram_ptr, self.cc)
     }
 
     fn ld16_pc_up(&mut self) -> u16 {
         let ram_ptr = self.regs.pc.get_addr();
         self.regs.pc.add_unsigned(2);
-        self.mmu.ld16(ram_ptr)
+        self.mmu.ld16(ram_ptr, self.cc)
     }
 
     pub fn execute_op(&mut self, op: u8) {
@@ -832,6 +839,8 @@ impl Cpu {
             0x73 => self.rra(Mode::NoPBIndY),
             0x4B => self.alr(Mode::Imm),
             0xAB => self.atx(Mode::Imm),
+            0x9C => self.sna(Mode::AbsX, self.regs.y, self.regs.x), //sya
+            0x9E => self.sna(Mode::AbsY, self.regs.x, self.regs.y), //sxa
 
             RTS => {
                 self.pull_pc();
@@ -870,7 +879,7 @@ impl Cpu {
                 self.push_pc();
                 self.push(self.regs.flags.as_byte() | 0b10000);
                 self.regs.flags.set_itr(true);
-                self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC));
+                self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC, self.cc));
             }
             TAX => self.tax(),
             TXA => {
