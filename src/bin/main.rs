@@ -2,6 +2,7 @@
 extern crate log;
 extern crate nes_emu;
 extern crate sdl2;
+extern crate sha3;
 
 #[macro_use]
 extern crate failure;
@@ -20,8 +21,9 @@ use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
 use std::fs::File;
 use std::io::Read;
-
 use std::env;
+use sha3::Sha3_256;
+use sha3::Digest;
 
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
@@ -73,7 +75,9 @@ struct NesFrontEnd {
 
 enum EventRes {
     StateRes(String),
+    Next,
     Quit,
+    Hash,
 }
 
 impl NesFrontEnd {
@@ -90,6 +94,26 @@ impl NesFrontEnd {
             } => {
                 self.switch_pause();
                 None
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::N),
+                ..
+            } => {
+                if self.pause {
+                    Some(EventRes::Next)
+                } else {
+                    None
+                }
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::H),
+                ..
+            } => {
+                if self.pause {
+                    Some(EventRes::Hash)
+                } else {
+                    None
+                }
             }
             Event::KeyDown {
                 keycode: Some(Keycode::R),
@@ -164,6 +188,27 @@ impl NesFrontEnd {
         self.nes.load_state(state);
         Ok("Loaded state successfully".to_string())
     }
+
+    fn next_frame(
+        &mut self,
+        texture: &mut sdl2::render::Texture,
+        canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+        top: usize,
+        bottom: usize,
+        framebuffer: &[u8],
+    ) {
+        texture
+            .update(
+                None,
+                &framebuffer[top * 3 * SCREEN_WIDTH
+                    ..(SCREEN_WIDTH * SCREEN_HEIGHT - bottom as usize) * 3],
+                SCREEN_WIDTH * 3,
+            )
+            .unwrap();
+        canvas.clear();
+        canvas.copy(&texture, None, None).unwrap();
+        canvas.present();
+    }
 }
 
 fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
@@ -219,22 +264,18 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
         save_name: rom_stem.to_string() + ".sav",
     };
 
+    let mut last_buffer: &[u8];
+
     loop {
         if !nes_frontend.pause {
-            let framebuffer = nes_frontend.nes.next_frame();
-            texture
-                .update(
-                    None,
-                    &framebuffer[config.overscan.top as usize * 3 * SCREEN_WIDTH
-                        ..(SCREEN_WIDTH * SCREEN_HEIGHT
-                            - config.overscan.bottom as usize)
-                            * 3],
-                    SCREEN_WIDTH * 3,
-                )
-                .unwrap();
-            canvas.clear();
-            canvas.copy(&texture, None, None).unwrap();
-            canvas.present();
+            last_buffer = nes_frontend.nes.next_frame();
+            nes_frontend.next_frame(
+                &mut texture,
+                &mut canvas,
+                config.overscan.top as usize,
+                config.overscan.bottom as usize,
+                last_buffer,
+            );
         }
 
         for event in event_pump.poll_iter() {
@@ -242,6 +283,19 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
                 match result {
                     EventRes::StateRes(r) => println!("{}", r),
                     EventRes::Quit => return Ok(()),
+                    EventRes::Next => {
+                        last_buffer = nes_frontend.nes.next_frame();
+                        nes_frontend.next_frame(
+                            &mut texture,
+                            &mut canvas,
+                            config.overscan.top as usize,
+                            config.overscan.bottom as usize,
+                            last_buffer,
+                        );
+                    }
+                    EventRes::Hash => {
+                        println!("{:?}", Sha3_256::digest(last_buffer));
+                    }
                 }
             }
         }

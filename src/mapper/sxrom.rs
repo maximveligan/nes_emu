@@ -1,6 +1,6 @@
 // Bubble bobble for some reason tries to write to addresses in the 0x4200+
-// region Double dragon won't get past the initial screen (no sprites are
-// rendered) Dragon warrior 1 just has a black screen on boot
+// region
+// Double dragon has chr table corruption
 // Dragion warrior 3 has a grey screen on boot
 // This could be due to timing issues/accuracy issues in other emulator
 // components but it's hard to tell
