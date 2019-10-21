@@ -179,6 +179,7 @@ pub struct Ppu {
     at_entry: u8,
     // Contains the shift and latch registers the NES uses for rendering
     internal_regs: InternalRegs,
+    odd_frame: bool,
 }
 
 impl Ppu {
@@ -199,6 +200,7 @@ impl Ppu {
             t_addr: VramAddr(0),
             at_entry: 0,
             internal_regs: InternalRegs::new(),
+            odd_frame: false,
         }
     }
 
@@ -450,7 +452,7 @@ impl Ppu {
 
     fn step_bg_regs(&mut self) {
         match self.cc {
-            2..=256 | 322..=337 => match self.cc % 8 {
+            1..=256 | 321..=336 => match self.cc % 8 {
                 1 => {
                     self.internal_regs.reload(self.at_entry);
                 }
@@ -531,7 +533,7 @@ impl Ppu {
     //it's not part of rendering pixels
     fn render_pixel(&mut self) {
         match self.cc {
-            2..=257 | 322..=337 => {
+            1..=257 | 321..=336 => {
                 let x = self.cc - 2;
                 if x < 256 && !self.is_prerender() {
                     let bg_color = self.bg_pixel(x as u8);
@@ -568,10 +570,19 @@ impl Ppu {
 
     fn step_cc(&mut self) {
         self.cc += 1;
-        if self.cc >= 341 {
-            self.cc %= 341;
+        if self.odd_frame && self.is_prerender() && (self.cc == 339) {
+            self.scanline = 0;
+            self.cc = 0;
+            self.odd_frame = !self.odd_frame;
+        }
+
+        else if self.cc > 340 {
+            self.cc = 0;
             self.scanline += 1;
             if self.scanline > PRERENDER {
+                if self.regs.mask.show_bg() {
+                    self.odd_frame = !self.odd_frame;
+                }
                 self.scanline = 0;
             }
         }
@@ -608,6 +619,8 @@ impl Ppu {
             PRERENDER => {
                 if self.cc == 1 {
                     self.regs.status.set_vblank(false);
+                    self.regs.status.set_sprite_0_hit(false);
+                    self.regs.status.set_sprite_o_f(false);
                 }
                 self.step_sprites();
                 self.render_pixel();
