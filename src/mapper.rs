@@ -6,11 +6,15 @@ use mapper::sxrom::*;
 use mapper::unrom::*;
 use mapper::nrom::*;
 use mapper::axrom::*;
+use mapper::txrom::*;
+use mapper::cnrom::*;
 
+pub mod axrom;
+pub mod cnrom;
 pub mod nrom;
 pub mod sxrom;
+pub mod txrom;
 pub mod unrom;
-pub mod axrom;
 
 pub struct Mapper {
     pub mem_type: MemType,
@@ -23,6 +27,8 @@ pub enum MemType {
     Sxrom(Sxrom),
     Unrom(Unrom),
     Axrom(Axrom),
+    Txrom(Txrom),
+    Cnrom(Cnrom),
 }
 
 impl Mapper {
@@ -42,6 +48,15 @@ impl Mapper {
                 let last_page_start = rom.prg_rom.len() - 0x4000;
                 MemType::Unrom(Unrom::new(last_page_start))
             }
+            3 => {
+                let use_chr_ram = rom.chr_ram.len() != 0;
+                MemType::Cnrom(Cnrom::new(rom.prg_rom.len(), use_chr_ram))
+            }
+            4 => {
+                let last_page_start = rom.prg_rom.len() - 0x4000;
+                let use_chr_ram = rom.chr_ram.len() != 0;
+                MemType::Txrom(Txrom::new(use_chr_ram, last_page_start))
+            }
             7 => {
                 let last_page_start = rom.prg_rom.len() - 0x8000;
                 MemType::Axrom(Axrom::new(last_page_start))
@@ -60,8 +75,10 @@ impl Mapper {
             MemType::Unrom(ref unrom) => unrom.ld_prg(addr, &self.rom.prg_rom),
             MemType::Sxrom(ref sxrom) => {
                 sxrom.ld_prg(addr, &self.rom.prg_rom, &self.rom.prg_ram)
-            },
+            }
             MemType::Axrom(ref axrom) => axrom.ld_prg(addr, &self.rom.prg_rom),
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
+            MemType::Cnrom(ref cnrom) => cnrom.ld_prg(addr, &self.rom.prg_rom),
         }
     }
 
@@ -73,8 +90,12 @@ impl Mapper {
             MemType::Unrom(ref unrom) => unrom.ld_chr(addr, &self.rom.chr_ram),
             MemType::Sxrom(ref sxrom) => {
                 sxrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram)
-            },
+            }
             MemType::Axrom(ref axrom) => axrom.ld_chr(addr, &self.rom.chr_ram),
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
+            MemType::Cnrom(ref cnrom) => {
+                cnrom.ld_chr(addr, &self.rom.chr_rom, &self.rom.chr_ram)
+            }
         }
     }
 
@@ -86,6 +107,8 @@ impl Mapper {
             }
             MemType::Nrom(ref nrom) => nrom.store_prg(addr, val),
             MemType::Axrom(ref mut axrom) => axrom.store_prg(addr, val),
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
+            MemType::Cnrom(ref mut cnrom) => cnrom.store_prg(addr, val),
         }
     }
 
@@ -99,20 +122,23 @@ impl Mapper {
             }
             MemType::Nrom(ref mut nrom) => {
                 nrom.store_chr(addr, val, &mut self.rom.chr_ram)
-            },
+            }
             MemType::Axrom(ref mut axrom) => {
                 axrom.store_chr(addr, val, &mut self.rom.chr_ram)
             }
+            MemType::Txrom(ref _txrom) => panic!("Txrom not ready yet"),
+            MemType::Cnrom(ref mut cnrom) => cnrom.store_prg(addr, val),
         }
     }
 
-    pub fn get_mirroring(&self) -> ScreenMode {
+    pub fn get_mirroring(&self) -> &ScreenMode {
         match self.mem_type {
-            MemType::Unrom(_) | MemType::Nrom(_) => {
-                self.rom.header.screen.clone()
+            MemType::Unrom(_) | MemType::Nrom(_) | MemType::Cnrom(_) => {
+                &self.rom.header.screen
             }
             MemType::Sxrom(ref sxrom) => sxrom.get_mirroring(),
             MemType::Axrom(ref axrom) => axrom.get_mirroring(),
+            MemType::Txrom(ref txrom) => txrom.get_mirroring(),
         }
     }
 
@@ -122,6 +148,8 @@ impl Mapper {
             MemType::Unrom(ref mut unrom) => unrom.reset(),
             MemType::Sxrom(ref mut sxrom) => sxrom.reset(),
             MemType::Axrom(ref mut axrom) => axrom.reset(),
+            MemType::Cnrom(ref mut cnrom) => cnrom.reset(),
+            MemType::Txrom(ref mut _txrom) => panic!("Txrom not ready yet"),
         }
     }
 }

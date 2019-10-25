@@ -22,6 +22,8 @@ pub struct Mmu {
     pub ctrl0: Controller,
     pub ctrl1: Controller,
     open_bus: u8,
+    bus_set_cycle: usize,
+    console_clock: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -44,23 +46,31 @@ impl Ram {
 }
 
 impl Mmu {
-    pub fn new(apu: Apu, ppu: Ppu, mapper: Rc<RefCell<Mapper>>) -> Mmu {
+    pub fn new(
+        apu: Apu,
+        ppu: Ppu,
+        mapper: Rc<RefCell<Mapper>>,
+        console_clock: usize,
+    ) -> Mmu {
         Mmu {
-            ppu: ppu,
-            apu: apu,
+            ppu,
+            apu,
+            mapper,
             ram: Ram::new(),
-            mapper: mapper,
             ctrl0: Controller::new(),
             ctrl1: Controller::new(),
             open_bus: 0,
+            bus_set_cycle: 0,
+            console_clock,
         }
     }
 
-    pub fn store(&mut self, address: u16, val: u8) {
+    pub fn store(&mut self, address: u16, val: u8, cur_cycle: usize) {
         match address {
             WRAM_START..=WRAM_END => self.ram.store(address & 0x7FF, val),
             PPU_START..=PPU_END => {
                 self.open_bus = val;
+                self.bus_set_cycle = cur_cycle;
                 self.ppu.store((address - 0x2000) & 7, val);
             }
             0x4016 => {
@@ -75,22 +85,49 @@ impl Mmu {
         }
     }
 
-    fn update_bus(&mut self, ppu_reg: u16, val: u8) {
-        match ppu_reg {
-            2 => self.open_bus = (self.open_bus & 0b11100000) | val,
-            7 => self.open_bus = val,
-            _ => (),
+    //2 => self.open_bus = (self.open_bus & 0b11100000) | val,
+
+    fn update_bus(&mut self, cur_cycle: usize) {
+        if (cur_cycle - self.bus_set_cycle) > self.console_clock {
+            self.open_bus = 0;
         }
     }
 
-    pub fn ld8(&mut self, address: u16) -> u8 {
+    pub fn ld8(&mut self, address: u16, cur_cycle: usize) -> u8 {
         match address {
             WRAM_START..=WRAM_END => self.ram.load(address & 0x7FF),
             PPU_START..=PPU_END => {
-                let ppu_reg = (address - 0x2000) & 7;
-                let val = self.ppu.ld(ppu_reg, self.open_bus);
-                self.update_bus(ppu_reg, val);
-                val
+                let ppu_reg = address & 0b111;
+
+                match ppu_reg {
+                    0 | 1 | 3 | 5 | 6 => {
+                        self.update_bus(cur_cycle);
+                        self.open_bus
+                    }
+                    2 => {
+                        self.update_bus(cur_cycle);
+                        let (ppu_status, _) = self.ppu.ld(2);
+                        self.open_bus = (ppu_status & 0b11100000)
+                            | (self.open_bus & 0b00011111);
+                        self.open_bus
+                    }
+                    4 => {
+                        let (read_val, _) = self.ppu.ld(ppu_reg);
+                        self.open_bus = read_val;
+                        read_val & 0b11100011
+                    }
+                    7 => {
+                        let (read_val, pal_read) = self.ppu.ld(ppu_reg);
+                        if pal_read.expect("Can't get None here") {
+                            (read_val & 0b00111111)
+                                | (self.open_bus & 0b11000000)
+                        } else {
+                            self.open_bus = read_val;
+                            read_val
+                        }
+                    }
+                    _ => panic!("No other possible values here"),
+                }
             }
             0x4015 => self.apu.load(address - 0x4000),
             0x4016 => self.ctrl0.ld8(),
@@ -106,9 +143,9 @@ impl Mmu {
         }
     }
 
-    pub fn ld16(&mut self, address: u16) -> u16 {
-        let l_byte = self.ld8(address);
-        let r_byte = self.ld8(address + 1);
+    pub fn ld16(&mut self, address: u16, cur_cycle: usize) -> u16 {
+        let l_byte = self.ld8(address, cur_cycle);
+        let r_byte = self.ld8(address + 1, cur_cycle);
         (r_byte as u16) << 8 | (l_byte as u16)
     }
 }

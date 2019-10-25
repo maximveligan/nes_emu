@@ -69,7 +69,7 @@ impl Vram {
     // Helper function that resolves the nametable mirroring and returns an
     // index usable for VRAM array indexing
     fn nt_mirror(&self, addr: u16) -> usize {
-        match self.mapper.borrow().get_mirroring() {
+        match &*self.mapper.borrow().get_mirroring() {
             ScreenMode::Horizontal => match addr {
                 NT_0..=NT_0_END => addr as usize,
                 NT_1..=NT_2_END => (addr - 0x400) as usize,

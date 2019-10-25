@@ -40,12 +40,12 @@ impl Sprite {
     }
 
     pub fn get_pt_address(&self, ctrl: &Ctrl, y: u16) -> u16 {
-        let pt_i = match ctrl.sprite_size() {
-            8 => ctrl.sprite_pt_addr() + (16 * (self.pt_index as u16)),
+        let (pt_i, tall_sprite) = match ctrl.sprite_size() {
+            8 => (ctrl.sprite_pt_addr() + (16 * (self.pt_index as u16)), false),
             16 => {
                 let offset = ((self.pt_index & !1) as u16) * 16;
                 let base = ((self.pt_index & 1) as u16) * 0x1000;
-                base + offset
+                ((base + offset), true)
             }
             _ => panic!("No other sprite sizes"),
         };
@@ -60,7 +60,7 @@ impl Sprite {
 
         // Grabs the adjacent tile if this is a 16 bit sprite and the y value
         // is greater than 7
-        let y_offset = if y < 8 { 0 } else { 8 };
+        let y_offset = if tall_sprite && y >= 8 { 8 } else { 0 };
 
         pt_i + y + y_offset
     }

@@ -30,10 +30,14 @@ use apu::Apu;
 use ppu::Ppu;
 use ppu::PpuRes;
 use rom::Rom;
+use rom::Region;
 use mapper::Mapper;
 use mmu::Mmu;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+const PAL_CPU_CLOCK_SPEED: usize = 1662607;
+const NTSC_CPU_CLOCK_SPEED: usize = 1789773;
 
 pub struct NesEmulator {
     pub cpu: Cpu,
@@ -41,10 +45,13 @@ pub struct NesEmulator {
 
 impl NesEmulator {
     pub fn new(rom: Rom) -> NesEmulator {
-        println!("{:?}", rom);
+        let cpu_clock_speed = match &rom.header.region {
+            Region::PAL => PAL_CPU_CLOCK_SPEED,
+            Region::NTSC => NTSC_CPU_CLOCK_SPEED,
+        };
         let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
         let cpu =
-            Cpu::new(Mmu::new(Apu::new(), Ppu::new(mapper.clone()), mapper));
+            Cpu::new(Mmu::new(Apu::new(), Ppu::new(mapper.clone()), mapper, cpu_clock_speed));
         NesEmulator { cpu: cpu }
     }
 
@@ -57,7 +64,7 @@ impl NesEmulator {
     pub fn get_state(&self) -> State {
         State {
             ppu_state: self.cpu.mmu.ppu.get_state(),
-            screen_mode: self.cpu.mmu.mapper.borrow().get_mirroring(),
+            screen_mode: self.cpu.mmu.mapper.borrow().get_mirroring().clone(),
             chr_ram: self.cpu.mmu.mapper.borrow().rom.chr_ram.clone(),
             cpu_regs: self.cpu.regs.clone(),
             mapper: self.cpu.mmu.mapper.borrow().mem_type.clone(),
@@ -90,6 +97,10 @@ impl NesEmulator {
 
     pub fn next_frame(&mut self) -> &[u8] {
         while !self.step() {}
+        self.cpu.mmu.ppu.get_buffer()
+    }
+
+    pub fn get_pixel_buffer(&self) -> &[u8] {
         self.cpu.mmu.ppu.get_buffer()
     }
 }

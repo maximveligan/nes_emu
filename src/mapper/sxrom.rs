@@ -1,6 +1,6 @@
 // Bubble bobble for some reason tries to write to addresses in the 0x4200+
-// region Double dragon won't get past the initial screen (no sprites are
-// rendered) Dragon warrior 1 just has a black screen on boot
+// region
+// Double dragon has chr table corruption
 // Dragion warrior 3 has a grey screen on boot
 // This could be due to timing issues/accuracy issues in other emulator
 // components but it's hard to tell
@@ -48,9 +48,9 @@ bitfield! {
 pub struct Sxrom {
     shift: Shift,
     ctrl: Ctrl,
-    chr_bank_0: usize,
-    chr_bank_1: usize,
-    prg_bank: usize,
+    chr_bank_0_offset: usize,
+    chr_bank_1_offset: usize,
+    prg_bank_offset: usize,
     prg_ram_enabled: bool,
     use_chr_ram: bool,
     last_page_start: usize,
@@ -64,9 +64,9 @@ impl Sxrom {
                 index: 0,
             },
             ctrl: Ctrl(0x0C),
-            chr_bank_0: 0,
-            chr_bank_1: 0,
-            prg_bank: 0,
+            chr_bank_0_offset: 0,
+            chr_bank_1_offset: 0,
+            prg_bank_offset: 0,
             use_chr_ram: use_chr_ram,
             last_page_start: last_page_start,
             prg_ram_enabled: true, //Default state is 0 = true
@@ -87,13 +87,20 @@ impl Sxrom {
                     match address {
                         0x8000..=0x9FFF => self.ctrl = Ctrl(val),
                         0xA000..=0xBFFF => {
-                            self.chr_bank_0 = (val & 0b11111) as usize % 8;
+                            // Equivalent to multiplying by 0x1000 which is
+                            // the chr page size
+                            let chr_bank_0 = (val & 0b11111) as usize % 8;
+                            self.chr_bank_0_offset = chr_bank_0 << 12;
                         }
                         0xC000..=0xDFFF => {
-                            self.chr_bank_1 = (val & 0b11111) as usize % 8;
+                            let chr_bank_1 = (val & 0b11111) as usize % 8;
+                            self.chr_bank_1_offset = chr_bank_1 << 12;
                         }
                         0xE000..=0xFFFF => {
-                            self.prg_bank = (val & 0b1111) as usize;
+                            let prg_bank_page = (val & 0b1111) as usize;
+                            // Equivalent to multiplying by 0x4000 which is
+                            // the page size
+                            self.prg_bank_offset = prg_bank_page << 14;
                             self.prg_ram_enabled = (val & 0b10000) == 0;
                         }
                         _ => panic!("Impossible to get here"),
@@ -142,11 +149,12 @@ impl Sxrom {
 
     fn get_chr_index(&self, addr: u16) -> usize {
         match self.ctrl.chr_rom_mode() as u8 {
-            0 => (((self.chr_bank_0 & 0xFE) * 0x1000) + addr as usize),
+            // & with !0x1000 to ignore low bit in 8KB mode
+            0 => ((self.chr_bank_0_offset & !0x1000) + addr as usize),
             1 => match addr {
-                0x0000..=0x0FFF => (self.chr_bank_0 * 0x1000) + addr as usize,
+                0x0000..=0x0FFF => (self.chr_bank_0_offset) + addr as usize,
                 0x1000..=0x1FFF => {
-                    (self.chr_bank_1 * 0x1000) + (addr as usize - 0x1000)
+                    (self.chr_bank_1_offset) + (addr as usize - 0x1000)
                 }
                 c => panic!("Chr indices are only 0000-1FFFF {:X}", c),
             },
@@ -156,17 +164,23 @@ impl Sxrom {
 
     fn get_prg_index(&self, addr: u16) -> usize {
         match self.ctrl.prg_rom_mode() {
-            0 | 1 => ((self.prg_bank >> 1) * 0x4000) + (addr as usize - 0x8000),
+            // Normally this code shifts right by 1, then left by 14, ANDing
+            // the base by !0x2000 pulls out the bit that would be set to 0 if
+            // we shifted by 1 first
+            0 | 1 => {
+                ((self.prg_bank_offset & !0x2000) >> 1)
+                    + (addr as usize - 0x8000)
+            }
             2 => match addr {
                 0x8000..=0xBFFF => addr as usize - 0x8000,
                 0xC000..=0xFFFF => {
-                    (self.prg_bank * 0x4000) + (addr as usize - 0xC000)
+                    self.prg_bank_offset + (addr as usize - 0xC000)
                 }
                 _ => panic!("addr can't be anything else"),
             },
             3 => match addr {
                 0x8000..=0xBFFF => {
-                    (self.prg_bank * 0x4000) + (addr as usize - 0x8000)
+                    self.prg_bank_offset + (addr as usize - 0x8000)
                 }
                 0xC000..=0xFFFF => {
                     self.last_page_start + addr as usize - 0xC000
@@ -180,18 +194,18 @@ impl Sxrom {
     pub fn reset(&mut self) {
         self.shift.reset();
         self.ctrl = Ctrl(0x0C);
-        self.chr_bank_0 = 0;
-        self.chr_bank_1 = 0;
-        self.prg_bank = 0;
+        self.chr_bank_0_offset = 0;
+        self.chr_bank_1_offset = 0;
+        self.prg_bank_offset = 0;
         self.prg_ram_enabled = true;
     }
 
-    pub fn get_mirroring(&self) -> ScreenMode {
+    pub fn get_mirroring(&self) -> &ScreenMode {
         match self.ctrl.mirroring() {
-            0 => ScreenMode::OneScreenSwap(ScreenBank::Upper),
-            1 => ScreenMode::OneScreenSwap(ScreenBank::Lower),
-            2 => ScreenMode::Vertical,
-            3 => ScreenMode::Horizontal,
+            0 => &ScreenMode::OneScreenSwap(ScreenBank::Upper),
+            1 => &ScreenMode::OneScreenSwap(ScreenBank::Lower),
+            2 => &ScreenMode::Vertical,
+            3 => &ScreenMode::Horizontal,
             _ => panic!("2 bit number can't be greater than 3"),
         }
     }

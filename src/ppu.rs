@@ -33,21 +33,6 @@ pub const PALETTE: [u32; 64] = [
     0x111111,
 ];
 
-//TODO: Add loadable palettes. This palette here is more accurate to the og NES
-//colors but in my opinion looks works.
-//pub const PALETTE: [u32; 64] = [
-//    0x666666, 0x002A88, 0x1412A7, 0x3B00A4, 0x5C007E, 0x6E0040, 0x6C0600,
-//    0x561D00, 0x333500, 0x0B4800, 0x005200, 0x004F08, 0x00404D, 0x000000,
-//    0x000000, 0x000000, 0xADADAD, 0x155FD9, 0x4240FF, 0x7527FE, 0xA01ACC,
-//    0xB71E7B, 0xB53120, 0x994E00, 0x6B6D00, 0x388700, 0x0C9300, 0x008F32,
-//    0x007C8D, 0x000000, 0x000000, 0x000000, 0xFFFEFF, 0x64B0FF, 0x9290FF,
-//    0xC676FF, 0xF36AFF, 0xFE6ECC, 0xFE8170, 0xEA9E22, 0xBCBE00, 0x88D800,
-//    0x5CE430, 0x45E082, 0x48CDDE, 0x4F4F4F, 0x000000, 0x000000, 0xFFFEFF,
-//    0xC0DFFF, 0xD3D2FF, 0xE8C8FF, 0xFBC2FF, 0xFEC4EA, 0xFECCC5, 0xF7D8A5,
-//    0xE4E594, 0xCFEF96, 0xBDF4AB, 0xB3F3CC, 0xB5EBF2, 0xB8B8B8, 0x000000,
-//    0x000000,
-//];
-
 #[derive(Copy, Clone)]
 struct Rgb {
     data: [u8; 3],
@@ -179,6 +164,7 @@ pub struct Ppu {
     at_entry: u8,
     // Contains the shift and latch registers the NES uses for rendering
     internal_regs: InternalRegs,
+    odd_frame: bool,
 }
 
 impl Ppu {
@@ -199,6 +185,7 @@ impl Ppu {
             t_addr: VramAddr(0),
             at_entry: 0,
             internal_regs: InternalRegs::new(),
+            odd_frame: false,
         }
     }
 
@@ -262,16 +249,14 @@ impl Ppu {
         }
     }
 
-    pub fn ld(&mut self, address: u16, open_bus: u8) -> u8 {
+    pub fn ld(&mut self, address: u16) -> (u8, Option<bool>) {
         match address {
-            0 => open_bus,
-            1 => open_bus,
-            2 => self.read_ppustatus(),
-            3 => open_bus,
-            4 => self.oam[self.regs.oam_addr as usize],
-            5 => open_bus,
-            6 => open_bus,
-            7 => self.read_ppudata(),
+            2 => (self.read_ppustatus(), None),
+            4 => (self.oam[self.regs.oam_addr as usize], None),
+            7 => {
+                let (val, pal_read) = self.read_ppudata();
+                (val, Some(pal_read))
+            }
             _ => panic!("Somehow got to invalid register"),
         }
     }
@@ -284,11 +269,12 @@ impl Ppu {
         tmp
     }
 
-    fn read_ppudata(&mut self) -> u8 {
+    // This bool tells us if this read was from a palette or not
+    fn read_ppudata(&mut self) -> (u8, bool) {
         let addr = self.regs.addr.addr();
         let val = self.vram.buffered_ld8(addr);
         self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
-        val
+        (val, (addr >= 0x3F00) && (addr <= 0x3FFF))
     }
 
     pub fn store(&mut self, address: u16, val: u8) {
@@ -569,10 +555,19 @@ impl Ppu {
 
     fn step_cc(&mut self) {
         self.cc += 1;
-        if self.cc >= 341 {
-            self.cc %= 341;
+        if self.odd_frame && self.is_prerender() && (self.cc == 339) {
+            self.scanline = 0;
+            self.cc = 0;
+            self.odd_frame = !self.odd_frame;
+        }
+
+        else if self.cc > 340 {
+            self.cc = 0;
             self.scanline += 1;
             if self.scanline > PRERENDER {
+                if self.regs.mask.show_bg() {
+                    self.odd_frame = !self.odd_frame;
+                }
                 self.scanline = 0;
             }
         }
@@ -609,6 +604,8 @@ impl Ppu {
             PRERENDER => {
                 if self.cc == 1 {
                     self.regs.status.set_vblank(false);
+                    self.regs.status.set_sprite_0_hit(false);
+                    self.regs.status.set_sprite_o_f(false);
                 }
                 self.step_sprites();
                 self.render_pixel();
