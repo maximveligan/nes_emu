@@ -5,3 +5,5 @@
 Cargo.lock
 *.sav
 config.toml
+/tests/nes_test_roms/
+mapper_docs/
