@@ -45,7 +45,6 @@ pub struct NesEmulator {
 
 impl NesEmulator {
     pub fn new(rom: Rom) -> NesEmulator {
-        println!("{:?}", rom);
         let cpu_clock_speed = match &rom.header.region {
             Region::PAL => PAL_CPU_CLOCK_SPEED,
             Region::NTSC => NTSC_CPU_CLOCK_SPEED,
@@ -98,6 +97,10 @@ impl NesEmulator {
 
     pub fn next_frame(&mut self) -> &[u8] {
         while !self.step() {}
+        self.cpu.mmu.ppu.get_buffer()
+    }
+
+    pub fn get_pixel_buffer(&self) -> &[u8] {
         self.cpu.mmu.ppu.get_buffer()
     }
 }

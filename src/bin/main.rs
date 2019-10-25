@@ -3,6 +3,7 @@ extern crate log;
 extern crate nes_emu;
 extern crate sdl2;
 extern crate sha3;
+extern crate hex;
 
 #[macro_use]
 extern crate failure;
@@ -65,12 +66,13 @@ fn main() -> Result<(), Error> {
     }
 }
 
-struct NesFrontEnd {
-    nes: NesEmulator,
+struct NesFrontEnd<'a> {
     pause: bool,
     ctrl0: HashMap<Keycode, Button>,
     ctrl1: HashMap<Keycode, Button>,
     save_name: String,
+    canvas: sdl2::render::Canvas<sdl2::video::Window>,
+    texture: sdl2::render::Texture<'a>,
 }
 
 enum EventRes {
@@ -80,8 +82,12 @@ enum EventRes {
     Hash,
 }
 
-impl NesFrontEnd {
-    fn handle_event(&mut self, event: sdl2::event::Event) -> Option<EventRes> {
+impl NesFrontEnd<'_> {
+    fn handle_event(
+        &mut self,
+        event: sdl2::event::Event,
+        nes: &mut NesEmulator,
+    ) -> Option<EventRes> {
         match event {
             Event::Quit { .. }
             | Event::KeyDown {
@@ -119,14 +125,14 @@ impl NesFrontEnd {
                 keycode: Some(Keycode::R),
                 ..
             } => {
-                self.nes.reset();
+                nes.reset();
                 None
             }
             Event::KeyDown {
                 keycode: Some(Keycode::Q),
                 ..
             } => {
-                let state_res = match self.save_state() {
+                let state_res = match self.save_state(nes) {
                     Ok(res) => res,
                     Err(e) => e.to_string(),
                 };
@@ -136,7 +142,7 @@ impl NesFrontEnd {
                 keycode: Some(Keycode::E),
                 ..
             } => {
-                let state_res = match self.load_state() {
+                let state_res = match self.load_state(nes) {
                     Ok(res) => res,
                     Err(e) => e.to_string(),
                 };
@@ -145,30 +151,40 @@ impl NesFrontEnd {
             Event::KeyDown {
                 keycode: Some(key), ..
             } => {
-                self.set_ctrl0_state(key, true);
-                self.set_ctrl1_state(key, true);
+                self.set_ctrl0_state(key, true, nes);
+                self.set_ctrl1_state(key, true, nes);
                 None
             }
             Event::KeyUp {
                 keycode: Some(key), ..
             } => {
-                self.set_ctrl0_state(key, false);
-                self.set_ctrl1_state(key, false);
+                self.set_ctrl0_state(key, false, nes);
+                self.set_ctrl1_state(key, false, nes);
                 None
             }
             _ => None,
         }
     }
 
-    fn set_ctrl0_state(&mut self, key: Keycode, state: bool) {
+    fn set_ctrl0_state(
+        &mut self,
+        key: Keycode,
+        state: bool,
+        nes: &mut NesEmulator,
+    ) {
         if let Some(button) = self.ctrl0.get(&key) {
-            self.nes.cpu.mmu.ctrl0.set_button_state(*button, state);
+            nes.cpu.mmu.ctrl0.set_button_state(*button, state);
         }
     }
 
-    fn set_ctrl1_state(&mut self, key: Keycode, state: bool) {
+    fn set_ctrl1_state(
+        &mut self,
+        key: Keycode,
+        state: bool,
+        nes: &mut NesEmulator,
+    ) {
         if let Some(button) = self.ctrl1.get(&key) {
-            self.nes.cpu.mmu.ctrl1.set_button_state(*button, state);
+            nes.cpu.mmu.ctrl1.set_button_state(*button, state);
         }
     }
 
@@ -176,28 +192,21 @@ impl NesFrontEnd {
         self.pause = !self.pause;
     }
 
-    fn save_state(&mut self) -> Result<String, Error> {
+    fn save_state(&mut self, nes: &mut NesEmulator) -> Result<String, Error> {
         let mut file = File::create(&self.save_name)?;
-        self.nes.get_state().save(&mut file)?;
+        nes.get_state().save(&mut file)?;
         Ok(format!("Successfully saved state: {}", &self.save_name))
     }
 
-    fn load_state(&mut self) -> Result<String, Error> {
+    fn load_state(&mut self, nes: &mut NesEmulator) -> Result<String, Error> {
         let mut file = File::open(&self.save_name)?;
         let state = nes_emu::state::State::load(&mut file)?;
-        self.nes.load_state(state);
+        nes.load_state(state);
         Ok("Loaded state successfully".to_string())
     }
 
-    fn next_frame(
-        &mut self,
-        texture: &mut sdl2::render::Texture,
-        canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-        top: usize,
-        bottom: usize,
-        framebuffer: &[u8],
-    ) {
-        texture
+    fn next_frame(&mut self, top: usize, bottom: usize, framebuffer: &[u8]) {
+        self.texture
             .update(
                 None,
                 &framebuffer[top * 3 * SCREEN_WIDTH
@@ -205,13 +214,14 @@ impl NesFrontEnd {
                 SCREEN_WIDTH * 3,
             )
             .unwrap();
-        canvas.clear();
-        canvas.copy(&texture, None, None).unwrap();
-        canvas.present();
+        self.canvas.clear();
+        self.canvas.copy(&self.texture, None, None).unwrap();
+        self.canvas.present();
     }
 }
 
 fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
+    let mut frame_counter: usize = 0;
     let config = Config::load_config("./config.toml".to_string())?;
 
     let screen_height = SCREEN_HEIGHT as u32
@@ -231,7 +241,7 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
         .build()
         .unwrap();
 
-    let mut canvas = window
+    let canvas = window
         .into_canvas()
         .present_vsync()
         .accelerated()
@@ -239,7 +249,7 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
         .unwrap();
 
     let texture_creator = canvas.texture_creator();
-    let mut texture = texture_creator
+    let texture = texture_creator
         .create_texture(
             PixelFormatEnum::RGB24,
             TextureAccess::Streaming,
@@ -249,52 +259,54 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
         .unwrap();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
-
     let mut raw_bytes = Vec::new();
     let mut raw_rom = File::open(path_in)?;
     raw_rom.read_to_end(&mut raw_bytes)?;
 
     let rom = load_rom(&raw_bytes)?;
 
+    let mut nes = NesEmulator::new(rom);
+
     let mut nes_frontend = NesFrontEnd {
-        nes: NesEmulator::new(rom),
         pause: false,
         ctrl0: ButtonLayout::make_ctrl_map(&config.ctrl1_layout)?,
         ctrl1: ButtonLayout::make_ctrl_map(&config.ctrl2_layout)?,
         save_name: rom_stem.to_string() + ".sav",
+        canvas: canvas,
+        texture: texture,
     };
-
-    let mut last_buffer: &[u8];
 
     loop {
         if !nes_frontend.pause {
-            last_buffer = nes_frontend.nes.next_frame();
             nes_frontend.next_frame(
-                &mut texture,
-                &mut canvas,
                 config.overscan.top as usize,
                 config.overscan.bottom as usize,
-                last_buffer,
+                nes.next_frame(),
             );
+            frame_counter += 1;
         }
 
         for event in event_pump.poll_iter() {
-            if let Some(result) = nes_frontend.handle_event(event) {
+            if let Some(result) = nes_frontend.handle_event(event, &mut nes) {
                 match result {
                     EventRes::StateRes(r) => println!("{}", r),
                     EventRes::Quit => return Ok(()),
                     EventRes::Next => {
-                        last_buffer = nes_frontend.nes.next_frame();
                         nes_frontend.next_frame(
-                            &mut texture,
-                            &mut canvas,
                             config.overscan.top as usize,
                             config.overscan.bottom as usize,
-                            last_buffer,
+                            nes.next_frame(),
                         );
+                        frame_counter += 1;
                     }
                     EventRes::Hash => {
-                        println!("{:?}", Sha3_256::digest(last_buffer));
+                        println!(
+                            "Hash: {} Frame number: {}",
+                            hex::encode(Sha3_256::digest(
+                                nes.get_pixel_buffer()
+                            )),
+                            frame_counter
+                        );
                     }
                 }
             }

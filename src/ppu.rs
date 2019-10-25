@@ -437,7 +437,7 @@ impl Ppu {
 
     fn step_bg_regs(&mut self) {
         match self.cc {
-            1..=256 | 321..=336 => match self.cc % 8 {
+            2..=256 | 322..=337 => match self.cc % 8 {
                 1 => {
                     self.internal_regs.reload(self.at_entry);
                 }
@@ -518,7 +518,7 @@ impl Ppu {
     //it's not part of rendering pixels
     fn render_pixel(&mut self) {
         match self.cc {
-            1..=257 | 321..=336 => {
+            2..=257 | 322..=337 => {
                 let x = self.cc - 2;
                 if x < 256 && !self.is_prerender() {
                     let bg_color = self.bg_pixel(x as u8);
