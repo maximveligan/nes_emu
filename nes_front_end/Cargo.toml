@@ -1,0 +1,18 @@
+[package]
+name = "nes_emu_frontend"
+version = "0.1.0"
+authors = ["maximveligan <maximveligan@gmail.com>"]
+
+[dependencies]
+nes_emu = { path = "../nes_emulator" }
+log = "*"
+env_logger = "*"
+serde = { version = "*", features = ["derive"] }
+serde_bytes = "*"
+sdl2 = "0.32.*"
+toml = "*"
+bincode = "*"
+failure = "*"
+itertools = "*"
+sha3 = "*"
+hex = "*"

@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::path::Path;
 use std::fs::File;
 use std::io::Read;
-use controller::Button;
+use nes_emu::controller::Button;
 use failure::Error;
 use sdl2::keyboard::Keycode;
 

@@ -2,9 +2,7 @@
 #[macro_use]
 extern crate nom;
 extern crate bincode;
-extern crate sdl2;
 extern crate serde;
-extern crate toml;
 extern crate env_logger;
 #[macro_use]
 extern crate bitfield;
@@ -14,7 +12,6 @@ extern crate failure;
 extern crate log;
 
 pub mod apu;
-pub mod config;
 pub mod controller;
 pub mod cpu;
 pub mod cpu_const;

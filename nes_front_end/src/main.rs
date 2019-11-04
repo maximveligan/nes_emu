@@ -4,6 +4,7 @@ extern crate nes_emu;
 extern crate sdl2;
 extern crate sha3;
 extern crate hex;
+extern crate serde;
 
 #[macro_use]
 extern crate failure;
@@ -15,8 +16,8 @@ use sdl2::render::TextureAccess;
 use sdl2::pixels::PixelFormatEnum;
 
 use std::collections::HashMap;
-use nes_emu::config::ButtonLayout;
-use nes_emu::config::Config;
+use config::ButtonLayout;
+use config::Config;
 use nes_emu::controller::Button;
 use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
@@ -25,6 +26,8 @@ use std::io::Read;
 use std::env;
 use sha3::Sha3_256;
 use sha3::Digest;
+
+pub mod config;
 
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
