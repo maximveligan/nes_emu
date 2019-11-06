@@ -1,0 +1,15 @@
+[package]
+name = "nes_emu"
+version = "0.1.0"
+authors = ["maximveligan <maximveligan@gmail.com>"]
+
+[dependencies]
+nom = "4.2.3"
+serde = { version = "*", features = ["derive"] }
+serde_bytes = "*"
+bitfield = "*"
+failure = "0.1.5"
+log = "*"
+env_logger = "*"
+itertools = "*"
+bincode = "*"
