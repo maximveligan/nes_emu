@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["maximveligan <maximveligan@gmail.com>"]
 
 [dependencies]
+<<<<<<< HEAD
 nom = "4.2.3"
 serde = { version = "*", features = ["derive"] }
 serde_bytes = "*"
