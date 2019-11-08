@@ -26,7 +26,6 @@ const drawFrameBuff = (frameBuffPtr, length) => {
     // No transparent pixels here
         pixelBuffer.data[(i * 4) + 3] = 0xFF;
     }
-
     ctx.putImageData(pixelBuffer, 0, 0);
 };
 
