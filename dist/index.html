@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Nes Emulator</title>
+    <style>
+      body {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <div>
+      <div id="result">Select a rom:</div>
+      <input type="file" id="file-input" />
+    </div>
+  <body>
+    <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
+    <p>Pause Button</p>
+    <button id="play-pause"></button>
+    <canvas id="nes-wasm-canvas"></canvas>
+    <script src="./bootstrap.js"></script>
+    <table style="width:100%">
+      <tr>
+        <th>Button</th>
+        <th>Key</th>
+      </tr>
+      <tr>
+        <td>Left</td>
+        <td>A</td>
+      </tr>
+      <tr>
+        <td>Right</td>
+        <td>D</td>
+      </tr>
+      <tr>
+        <td>Up</td>
+        <td>W</td>
+      </tr>
+      <tr>
+        <td>Down</td>
+        <td>S</td>
+      </tr>
+      <tr>
+        <td>A</td>
+        <td>F</td>
+      </tr>
+      <tr>
+        <td>B</td>
+        <td>G</td>
+      </tr>
+      <tr>
+        <td>Start</td>
+        <td>T</td>
+      </tr>
+      <tr>
+        <td>Select</td>
+        <td>Y</td>
+      </tr>
+    </table>
+  </body>
+</html>
