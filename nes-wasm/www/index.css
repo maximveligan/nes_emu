@@ -1,16 +1,3 @@
-body {
-  background-color: #E6EEFF;
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-}
 table, th, td {
   padding: 10px;
   border: 1px solid black; 
@@ -34,4 +21,7 @@ table, th, td {
 }
 #file-input {
   display: none;
+}
+#centered {
+    text-align:center;
 }

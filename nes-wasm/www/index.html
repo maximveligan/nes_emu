@@ -5,64 +5,66 @@
     <meta charset="utf-8">
     <title>Nes Emulator</title>
   </head>
-  <h1>NES Emulator</h1>
-  <input type="file" id="file-input"/>
-  <label for="file-input" class="button">Select a rom</label>
   <body>
     <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
-    <div id="pause_container">
-      <div id="pause_label"><label>Pause Button: </label></div>
-      <div id="pause_button"><button id="play-pause"></button></div>
+    <div id="centered">
+        <canvas id="nes-wasm-canvas"></canvas>
+        <h1>NES Emulator</h1>
+        <input type="file" id="file-input"/>
+        <label for="file-input" class="button">Select a rom</label>
+        <div id="pause_container">
+          <div id="pause_label"><label>Pause Button: </label></div>
+          <div id="pause_button"><button id="play-pause"></button></div>
+        </div>
+        <script src="./bootstrap.js"></script>
+        <h1>Controller Bindings</h1>
+        <table cellpadding="10" align="center">
+          <tr>
+            <th>Nes Button</th>
+            <th>Player 1</th>
+            <th>Player 2</th>
+          </tr>
+          <tr>
+            <td>Left</td>
+            <td>A</td>
+            <td>Left Arrow</td>
+          </tr>
+          <tr>
+            <td>Right</td>
+            <td>D</td>
+            <td>Right Arrow</td>
+          </tr>
+          <tr>
+            <td>Up</td>
+            <td>W</td>
+            <td>Up Arrow</td>
+          </tr>
+          <tr>
+            <td>Down</td>
+            <td>S</td>
+            <td>Down Arrow</td>
+          </tr>
+          <tr>
+            <td>A</td>
+            <td>F</td>
+            <td>N</td>
+          </tr>
+          <tr>
+            <td>B</td>
+            <td>G</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>Start</td>
+            <td>T</td>
+            <td>Right Enter</td>
+          </tr>
+          <tr>
+            <td>Select</td>
+            <td>Y</td>
+            <td>Right Shift</td>
+          </tr>
+        </table>
     </div>
-    <canvas id="nes-wasm-canvas"></canvas>
-    <script src="./bootstrap.js"></script>
-    <h1>Controller Bindings</h1>
-    <table cellpadding="10">
-      <tr>
-        <th>Nes Button</th>
-        <th>Player 1</th>
-        <th>Player 2</th>
-      </tr>
-      <tr>
-        <td>Left</td>
-        <td>A</td>
-        <td>Left Arrow</td>
-      </tr>
-      <tr>
-        <td>Right</td>
-        <td>D</td>
-        <td>Right Arrow</td>
-      </tr>
-      <tr>
-        <td>Up</td>
-        <td>W</td>
-        <td>Up Arrow</td>
-      </tr>
-      <tr>
-        <td>Down</td>
-        <td>S</td>
-        <td>Down Arrow</td>
-      </tr>
-      <tr>
-        <td>A</td>
-        <td>F</td>
-        <td>N</td>
-      </tr>
-      <tr>
-        <td>B</td>
-        <td>G</td>
-        <td>M</td>
-      </tr>
-      <tr>
-        <td>Start</td>
-        <td>T</td>
-        <td>Right Enter</td>
-      </tr>
-      <tr>
-        <td>Select</td>
-        <td>Y</td>
-        <td>Right Shift</td>
-      </tr>
-    </table>
   </body>
 </html>

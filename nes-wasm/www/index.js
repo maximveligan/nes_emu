@@ -13,13 +13,17 @@ const playPauseButton = document.getElementById("play-pause");
 const canvas = document.getElementById("nes-wasm-canvas");
 
 // Need to get actual scaling working here
-const scale = 3;
+const scale = Math.round((window.innerHeight / SCREEN_HEIGHT) / 1.5);
 
 canvas.width = SCREEN_WIDTH * scale;
 canvas.height = SCREEN_HEIGHT * scale;
 
 const ctx = canvas.getContext('2d');
 playPauseButton.textContent = "⏸";
+
+ctx.beginPath();
+ctx.strokeStyle = "#FFFFFFFF";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 const play = () => {
   playPauseButton.textContent = "⏸";
