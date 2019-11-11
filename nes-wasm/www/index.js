@@ -1,19 +1,22 @@
 import { memory } from "nes-wasm/nes_wasm_bg";
 import { EmuInterface, KeyCode } from "nes-wasm";
 
-const PIXEL_SCALE = 1; // px
 const SCREEN_HEIGHT = 240;
 const SCREEN_WIDTH = 256;
 const SCREEN_SIZE = SCREEN_HEIGHT * SCREEN_WIDTH;
 const COLOR_CHANNELS = 3;
 
-var nes_fe;
+var nes_fe = null;
 let animationId = null;
 
 const playPauseButton = document.getElementById("play-pause");
 const canvas = document.getElementById("nes-wasm-canvas");
-canvas.height = PIXEL_SCALE * SCREEN_HEIGHT;
-canvas.width = PIXEL_SCALE * SCREEN_WIDTH;
+
+// Need to get actual scaling working here
+const scale = 3;
+
+canvas.width = SCREEN_WIDTH * scale;
+canvas.height = SCREEN_HEIGHT * scale;
 
 const ctx = canvas.getContext('2d');
 playPauseButton.textContent = "⏸";
@@ -38,11 +41,15 @@ playPauseButton.addEventListener("click", event => {
 });
 
 document.addEventListener('keydown', function(event) {
-    nes_fe.set_button(KeyCode.new(event.keyCode), true);
+    if (nes_fe != null) {
+        nes_fe.set_button(KeyCode.new(event.keyCode), true);
+    }
 });
 
 document.addEventListener('keyup', function(event) {
-    nes_fe.set_button(KeyCode.new(event.keyCode), false);
+    if (nes_fe != null) {
+        nes_fe.set_button(KeyCode.new(event.keyCode), false);
+    }
 });
 
 const drawFrameBuff = (frameBuffPtr, length) => {
@@ -57,6 +64,7 @@ const drawFrameBuff = (frameBuffPtr, length) => {
         pixelBuffer.data[(i * 4) + 3] = 0xFF;
     }
     ctx.putImageData(pixelBuffer, 0, 0);
+    ctx.drawImage(ctx.canvas, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, canvas.width, canvas.height);
 };
 
 const isPaused = () => {
