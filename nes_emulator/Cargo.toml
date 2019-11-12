@@ -13,3 +13,7 @@ log = "*"
 env_logger = "*"
 itertools = "*"
 bincode = "*"
+
+[dev-dependencies]
+hex = "*"
+sha3 = "*"
