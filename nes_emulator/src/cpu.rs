@@ -1,9 +1,9 @@
-use serde::Serialize;
-use serde::Deserialize;
 use cpu_const::*;
-use std::fmt;
-use mmu::Mmu;
 use log::Level;
+use mmu::Mmu;
+use serde::Deserialize;
+use serde::Serialize;
+use std::fmt;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Registers {
@@ -206,7 +206,8 @@ impl Cpu {
             Mode::IndY => {
                 let base = self.ld8_pc_up();
                 let tmp = if base == 0xFF {
-                    (self.mmu.ld8(0, self.cc) as u16) << 8 | (self.mmu.ld8(0xFF, self.cc) as u16)
+                    (self.mmu.ld8(0, self.cc) as u16) << 8
+                        | (self.mmu.ld8(0xFF, self.cc) as u16)
                 } else {
                     self.mmu.ld16(base as u16, self.cc)
                 };
@@ -217,7 +218,8 @@ impl Cpu {
             Mode::NoPBIndY => {
                 let base = self.ld8_pc_up();
                 let tmp = if base == 0xFF {
-                    (self.mmu.ld8(0, self.cc) as u16) << 8 | (self.mmu.ld8(0xFF, self.cc) as u16)
+                    (self.mmu.ld8(0, self.cc) as u16) << 8
+                        | (self.mmu.ld8(0xFF, self.cc) as u16)
                 } else {
                     self.mmu.ld16(base as u16, self.cc)
                 };
@@ -603,6 +605,73 @@ impl Cpu {
         self.store(addr, and_reg & (((addr >> 8) as u8).wrapping_add(1)));
     }
 
+    fn brk(&mut self) {
+        self.regs.pc.add_signed(1);
+        self.push_pc();
+        self.push(self.regs.flags.as_byte() | 0b10000);
+        self.regs.flags.set_itr(true);
+        self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC, self.cc));
+    }
+
+    fn rts(&mut self) {
+        self.pull_pc();
+        self.regs.pc.add_unsigned(1);
+    }
+
+    fn rti(&mut self) {
+        self.pull_status();
+        self.pull_pc();
+    }
+
+    fn jsr(&mut self) {
+        let addr = self.address_mem(Mode::Abs);
+        self.regs.pc.add_signed(-1);
+        self.push_pc();
+        self.regs.pc.set_addr(addr);
+    }
+
+    fn pla(&mut self) {
+        let acc = self.pop();
+        self.regs.acc = acc;
+        self.set_zero_neg(acc);
+    }
+
+    fn txa(&mut self) {
+        let x = self.regs.x;
+        self.regs.acc = x;
+        self.set_zero_neg(x);
+    }
+    fn tay(&mut self) {
+        let acc = self.regs.acc;
+        self.regs.y = acc;
+        self.set_zero_neg(acc);
+    }
+    fn tya(&mut self) {
+        let y = self.regs.y;
+        self.regs.acc = y;
+        self.set_zero_neg(y);
+    }
+    fn dex(&mut self) {
+        self.regs.x = self.regs.x.wrapping_sub(1);
+        self.set_zero_neg(self.regs.x);
+    }
+    fn inx(&mut self) {
+        self.regs.x = self.regs.x.wrapping_add(1);
+        self.set_zero_neg(self.regs.x);
+    }
+    fn dey(&mut self) {
+        self.regs.y = self.regs.y.wrapping_sub(1);
+        self.set_zero_neg(self.regs.y);
+    }
+    fn iny(&mut self) {
+        self.regs.y = self.regs.y.wrapping_add(1);
+        self.set_zero_neg(self.regs.y);
+    }
+    fn tsx(&mut self) {
+        self.regs.x = self.regs.sp;
+        self.set_zero_neg(self.regs.sp);
+    }
+
     fn push(&mut self, val: u8) {
         let addr = self.regs.sp as u16 | 0x100;
         self.store(addr, val);
@@ -841,15 +910,8 @@ impl Cpu {
             0xAB => self.atx(Mode::Imm),
             0x9C => self.sna(Mode::AbsX, self.regs.y, self.regs.x), //sya
             0x9E => self.sna(Mode::AbsY, self.regs.x, self.regs.y), //sxa
-
-            RTS => {
-                self.pull_pc();
-                self.regs.pc.add_unsigned(1);
-            }
-            RTI => {
-                self.pull_status();
-                self.pull_pc();
-            }
+            RTS => self.rts(),
+            RTI => self.rti(),
             SED => self.regs.flags.set_dec(true),
             CLC => self.regs.flags.set_carry(false),
             SEC => self.regs.flags.set_carry(true),
@@ -857,126 +919,43 @@ impl Cpu {
             SEI => self.regs.flags.set_itr(true),
             CLV => self.regs.flags.set_overflow(false),
             CLD => self.regs.flags.set_dec(false),
-
             NOP | 0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => (),
-
             // DOP: Double NOP
             0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89
             | 0xC2 | 0xD4 | 0xE2 | 0xF4 | 0x04 => {
                 self.regs.pc.add_signed(1);
             }
-
             // TOP: Triple NOP
             0x0C => {
-                let _ = self.address_mem(Mode::Abs);
+                self.address_mem(Mode::Abs);
             }
             0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
-                let _ = self.address_mem(Mode::AbsX);
+                self.address_mem(Mode::AbsX);
             }
-
-            BRK => {
-                self.regs.pc.add_signed(1);
-                self.push_pc();
-                self.push(self.regs.flags.as_byte() | 0b10000);
-                self.regs.flags.set_itr(true);
-                self.regs.pc.set_addr(self.mmu.ld16(IRQ_VEC, self.cc));
-            }
+            BRK => self.brk(),
             TAX => self.tax(),
-            TXA => {
-                let x = self.regs.x;
-                self.regs.acc = x;
-                self.set_zero_neg(x);
-            }
-            TAY => {
-                let acc = self.regs.acc;
-                self.regs.y = acc;
-                self.set_zero_neg(acc);
-            }
-            TYA => {
-                let y = self.regs.y;
-                self.regs.acc = y;
-                self.set_zero_neg(y);
-            }
-            DEX => {
-                let x = self.regs.x.wrapping_sub(1);
-                self.regs.x = x;
-                self.set_zero_neg(x);
-            }
-            INX => {
-                let x = self.regs.x.wrapping_add(1);
-                self.regs.x = x;
-                self.set_zero_neg(x);
-            }
-            DEY => {
-                let y = self.regs.y.wrapping_sub(1);
-                self.regs.y = y;
-                self.set_zero_neg(y);
-            }
-            INY => {
-                let y = self.regs.y.wrapping_add(1);
-                self.regs.y = y;
-                self.set_zero_neg(y);
-            }
-            TSX => {
-                let sp = self.regs.sp;
-                self.regs.x = sp;
-                self.set_zero_neg(sp);
-            }
-            TXS => {
-                let x = self.regs.x;
-                self.regs.sp = x;
-            }
-            PHA => {
-                let acc = self.regs.acc;
-                self.push(acc);
-            }
-            PLA => {
-                let acc = self.pop();
-                self.regs.acc = acc;
-                self.set_zero_neg(acc);
-            }
+            TXA => self.txa(),
+            TAY => self.tay(),
+            TYA => self.tya(),
+            DEX => self.dex(),
+            INX => self.inx(),
+            DEY => self.dey(),
+            INY => self.iny(),
+            TSX => self.tsx(),
+            TXS => self.regs.sp = self.regs.x,
+            PHA => self.push(self.regs.acc),
+            PLA => self.pla(),
             PHP => self.push(self.regs.flags.as_byte() | 0b10000),
-            PLP => {
-                self.pull_status();
-            }
-            BVS => {
-                let flag = self.regs.flags.overflow();
-                self.generic_branch(flag);
-            }
-            BVC => {
-                let flag = !self.regs.flags.overflow();
-                self.generic_branch(flag);
-            }
-            BMI => {
-                let flag = self.regs.flags.neg();
-                self.generic_branch(flag);
-            }
-            BPL => {
-                let flag = !self.regs.flags.neg();
-                self.generic_branch(flag);
-            }
-            BNE => {
-                let flag = !self.regs.flags.zero();
-                self.generic_branch(flag);
-            }
-            BEQ => {
-                let flag = self.regs.flags.zero();
-                self.generic_branch(flag);
-            }
-            BCS => {
-                let flag = self.regs.flags.carry();
-                self.generic_branch(flag);
-            }
-            BCC => {
-                let flag = !self.regs.flags.carry();
-                self.generic_branch(flag);
-            }
-            JSR => {
-                let addr = self.address_mem(Mode::Abs);
-                self.regs.pc.add_signed(-1);
-                self.push_pc();
-                self.regs.pc.set_addr(addr);
-            }
+            PLP => self.pull_status(),
+            BVS => self.generic_branch(self.regs.flags.overflow()),
+            BVC => self.generic_branch(!self.regs.flags.overflow()),
+            BMI => self.generic_branch(self.regs.flags.neg()),
+            BPL => self.generic_branch(!self.regs.flags.neg()),
+            BNE => self.generic_branch(!self.regs.flags.zero()),
+            BEQ => self.generic_branch(self.regs.flags.zero()),
+            BCS => self.generic_branch(self.regs.flags.carry()),
+            BCC => self.generic_branch(!self.regs.flags.carry()),
+            JSR => self.jsr(),
             JMP_IND => self.jmp(Mode::JmpIndir),
             _ => panic!("Unsupported op {:X} {:?}", op, self.regs),
         }

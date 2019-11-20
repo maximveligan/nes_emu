@@ -68,15 +68,8 @@ impl Mmu {
     pub fn store(&mut self, address: u16, val: u8, cur_cycle: usize) {
         match address {
             WRAM_START..=WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START..=PPU_END => {
-                self.open_bus = val;
-                self.bus_set_cycle = cur_cycle;
-                self.ppu.store((address - 0x2000) & 7, val);
-            }
-            0x4016 => {
-                self.ctrl0.store(val);
-                self.ctrl1.store(val);
-            }
+            PPU_START..=PPU_END => self.ppu_store(address, val, cur_cycle),
+            0x4016 => self.ctrl_store(val),
             0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
             0x4018..=0x401F => println!("disabled normally"),
             ROM_START..=ROM_END => {
@@ -85,7 +78,16 @@ impl Mmu {
         }
     }
 
-    //2 => self.open_bus = (self.open_bus & 0b11100000) | val,
+    fn ppu_store(&mut self, address: u16, val: u8, cur_cycle: usize) {
+        self.open_bus = val;
+        self.bus_set_cycle = cur_cycle;
+        self.ppu.store((address - 0x2000) & 7, val);
+    }
+
+    fn ctrl_store(&mut self, val: u8) {
+        self.ctrl0.store(val);
+        self.ctrl1.store(val);
+    }
 
     fn update_bus(&mut self, cur_cycle: usize) {
         if (cur_cycle - self.bus_set_cycle) > self.console_clock {

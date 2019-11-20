@@ -46,8 +46,9 @@ impl EmuInterface {
             Err(e) => return Err(JsValue::from_str(&e.to_string())),
         };
         let mut button_map_one = HashMap::new();
-        // W A S D for directions, F is A, G is B, T is Start, Y is Select
+        // let mut button_map_two = HashMap::new();
         // TODO: add loadable config from JS
+        // W A S D for directions, F is A, G is B, T is Start, Y is Select
         button_map_one.insert(KeyCode(87), Button::Up);
         button_map_one.insert(KeyCode(83), Button::Down);
         button_map_one.insert(KeyCode(65), Button::Left);
@@ -56,6 +57,16 @@ impl EmuInterface {
         button_map_one.insert(KeyCode(71), Button::B);
         button_map_one.insert(KeyCode(84), Button::Start);
         button_map_one.insert(KeyCode(89), Button::Select);
+
+        // W A S D for directions, F is A, G is B, T is Start, Y is Select
+        // button_map_one.insert(KeyCode(87), Button::Up);
+        // button_map_one.insert(KeyCode(83), Button::Down);
+        // button_map_one.insert(KeyCode(65), Button::Left);
+        // button_map_one.insert(KeyCode(68), Button::Right);
+        // button_map_one.insert(KeyCode(70), Button::A);
+        // button_map_one.insert(KeyCode(71), Button::B);
+        // button_map_one.insert(KeyCode(84), Button::Start);
+        // button_map_one.insert(KeyCode(89), Button::Select);
 
         Ok(EmuInterface {
             nes_emu: NesEmulator::new(rom),

@@ -33,8 +33,8 @@ use mmu::Mmu;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const PAL_CPU_CLOCK_SPEED: usize = 1662607;
-const NTSC_CPU_CLOCK_SPEED: usize = 1789773;
+const PAL_CPU_CLOCK_SPEED: usize = 1662607; // measured in hertz
+const NTSC_CPU_CLOCK_SPEED: usize = 1789773; // measured in hertz
 
 pub struct NesEmulator {
     pub cpu: Cpu,
