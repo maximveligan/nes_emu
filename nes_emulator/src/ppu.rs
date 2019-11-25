@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ppu::pregisters::PRegisters;
+use ppu::shift_regs::InternalRegs;
 use ppu::pregisters::VramAddr;
 use ppu::pregisters::Ctrl;
 use ppu::sprite::Sprite;
@@ -14,6 +15,7 @@ use ppu::vram::*;
 pub mod pregisters;
 pub mod sprite;
 pub mod vram;
+pub mod shift_regs;
 
 const SPRITE_NUM: usize = 64;
 const SCREEN_WIDTH: usize = 256;
@@ -33,89 +35,15 @@ pub const PALETTE: [u32; 64] = [
     0x111111,
 ];
 
-#[derive(Copy, Clone)]
-struct Rgb {
-    data: [u8; 3],
-}
-
 #[derive(Debug)]
 pub enum PpuRes {
     Nmi,
     Draw,
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
-//These are 1 bit latches, so I'm using booleans to store them
-struct AtLatch {
-    low_b: bool,
-    high_b: bool,
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone)]
-struct AtShift {
-    low_tile: u8,
-    high_tile: u8,
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone)]
-struct BgLatch {
-    low_tile: u8,
-    high_tile: u8,
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone)]
-struct BgShift {
-    low_tile: u16,
-    high_tile: u16,
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone)]
-pub struct InternalRegs {
-    at_latch: AtLatch,
-    at_shift: AtShift,
-    bg_latch: BgLatch,
-    bg_shift: BgShift,
-}
-
-impl InternalRegs {
-    fn new() -> InternalRegs {
-        InternalRegs {
-            at_latch: AtLatch {
-                low_b: false,
-                high_b: false,
-            },
-            at_shift: AtShift {
-                low_tile: 0,
-                high_tile: 0,
-            },
-            bg_latch: BgLatch {
-                low_tile: 0,
-                high_tile: 0,
-            },
-            bg_shift: BgShift {
-                low_tile: 0,
-                high_tile: 0,
-            },
-        }
-    }
-
-    fn reload(&mut self, at_entry: u8) {
-        self.bg_shift.low_tile =
-            (self.bg_shift.low_tile & 0xFF00) | self.bg_latch.low_tile as u16;
-        self.bg_shift.high_tile =
-            (self.bg_shift.high_tile & 0xFF00) | self.bg_latch.high_tile as u16;
-        self.at_latch.low_b = (at_entry & 1) == 1;
-        self.at_latch.high_b = ((at_entry >> 1) & 1) == 1;
-    }
-
-    fn shift(&mut self) {
-        self.at_shift.low_tile =
-            (self.at_shift.low_tile << 1) | self.at_latch.low_b as u8;
-        self.at_shift.high_tile =
-            (self.at_shift.high_tile << 1) | self.at_latch.high_b as u8;
-        self.bg_shift.low_tile <<= 1;
-        self.bg_shift.high_tile <<= 1;
-    }
+#[derive(Copy, Clone)]
+struct Rgb {
+    data: [u8; 3],
 }
 
 #[derive(Serialize, Deserialize)]
@@ -398,12 +326,8 @@ impl Ppu {
     ) -> (u8, Option<Priority>) {
         for sprite in self.main_oam.iter() {
             if !self.regs.mask.show_sprites()
-                || (sprite.x < 8 && !self.regs.mask.left8_sprite())
+                || (sprite.x < 8 && !self.regs.mask.left8_sprite()) || !sprite.in_bounding_box(x)
             {
-                continue;
-            }
-
-            if !sprite.in_bounding_box(x) {
                 continue;
             }
 
@@ -458,10 +382,8 @@ impl Ppu {
                     let pt_index = self.regs.ctrl.nt_pt_addr()
                         + (nt_entry as u16 * 16)
                         + self.regs.addr.fine_y() as u16;
-                    self.internal_regs.bg_latch.low_tile =
-                        self.vram.ld8(pt_index);
-                    self.internal_regs.bg_latch.high_tile =
-                        self.vram.ld8(pt_index + 8);
+                    self.internal_regs.bg_latch.fill(self.vram.ld8(pt_index), self.vram.ld8(pt_index + 8));
+                        
                     if self.regs.mask.show_bg() {
                         if self.cc == 256 {
                             self.regs.addr.scroll_y();
@@ -495,19 +417,11 @@ impl Ppu {
         }
         let bg_off = 15 - self.fine_x;
         let at_off = 7 - self.fine_x;
-        let c = ((((self.internal_regs.bg_shift.high_tile >> (bg_off)) & 1)
-            as u8)
-            << 1)
-            | (((self.internal_regs.bg_shift.low_tile >> (bg_off)) & 1) as u8);
-
+        let c = self.internal_regs.bg_shift.get_color(bg_off);
         if c == 0 {
             return 0;
         }
-        (((((self.internal_regs.at_shift.high_tile >> (at_off)) & 1) as u8)
-            << 1)
-            | (((self.internal_regs.at_shift.low_tile >> (at_off)) & 1) as u8))
-            << 2
-            | c
+        self.internal_regs.at_shift.get_color(c, at_off)
     }
 
     fn is_prerender(&self) -> bool {
@@ -555,7 +469,7 @@ impl Ppu {
 
     fn step_cc(&mut self) {
         self.cc += 1;
-        if self.odd_frame && self.is_prerender() && (self.cc == 339) {
+        if self.odd_frame && self.is_prerender() && (self.cc == 340) {
             self.scanline = 0;
             self.cc = 0;
             self.odd_frame = !self.odd_frame;
