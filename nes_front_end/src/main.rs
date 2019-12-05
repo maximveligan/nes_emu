@@ -6,10 +6,7 @@ extern crate sha3;
 extern crate hex;
 extern crate serde;
 
-#[macro_use]
-extern crate failure;
 use std::path::Path;
-use failure::Error;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::TextureAccess;
@@ -26,46 +23,35 @@ use std::io::Read;
 use std::env;
 use sha3::Sha3_256;
 use sha3::Digest;
+use std::error::Error;
 
 pub mod config;
 
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
-fn get_save_state_name<'a>(rom_path: &'a Path) -> Result<&'a str, Error> {
+fn get_save_state_name<'a>(rom_path: &'a Path) -> Result<&'a str, Box<dyn Error>> {
     if let Some(os_stem) = rom_path.file_stem() {
-        if let Some(rom_stem) = os_stem.to_str() {
-            Ok(rom_stem)
-        } else {
-            bail!("Failed to convert path to UTF-8");
-        }
+        Ok(os_stem.to_str().ok_or("Failed to convert from utf-8")?)
     } else {
         warn!("Rom file name did not have an extension");
-        if let Some(rom_string) = rom_path.to_str() {
-            Ok(rom_string)
-        } else {
-            bail!("Failed to convert path to UTF-8");
-        }
+        Ok(rom_path.to_str().ok_or("Failed to convert path to UTF-8")?)
     }
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
-    if let Some(str_path) = env::args().nth(1) {
-        let rom_path = Path::new(&str_path);
-        if !rom_path.is_file() {
-            bail!("Given path is not a file");
-        } else {
-            let save_state_name = get_save_state_name(rom_path)?;
-            start_emulator(
-                rom_path
-                    .to_str()
-                    .expect("Checked for this in get_save_state_name"),
-                save_state_name,
-            )
-        }
+    let str_path = env::args().nth(1).ok_or("No given path")?;
+    let rom_path = Path::new(&str_path);
+    if !rom_path.is_file() {
+        Err("Given path is not a file")?
     } else {
-        bail!("No given path");
+        start_emulator(
+            rom_path
+                .to_str()
+                .expect("Checked for this in get_save_state_name"),
+            get_save_state_name(rom_path)?
+        )
     }
 }
 
@@ -195,13 +181,13 @@ impl NesFrontEnd<'_> {
         self.pause = !self.pause;
     }
 
-    fn save_state(&mut self, nes: &mut NesEmulator) -> Result<String, Error> {
+    fn save_state(&mut self, nes: &mut NesEmulator) -> Result<String, Box<dyn Error>> {
         let mut file = File::create(&self.save_name)?;
         nes.get_state().save(&mut file)?;
         Ok(format!("Successfully saved state: {}", &self.save_name))
     }
 
-    fn load_state(&mut self, nes: &mut NesEmulator) -> Result<String, Error> {
+    fn load_state(&mut self, nes: &mut NesEmulator) -> Result<String, Box<dyn Error>> {
         let mut file = File::open(&self.save_name)?;
         let state = nes_emu::state::State::load(&mut file)?;
         nes.load_state(state);
@@ -223,7 +209,7 @@ impl NesFrontEnd<'_> {
     }
 }
 
-fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Error> {
+fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Box<dyn Error>> {
     let mut frame_counter: usize = 0;
     let config = Config::load_config("./config.toml".to_string())?;
 

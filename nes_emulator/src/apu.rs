@@ -36,12 +36,20 @@ impl Apu {
             ),
         }
     }
-    pub fn store(&self, _addr: u16, _val: u8) {
-        // unimplemented!("Storing to APU not supported");
-        //println!("Warning! Storing not implemented for APU");
+    pub fn store(&mut self, addr: u16, _val: u8) {
+        match addr {
+            0x00..=0x03 => {}
+            0x04..=0x07 => {}
+            0x08..=0x0B => {}
+            0x0C..=0x0F => {}
+            0x10..=0x13 => {}
+            0x15 => {}
+            0x17 => {}
+            _ => panic!("Can't get here"),
+        }
     }
 
-    fn read_status(&mut self) -> u8 {
+    pub fn read_status(&mut self) -> u8 {
         //TODO: this is a placeholder
         self.status
     }

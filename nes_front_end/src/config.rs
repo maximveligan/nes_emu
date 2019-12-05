@@ -5,8 +5,8 @@ use std::path::Path;
 use std::fs::File;
 use std::io::Read;
 use nes_emu::controller::Button;
-use failure::Error;
 use sdl2::keyboard::Keycode;
+use std::error::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -34,7 +34,7 @@ pub struct ButtonLayout {
     select: String,
 }
 
-fn str_to_keycode(input: &str) -> Result<Keycode, Error> {
+fn str_to_keycode(input: &str) -> Result<Keycode, Box<dyn Error>> {
     match input {
         "A" => Ok(Keycode::A),
         "B" => Ok(Keycode::B),
@@ -69,12 +69,12 @@ fn str_to_keycode(input: &str) -> Result<Keycode, Error> {
         "LShift" => Ok(Keycode::LShift),
         "RShift" => Ok(Keycode::RShift),
         "Enter" => Ok(Keycode::Return),
-        k => Err(format_err!("Unsupported character {}", k)),
+        k => Err(format!("Unsupported character {}", k))?,
     }
 }
 
 impl ButtonLayout {
-    pub fn make_ctrl_map(&self) -> Result<HashMap<Keycode, Button>, Error> {
+    pub fn make_ctrl_map(&self) -> Result<HashMap<Keycode, Button>, Box<dyn Error>> {
         let mut button_map = HashMap::new();
         button_map.insert(str_to_keycode(&self.left)?, Button::Left);
         button_map.insert(str_to_keycode(&self.right)?, Button::Right);
@@ -88,11 +88,9 @@ impl ButtonLayout {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum ConfigError {
-    #[fail(display = "Unable to open config file: {}", _0)]
     FileError(std::io::Error),
-    #[fail(display = "Unable to parse config file: {}", _0)]
     ParseError(toml::de::Error),
 }
 
@@ -130,7 +128,7 @@ impl Config {
         }
     }
 
-    pub fn load_config(config_path: String) -> Result<Config, Error> {
+    pub fn load_config(config_path: String) -> Result<Config, Box<dyn Error>> {
         if Path::new(&config_path).exists() {
             let mut file = File::open(config_path)?;
             let mut config_string = String::new();

@@ -71,7 +71,9 @@ impl Mmu {
             PPU_START..=PPU_END => self.ppu_store(address, val, cur_cycle),
             0x4016 => self.ctrl_store(val),
             0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
-            0x4018..=0x401F => println!("disabled normally"),
+            0x4018..=0x401F => {
+                debug!("Tried to write to {:X} with value {:X}", address, val);
+            }
             ROM_START..=ROM_END => {
                 self.mapper.borrow_mut().store_prg(address, val)
             }
@@ -135,7 +137,7 @@ impl Mmu {
             0x4016 => self.ctrl0.ld8(),
             0x4017 => self.ctrl1.ld8(),
             0x4000..=0x4014 | 0x4018..=0x401F => {
-                println!("disabled normally");
+                debug!("Tried to read from {:X}", address);
                 0
             }
             ROM_START..=ROM_END => {
