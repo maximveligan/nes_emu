@@ -3,7 +3,7 @@
 This is a NES (Nintendo Entertainment System) emulator written in Rust using SDL2 for graphics and input.
 
 # Try it out!
-I've compiled this project to wasm, using html canvas as a front end. You can try out the emulator [here] (https://maximveligan.github.io/nes.html).
+I've compiled this project to wasm, using html canvas as a front end. You can try out the emulator [here](https://maximveligan.github.io/nes.html).
 
 ## Why NES?
 I have already written a [chip 8 emulator](https://github.com/maximveligan/chip_8), so the NES seemed like a good place to go next. It is a fairly well documented system, and is not too difficult for one person to finish. The NES is also a more rewarding system to emulate than the chip 8, since it has so many iconic games for it. The final reason for writing a NES emulator is that I wanted to learn more about how real hardware interfaces.
