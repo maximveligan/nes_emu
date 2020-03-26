@@ -191,7 +191,7 @@ impl Cpu {
                 } else {
                     self.mmu.ld8(tmp + 1, self.cc)
                 };
-                ((high as u16) << 8 | (low as u16))
+                (high as u16) << 8 | (low as u16)
             }
             Mode::IndX => {
                 let tmp = self.ld8_pc_up();
