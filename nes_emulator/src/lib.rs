@@ -10,11 +10,10 @@ extern crate bitfield;
 extern crate failure;
 #[macro_use]
 extern crate log;
+extern crate cpu_6502;
 
 pub mod apu;
 pub mod controller;
-pub mod cpu;
-pub mod cpu_const;
 pub mod mapper;
 pub mod mmu;
 pub mod ppu;
@@ -22,7 +21,7 @@ pub mod rom;
 pub mod state;
 
 use state::State;
-use cpu::Cpu;
+use cpu_6502::cpu::Cpu;
 use apu::Apu;
 use ppu::Ppu;
 use ppu::PpuRes;
@@ -37,7 +36,7 @@ const PAL_CPU_CLOCK_SPEED: usize = 1662607; // measured in hertz
 const NTSC_CPU_CLOCK_SPEED: usize = 1789773; // measured in hertz
 
 pub struct NesEmulator {
-    pub cpu: Cpu,
+    pub cpu: Cpu<Mmu>,
 }
 
 impl NesEmulator {

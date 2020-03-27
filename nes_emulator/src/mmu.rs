@@ -6,6 +6,7 @@ use mapper::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
 use controller::Controller;
+use cpu_6502::Memory;
 
 const WRAM_START: u16 = 0x0000;
 const WRAM_END: u16 = 0x1FFF;
@@ -26,78 +27,8 @@ pub struct Mmu {
     console_clock: usize,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Ram(Box<[u8]>);
-
-impl Ram {
-    pub fn new() -> Ram {
-        Ram {
-            0: Box::new([0; 0xFFF]),
-        }
-    }
-
-    fn load(&self, address: u16) -> u8 {
-        self.0[address as usize]
-    }
-
-    fn store(&mut self, address: u16, val: u8) {
-        self.0[address as usize] = val;
-    }
-}
-
-impl Mmu {
-    pub fn new(
-        apu: Apu,
-        ppu: Ppu,
-        mapper: Rc<RefCell<Mapper>>,
-        console_clock: usize,
-    ) -> Mmu {
-        Mmu {
-            ppu,
-            apu,
-            mapper,
-            ram: Ram::new(),
-            ctrl0: Controller::new(),
-            ctrl1: Controller::new(),
-            open_bus: 0,
-            bus_set_cycle: 0,
-            console_clock,
-        }
-    }
-
-    pub fn store(&mut self, address: u16, val: u8, cur_cycle: usize) {
-        match address {
-            WRAM_START..=WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START..=PPU_END => self.ppu_store(address, val, cur_cycle),
-            0x4016 => self.ctrl_store(val),
-            0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
-            0x4018..=0x401F => {
-                debug!("Tried to write to {:X} with value {:X}", address, val);
-            }
-            ROM_START..=ROM_END => {
-                self.mapper.borrow_mut().store_prg(address, val)
-            }
-        }
-    }
-
-    fn ppu_store(&mut self, address: u16, val: u8, cur_cycle: usize) {
-        self.open_bus = val;
-        self.bus_set_cycle = cur_cycle;
-        self.ppu.store((address - 0x2000) & 7, val);
-    }
-
-    fn ctrl_store(&mut self, val: u8) {
-        self.ctrl0.store(val);
-        self.ctrl1.store(val);
-    }
-
-    fn update_bus(&mut self, cur_cycle: usize) {
-        if (cur_cycle - self.bus_set_cycle) > self.console_clock {
-            self.open_bus = 0;
-        }
-    }
-
-    pub fn ld8(&mut self, address: u16, cur_cycle: usize) -> u8 {
+impl Memory for Mmu {
+    fn ld8(&mut self, address: u16, cur_cycle: usize) -> u8 {
         match address {
             WRAM_START..=WRAM_END => self.ram.load(address & 0x7FF),
             PPU_START..=PPU_END => {
@@ -147,9 +78,81 @@ impl Mmu {
         }
     }
 
-    pub fn ld16(&mut self, address: u16, cur_cycle: usize) -> u16 {
+    fn ld16(&mut self, address: u16, cur_cycle: usize) -> u16 {
         let l_byte = self.ld8(address, cur_cycle);
         let r_byte = self.ld8(address + 1, cur_cycle);
         (r_byte as u16) << 8 | (l_byte as u16)
+    }
+
+    fn store(&mut self, address: u16, val: u8, cur_cycle: usize) {
+        match address {
+            WRAM_START..=WRAM_END => self.ram.store(address & 0x7FF, val),
+            PPU_START..=PPU_END => self.ppu_store(address, val, cur_cycle),
+            0x4016 => self.ctrl_store(val),
+            0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
+            0x4018..=0x401F => {
+                debug!("Tried to write to {:X} with value {:X}", address, val);
+            }
+            ROM_START..=ROM_END => {
+                self.mapper.borrow_mut().store_prg(address, val)
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Ram(Box<[u8]>);
+
+impl Ram {
+    pub fn new() -> Ram {
+        Ram {
+            0: Box::new([0; 0xFFF]),
+        }
+    }
+
+    fn load(&self, address: u16) -> u8 {
+        self.0[address as usize]
+    }
+
+    fn store(&mut self, address: u16, val: u8) {
+        self.0[address as usize] = val;
+    }
+}
+
+impl Mmu {
+    pub fn new(
+        apu: Apu,
+        ppu: Ppu,
+        mapper: Rc<RefCell<Mapper>>,
+        console_clock: usize,
+    ) -> Mmu {
+        Mmu {
+            ppu,
+            apu,
+            mapper,
+            ram: Ram::new(),
+            ctrl0: Controller::new(),
+            ctrl1: Controller::new(),
+            open_bus: 0,
+            bus_set_cycle: 0,
+            console_clock,
+        }
+    }
+
+    fn ppu_store(&mut self, address: u16, val: u8, cur_cycle: usize) {
+        self.open_bus = val;
+        self.bus_set_cycle = cur_cycle;
+        self.ppu.store((address - 0x2000) & 7, val);
+    }
+
+    fn ctrl_store(&mut self, val: u8) {
+        self.ctrl0.store(val);
+        self.ctrl1.store(val);
+    }
+
+    fn update_bus(&mut self, cur_cycle: usize) {
+        if (cur_cycle - self.bus_set_cycle) > self.console_clock {
+            self.open_bus = 0;
+        }
     }
 }

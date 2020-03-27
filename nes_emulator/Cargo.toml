@@ -13,6 +13,7 @@ log = "*"
 env_logger = "*"
 itertools = "*"
 bincode = "*"
+cpu_6502 = { path = "../cpu_6502" }
 
 [dev-dependencies]
 hex = "*"

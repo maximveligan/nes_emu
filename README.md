@@ -32,6 +32,9 @@ The CPU of the NES has a 16 bit addressing range. Most games are larger than tha
 ## Usage
 To run the emulator, install cargo and the rust compiler. SDL2 is also required to use my frontend. To start the emulator, go into the NES directory and run `cargo run --release <PATH TO ROM>`.
 
+## Building for Wasm
+To build the emulator as a wasm package, run `wasm-pack build` inside of the `nes-wasm` folder. You can then run `npm install` within the `./nes_emu/nes-wasm/www/` folder to install the npm package. Then run `npm start` to start the web page. You can view the page at `http://localhost:8080`.
+
 ### Default Controls
 ```
 Up: W

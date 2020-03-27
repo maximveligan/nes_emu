@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::io::Write;
 use mmu::Ram;
-use cpu::Registers;
+use cpu_6502::cpu::Registers;
 use rom::ScreenMode;
 use mapper::MemType;
 use failure::Error;
