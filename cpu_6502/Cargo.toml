@@ -1,0 +1,12 @@
+[package]
+name = "cpu_6502"
+version = "0.1.0"
+authors = ["maximveligan <maximveligan@gmail.com>"]
+
+[dependencies]
+log = "*"
+env_logger = "*"
+serde = { version = "*", features = ["derive"] }
+serde_bytes = "*"
+itertools = "*"
+bitfield = "*"
