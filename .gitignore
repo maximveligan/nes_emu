@@ -10,3 +10,4 @@ mapper_docs/
 /nes-wasm/target/
 /nes-wasm/www/node_modules/
 /nes-wasm/www/dist/
+/assets/
