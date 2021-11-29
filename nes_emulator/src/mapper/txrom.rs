@@ -1,6 +1,6 @@
-use serde::Serialize;
-use serde::Deserialize;
 use rom::ScreenMode;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Txrom {
@@ -40,12 +40,7 @@ impl Txrom {
         }
     }
 
-    pub fn ld_prg(
-        &self,
-        address: u16,
-        prg_rom: &Vec<u8>,
-        prg_ram: &Vec<u8>,
-    ) -> u8 {
+    pub fn ld_prg(&self, address: u16, prg_rom: &[u8], prg_ram: &[u8]) -> u8 {
         match address {
             // This is optional, check what that means
             0x6000..=0x7FFF => prg_ram[address as usize - 0x6000],
@@ -113,15 +108,15 @@ impl Txrom {
             // Implemented bits 0 and 1 for MMC6 at some point
             let shifted_val = val >> 4;
             self.allow_writes = shifted_val & 0b0100 == 0;
-            self.ram_enabled = shifted_val & 0b1000 == 1;
+            self.ram_enabled = shifted_val & 0b1000 != 0;
         }
     }
 
     pub fn ld_chr(
         &self,
         _address: u16,
-        _chr_rom: &Vec<u8>,
-        _chr_ram: &Vec<u8>,
+        _chr_rom: &[u8],
+        _chr_ram: &[u8],
     ) -> u8 {
         0
     }

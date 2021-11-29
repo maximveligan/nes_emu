@@ -1,12 +1,12 @@
-use serde::Serialize;
-use serde::Deserialize;
-use ppu::Ppu;
 use apu::Apu;
-use mapper::Mapper;
-use std::cell::RefCell;
-use std::rc::Rc;
 use controller::Controller;
 use cpu_6502::Memory;
+use mapper::Mapper;
+use ppu::Ppu;
+use serde::Deserialize;
+use serde::Serialize;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const WRAM_START: u16 = 0x0000;
 const WRAM_END: u16 = 0x1FFF;
@@ -103,13 +103,15 @@ impl Memory for Mmu {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Ram(Box<[u8]>);
 
-impl Ram {
-    pub fn new() -> Ram {
+impl Default for Ram {
+    fn default() -> Ram {
         Ram {
             0: Box::new([0; 0xFFF]),
         }
     }
+}
 
+impl Ram {
     fn load(&self, address: u16) -> u8 {
         self.0[address as usize]
     }
@@ -130,9 +132,9 @@ impl Mmu {
             ppu,
             apu,
             mapper,
-            ram: Ram::new(),
-            ctrl0: Controller::new(),
-            ctrl1: Controller::new(),
+            ram: Ram::default(),
+            ctrl0: Controller::default(),
+            ctrl1: Controller::default(),
             open_bus: 0,
             bus_set_cycle: 0,
             console_clock,

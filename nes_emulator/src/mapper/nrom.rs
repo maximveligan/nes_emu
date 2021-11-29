@@ -1,5 +1,5 @@
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 
 const UNMIRRORED_MASK: usize = 0x7FFF;
 const MIRRORED_MASK: usize = 0x3FFF;
@@ -21,7 +21,7 @@ impl Nrom {
         }
     }
 
-    pub fn ld_prg(&self, address: u16, prg_rom: &Vec<u8>) -> u8 {
+    pub fn ld_prg(&self, address: u16, prg_rom: &[u8]) -> u8 {
         if address < NROM_PRG_ROM_START {
             info!("Attempt to read from nrom {:X}", address);
             0
@@ -39,12 +39,7 @@ impl Nrom {
         );
     }
 
-    pub fn ld_chr(
-        &self,
-        address: u16,
-        chr_rom: &Vec<u8>,
-        chr_ram: &Vec<u8>,
-    ) -> u8 {
+    pub fn ld_chr(&self, address: u16, chr_rom: &[u8], chr_ram: &[u8]) -> u8 {
         if self.use_chr_ram {
             chr_ram[address as usize]
         } else {

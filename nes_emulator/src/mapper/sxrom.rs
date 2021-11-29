@@ -5,10 +5,10 @@
 // This could be due to timing issues/accuracy issues in other emulator
 // components but it's hard to tell
 
-use serde::Serialize;
-use serde::Deserialize;
-use rom::ScreenMode;
 use rom::ScreenBank;
+use rom::ScreenMode;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
 struct Shift {
@@ -23,7 +23,7 @@ impl Shift {
     }
 
     fn push(&mut self, val: u8) -> Option<u8> {
-        self.val = self.val | (val & 1) << self.index;
+        self.val |= (val & 1) << self.index;
         if self.index == 4 {
             let tmp = self.val;
             self.reset();
@@ -67,9 +67,9 @@ impl Sxrom {
             chr_bank_0_offset: 0,
             chr_bank_1_offset: 0,
             prg_bank_offset: 0,
-            use_chr_ram: use_chr_ram,
-            last_page_start: last_page_start,
             prg_ram_enabled: true, //Default state is 0 = true
+            use_chr_ram,
+            last_page_start,
         }
     }
 
@@ -78,44 +78,35 @@ impl Sxrom {
             info!("Storing to unmapped prg mem {:X}", address);
         } else if address < 0x8000 {
             prg_ram[address as usize - 0x6000] = val;
-        } else {
-            if (val & 0x80) != 0 {
-                self.reset();
-                self.ctrl = Ctrl(self.ctrl.as_byte() | 0x0C);
-            } else {
-                if let Some(val) = self.shift.push(val) {
-                    match address {
-                        0x8000..=0x9FFF => self.ctrl = Ctrl(val),
-                        0xA000..=0xBFFF => {
-                            // Equivalent to multiplying by 0x1000 which is
-                            // the chr page size
-                            let chr_bank_0 = (val & 0b11111) as usize % 8;
-                            self.chr_bank_0_offset = chr_bank_0 << 12;
-                        }
-                        0xC000..=0xDFFF => {
-                            let chr_bank_1 = (val & 0b11111) as usize % 8;
-                            self.chr_bank_1_offset = chr_bank_1 << 12;
-                        }
-                        0xE000..=0xFFFF => {
-                            let prg_bank_page = (val & 0b1111) as usize;
-                            // Equivalent to multiplying by 0x4000 which is
-                            // the page size
-                            self.prg_bank_offset = prg_bank_page << 14;
-                            self.prg_ram_enabled = (val & 0b10000) == 0;
-                        }
-                        _ => panic!("Impossible to get here"),
-                    }
+        } else if (val & 0x80) != 0 {
+            self.reset();
+            self.ctrl = Ctrl(self.ctrl.as_byte() | 0x0C);
+        } else if let Some(val) = self.shift.push(val) {
+            match address {
+                0x8000..=0x9FFF => self.ctrl = Ctrl(val),
+                0xA000..=0xBFFF => {
+                    // Equivalent to multiplying by 0x1000 which is
+                    // the chr page size
+                    let chr_bank_0 = (val & 0b11111) as usize % 8;
+                    self.chr_bank_0_offset = chr_bank_0 << 12;
                 }
+                0xC000..=0xDFFF => {
+                    let chr_bank_1 = (val & 0b11111) as usize % 8;
+                    self.chr_bank_1_offset = chr_bank_1 << 12;
+                }
+                0xE000..=0xFFFF => {
+                    let prg_bank_page = (val & 0b1111) as usize;
+                    // Equivalent to multiplying by 0x4000 which is
+                    // the page size
+                    self.prg_bank_offset = prg_bank_page << 14;
+                    self.prg_ram_enabled = (val & 0b10000) == 0;
+                }
+                _ => panic!("Impossible to get here"),
             }
         }
     }
 
-    pub fn ld_prg(
-        &self,
-        address: u16,
-        prg_rom: &Vec<u8>,
-        prg_ram: &Vec<u8>,
-    ) -> u8 {
+    pub fn ld_prg(&self, address: u16, prg_rom: &[u8], prg_ram: &[u8]) -> u8 {
         match address {
             0x6000..=0x7FFF => prg_ram[address as usize - 0x6000],
             0x8000..=0xFFFF => prg_rom[self.get_prg_index(address)],
@@ -126,12 +117,7 @@ impl Sxrom {
         }
     }
 
-    pub fn ld_chr(
-        &self,
-        address: u16,
-        chr_rom: &Vec<u8>,
-        chr_ram: &Vec<u8>,
-    ) -> u8 {
+    pub fn ld_chr(&self, address: u16, chr_rom: &[u8], chr_ram: &[u8]) -> u8 {
         if self.use_chr_ram {
             chr_ram[self.get_chr_index(address)]
         } else {

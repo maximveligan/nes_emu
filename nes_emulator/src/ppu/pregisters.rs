@@ -1,5 +1,5 @@
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 
 const X_SCROLL_MASK: u16 = 0b000010000011111;
 const Y_SCROLL_MASK: u16 = 0b111101111100000;
@@ -200,8 +200,8 @@ pub struct PRegisters {
     pub addr: VramAddr,
 }
 
-impl PRegisters {
-    pub fn new() -> PRegisters {
+impl Default for PRegisters {
+    fn default() -> PRegisters {
         PRegisters {
             ctrl: Ctrl(0),
             mask: Mask(0),

@@ -2,8 +2,8 @@
 #[macro_use]
 extern crate nom;
 extern crate bincode;
-extern crate serde;
 extern crate env_logger;
+extern crate serde;
 #[macro_use]
 extern crate bitfield;
 #[macro_use]
@@ -20,15 +20,15 @@ pub mod ppu;
 pub mod rom;
 pub mod state;
 
-use state::State;
-use cpu_6502::cpu::Cpu;
 use apu::Apu;
-use ppu::Ppu;
-use ppu::PpuRes;
-use rom::Rom;
-use rom::Region;
+use cpu_6502::cpu::Cpu;
 use mapper::Mapper;
 use mmu::Mmu;
+use ppu::Ppu;
+use ppu::PpuRes;
+use rom::Region;
+use rom::Rom;
+use state::State;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -46,9 +46,13 @@ impl NesEmulator {
             Region::NTSC => NTSC_CPU_CLOCK_SPEED,
         };
         let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
-        let cpu =
-            Cpu::new(Mmu::new(Apu::new(), Ppu::new(mapper.clone()), mapper, cpu_clock_speed));
-        NesEmulator { cpu: cpu }
+        let cpu = Cpu::new(Mmu::new(
+            Apu::default(),
+            Ppu::new(mapper.clone()),
+            mapper,
+            cpu_clock_speed,
+        ));
+        NesEmulator { cpu }
     }
 
     pub fn reset(&mut self) {

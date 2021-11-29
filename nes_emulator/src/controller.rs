@@ -13,6 +13,7 @@ pub enum Button {
     Right = 0b1000_0000,
 }
 
+#[derive(Default)]
 pub struct Controller {
     ctrl_state: u8,
     strobe: bool,
@@ -20,14 +21,6 @@ pub struct Controller {
 }
 
 impl Controller {
-    pub fn new() -> Controller {
-        Controller {
-            ctrl_state: 0,
-            strobe: false,
-            shift: 0,
-        }
-    }
-
     pub fn ld8(&mut self) -> u8 {
         let val = if self.shift < 8 {
             (self.ctrl_state >> self.shift) & 1

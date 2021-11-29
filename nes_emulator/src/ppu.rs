@@ -1,21 +1,21 @@
-use serde::Serialize;
-use serde::Deserialize;
 use mapper::Mapper;
+use serde::Deserialize;
+use serde::Serialize;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ppu::pregisters::PRegisters;
-use ppu::shift_regs::InternalRegs;
-use ppu::pregisters::VramAddr;
 use ppu::pregisters::Ctrl;
-use ppu::sprite::Sprite;
+use ppu::pregisters::PRegisters;
+use ppu::pregisters::VramAddr;
+use ppu::shift_regs::InternalRegs;
 use ppu::sprite::Priority;
+use ppu::sprite::Sprite;
 use ppu::vram::*;
 
 pub mod pregisters;
+pub mod shift_regs;
 pub mod sprite;
 pub mod vram;
-pub mod shift_regs;
 
 const SPRITE_NUM: usize = 64;
 const SCREEN_WIDTH: usize = 256;
@@ -100,7 +100,7 @@ impl Ppu {
         Ppu {
             trip_nmi: false,
             vblank_off: false,
-            regs: PRegisters::new(),
+            regs: PRegisters::default(),
             vram: Vram::new(mapper),
             screen_buff: Box::new([0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT]),
             oam: [0; 256],
@@ -112,7 +112,7 @@ impl Ppu {
             fine_x: 0,
             t_addr: VramAddr(0),
             at_entry: 0,
-            internal_regs: InternalRegs::new(),
+            internal_regs: InternalRegs::default(),
             odd_frame: false,
         }
     }
@@ -150,7 +150,7 @@ impl Ppu {
     pub fn reset(&mut self) {
         self.trip_nmi = false;
         self.vblank_off = false;
-        self.regs = PRegisters::new();
+        self.regs = PRegisters::default();
         self.vram.reset();
         self.screen_buff = Box::new([0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT]);
         self.oam = [0; 256];
@@ -162,7 +162,7 @@ impl Ppu {
         self.fine_x = 0;
         self.t_addr = VramAddr(0);
         self.at_entry = 0;
-        self.internal_regs = InternalRegs::new();
+        self.internal_regs = InternalRegs::default();
     }
 
     fn get_palette_color(&self, vram_offset: u8) -> Rgb {
@@ -202,7 +202,7 @@ impl Ppu {
         let addr = self.regs.addr.addr();
         let val = self.vram.buffered_ld8(addr);
         self.regs.addr.add_offset(self.regs.ctrl.vram_incr());
-        (val, (addr >= 0x3F00) && (addr <= 0x3FFF))
+        (val, (0x3F00..=0x3FFF).contains(&addr))
     }
 
     pub fn store(&mut self, address: u16, val: u8) {
@@ -256,7 +256,7 @@ impl Ppu {
     fn write_ppuaddr(&mut self, val: u8) {
         if self.write_latch {
             self.t_addr.set_l_byte(val);
-            self.regs.addr = self.t_addr.clone();
+            self.regs.addr = self.t_addr;
         } else {
             self.t_addr.set_h_byte_clear_bit(val);
         }
@@ -326,7 +326,8 @@ impl Ppu {
     ) -> (u8, Option<Priority>) {
         for sprite in self.main_oam.iter() {
             if !self.regs.mask.show_sprites()
-                || (sprite.x < 8 && !self.regs.mask.left8_sprite()) || !sprite.in_bounding_box(x)
+                || (sprite.x < 8 && !self.regs.mask.left8_sprite())
+                || !sprite.in_bounding_box(x)
             {
                 continue;
             }
@@ -350,7 +351,7 @@ impl Ppu {
             }
 
             let sprite_color =
-                (sprite.attributes.palette()) + 4 << 2 | tile_color;
+                ((sprite.attributes.palette()) + 4) << 2 | tile_color;
             return (
                 sprite_color,
                 Some(Priority::from_attr(sprite.attributes.priority() as u8)),
@@ -382,8 +383,11 @@ impl Ppu {
                     let pt_index = self.regs.ctrl.nt_pt_addr()
                         + (nt_entry as u16 * 16)
                         + self.regs.addr.fine_y() as u16;
-                    self.internal_regs.bg_latch.fill(self.vram.ld8(pt_index), self.vram.ld8(pt_index + 8));
-                        
+                    self.internal_regs.bg_latch.fill(
+                        self.vram.ld8(pt_index),
+                        self.vram.ld8(pt_index + 8),
+                    );
+
                     if self.regs.mask.show_bg() {
                         if self.cc == 256 {
                             self.regs.addr.scroll_y();
@@ -473,9 +477,7 @@ impl Ppu {
             self.scanline = 0;
             self.cc = 0;
             self.odd_frame = !self.odd_frame;
-        }
-
-        else if self.cc > 340 {
+        } else if self.cc > 340 {
             self.cc = 0;
             self.scanline += 1;
             if self.scanline > PRERENDER {

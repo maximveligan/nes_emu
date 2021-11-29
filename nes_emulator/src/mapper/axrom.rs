@@ -2,10 +2,10 @@
 // but then hang indefinetely. Almost certainly timing issues, as this mapper is
 // very simple. Marble Madness works fine.
 
-use serde::Serialize;
-use serde::Deserialize;
-use rom::ScreenMode;
 use rom::ScreenBank;
+use rom::ScreenMode;
+use serde::Deserialize;
+use serde::Serialize;
 
 const THIRTY_TWO_KB: usize = 0x8000;
 
@@ -37,7 +37,7 @@ impl Axrom {
         }
     }
 
-    pub fn ld_prg(&self, address: u16, prg_rom: &Vec<u8>) -> u8 {
+    pub fn ld_prg(&self, address: u16, prg_rom: &[u8]) -> u8 {
         if address < 0x8000 {
             info!("Reading from unmapped prg_rom address: {:X}", address);
             0
@@ -48,7 +48,7 @@ impl Axrom {
         }
     }
 
-    pub fn ld_chr(&self, address: u16, chr_ram: &Vec<u8>) -> u8 {
+    pub fn ld_chr(&self, address: u16, chr_ram: &[u8]) -> u8 {
         chr_ram[address as usize]
     }
 

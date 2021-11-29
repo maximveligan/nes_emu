@@ -9,7 +9,7 @@ log = "*"
 env_logger = "*"
 serde = { version = "*", features = ["derive"] }
 serde_bytes = "*"
-sdl2 = "0.32.*"
+sdl2 = "0.35.*"
 toml = "*"
 bincode = "*"
 itertools = "*"

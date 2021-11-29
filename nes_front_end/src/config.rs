@@ -1,12 +1,12 @@
-use serde::Serialize;
-use std::collections::HashMap;
-use serde::Deserialize;
-use std::path::Path;
-use std::fs::File;
-use std::io::Read;
 use nes_emu::controller::Button;
 use sdl2::keyboard::Keycode;
+use serde::Deserialize;
+use serde::Serialize;
+use std::collections::HashMap;
 use std::error::Error;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -69,7 +69,7 @@ fn str_to_keycode(input: &str) -> Result<Keycode, Box<dyn Error>> {
         "LShift" => Ok(Keycode::LShift),
         "RShift" => Ok(Keycode::RShift),
         "Enter" => Ok(Keycode::Return),
-        k => Err(format!("Unsupported character {}", k))?,
+        k => Err(format!("Unsupported character {}", k).into()),
     }
 }
 
@@ -124,7 +124,7 @@ impl Config {
             pixel_scale: 6,
             ctrl1_layout: layout1,
             ctrl2_layout: layout2,
-            overscan: overscan,
+            overscan,
         }
     }
 

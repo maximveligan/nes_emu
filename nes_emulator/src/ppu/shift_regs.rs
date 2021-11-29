@@ -57,8 +57,8 @@ pub struct InternalRegs {
     pub bg_shift: BgShift,
 }
 
-impl InternalRegs {
-    pub fn new() -> InternalRegs {
+impl Default for InternalRegs {
+    fn default() -> InternalRegs {
         InternalRegs {
             at_latch: AtLatch {
                 low_b: false,
@@ -78,7 +78,9 @@ impl InternalRegs {
             },
         }
     }
+}
 
+impl InternalRegs {
     pub fn reload(&mut self, at_entry: u8) {
         self.bg_shift.low_tile =
             (self.bg_shift.low_tile & 0xFF00) | self.bg_latch.low_tile as u16;

@@ -1,36 +1,36 @@
 #[macro_use]
 extern crate log;
+extern crate hex;
 extern crate nes_emu;
 extern crate sdl2;
-extern crate sha3;
-extern crate hex;
 extern crate serde;
+extern crate sha3;
 
-use std::path::Path;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::render::TextureAccess;
 use sdl2::pixels::PixelFormatEnum;
+use sdl2::render::TextureAccess;
+use std::path::Path;
 
-use std::collections::HashMap;
 use config::ButtonLayout;
 use config::Config;
 use nes_emu::controller::Button;
 use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
+use sha3::Digest;
+use sha3::Sha3_256;
+use std::collections::HashMap;
+use std::env;
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use std::env;
-use sha3::Sha3_256;
-use sha3::Digest;
-use std::error::Error;
 
 pub mod config;
 
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
-fn get_save_state_name<'a>(rom_path: &'a Path) -> Result<&'a str, Box<dyn Error>> {
+fn get_save_state_name(rom_path: &Path) -> Result<&str, Box<dyn Error>> {
     if let Some(os_stem) = rom_path.file_stem() {
         Ok(os_stem.to_str().ok_or("Failed to convert from utf-8")?)
     } else {
@@ -44,13 +44,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let str_path = env::args().nth(1).ok_or("No given path")?;
     let rom_path = Path::new(&str_path);
     if !rom_path.is_file() {
-        Err("Given path is not a file")?
+        Err("Given path is not a file".into())
     } else {
         start_emulator(
             rom_path
                 .to_str()
                 .expect("Checked for this in get_save_state_name"),
-            get_save_state_name(rom_path)?
+            get_save_state_name(rom_path)?,
         )
     }
 }
@@ -155,23 +155,13 @@ impl NesFrontEnd<'_> {
         }
     }
 
-    fn set_ctrl0_state(
-        &mut self,
-        key: Keycode,
-        state: bool,
-        nes: &mut NesEmulator,
-    ) {
+    fn set_ctrl0_state(&mut self, key: Keycode, state: bool, nes: &mut NesEmulator) {
         if let Some(button) = self.ctrl0.get(&key) {
             nes.cpu.mmu.ctrl0.set_button_state(*button, state);
         }
     }
 
-    fn set_ctrl1_state(
-        &mut self,
-        key: Keycode,
-        state: bool,
-        nes: &mut NesEmulator,
-    ) {
+    fn set_ctrl1_state(&mut self, key: Keycode, state: bool, nes: &mut NesEmulator) {
         if let Some(button) = self.ctrl1.get(&key) {
             nes.cpu.mmu.ctrl1.set_button_state(*button, state);
         }
@@ -198,8 +188,8 @@ impl NesFrontEnd<'_> {
         self.texture
             .update(
                 None,
-                &framebuffer[top * 3 * SCREEN_WIDTH
-                    ..(SCREEN_WIDTH * SCREEN_HEIGHT - bottom as usize) * 3],
+                &framebuffer
+                    [top * 3 * SCREEN_WIDTH..(SCREEN_WIDTH * SCREEN_HEIGHT - bottom as usize) * 3],
                 SCREEN_WIDTH * 3,
             )
             .unwrap();
@@ -213,9 +203,8 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Box<dyn Error>> {
     let mut frame_counter: usize = 0;
     let config = Config::load_config("./config.toml".to_string())?;
 
-    let screen_height = SCREEN_HEIGHT as u32
-        - config.overscan.bottom as u32
-        - config.overscan.top as u32;
+    let screen_height =
+        SCREEN_HEIGHT as u32 - config.overscan.bottom as u32 - config.overscan.top as u32;
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -261,8 +250,8 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Box<dyn Error>> {
         ctrl0: ButtonLayout::make_ctrl_map(&config.ctrl1_layout)?,
         ctrl1: ButtonLayout::make_ctrl_map(&config.ctrl2_layout)?,
         save_name: rom_stem.to_string() + ".sav",
-        canvas: canvas,
-        texture: texture,
+        canvas,
+        texture,
     };
 
     loop {
@@ -291,9 +280,7 @@ fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Box<dyn Error>> {
                     EventRes::Hash => {
                         println!(
                             "Hash: {} Frame number: {}",
-                            hex::encode(Sha3_256::digest(
-                                nes.get_pixel_buffer()
-                            )),
+                            hex::encode(Sha3_256::digest(nes.get_pixel_buffer())),
                             frame_counter
                         );
                     }

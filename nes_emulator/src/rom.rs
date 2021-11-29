@@ -1,9 +1,9 @@
-use serde::Serialize;
-use serde::Deserialize;
+use failure::Error;
 use nom::be_u8;
 use nom::IResult;
+use serde::Deserialize;
+use serde::Serialize;
 use std::fmt;
-use failure::Error;
 
 const PRG_ROM_PAGE_SIZE: usize = 16384;
 const PRG_RAM_PAGE_SIZE: usize = 8192;
@@ -31,30 +31,28 @@ fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
             >> flag9: be_u8
             >> flag10: be_u8
             >> take!(5)
-            >> cond!((flag6 & 0b100) == 1, take!(TRAINER_LEN))
+            >> cond!((flag6 & 0b100) != 0, take!(TRAINER_LEN))
             >> prg_rom: take!(prg_pgs as usize * PRG_ROM_PAGE_SIZE)
             >> chr_rom: take!(chr_pgs as usize * CHR_ROM_PAGE_SIZE)
             >> (Rom {
                 header: Header {
                     mapper: flag7 & 0xF0 | ((flag6 & 0xF0) >> 4),
-                    screen: if flag6 & 0b1000 == 1 {
+                    screen: if flag6 & 0b1000 != 0 {
                         ScreenMode::FourScreen
+                    } else if flag6 & 0b01 == 1 {
+                        ScreenMode::Vertical
                     } else {
-                        if flag6 & 0b01 == 1 {
-                            ScreenMode::Vertical
-                        } else {
-                            ScreenMode::Horizontal
-                        }
+                        ScreenMode::Horizontal
                     },
-                    save_ram: flag6 & 0b10 == 1,
+                    save_ram: flag6 & 0b10 != 0,
                     vs_unisystem: flag7 & 0b01 == 1,
-                    playchoice10: flag7 & 0b10 == 1,
+                    playchoice10: flag7 & 0b10 != 0,
                     region: if flag9 & 0b01 == 1 {
                         Region::PAL
                     } else {
                         Region::NTSC
                     },
-                    flag10: flag10,
+                    flag10,
                     rom_type: if flag7 & 0b1100 == 0b1000 {
                         RomType::Nes2
                     } else {
@@ -133,22 +131,16 @@ pub struct Rom {
 
 impl Rom {
     fn check_invalid(&self) -> Result<(), LoadRomError> {
-        match self.header.rom_type {
-            RomType::Nes2 => {
-                return Err(LoadRomError::Unsupported(
-                    "Unsupported rom type NES2.0!".to_string(),
-                ));
-            }
-            _ => (),
+        if self.header.rom_type == RomType::Nes2 {
+            return Err(LoadRomError::Unsupported(
+                "Unsupported rom type NES2.0!".to_string(),
+            ));
         }
 
-        match self.header.region {
-            Region::PAL => {
-                return Err(LoadRomError::Unsupported(
-                    "Unsupported region PAL!".to_string(),
-                ));
-            }
-            _ => (),
+        if self.header.region == Region::PAL {
+            return Err(LoadRomError::Unsupported(
+                "Unsupported region PAL!".to_string(),
+            ));
         }
 
         Ok(())
@@ -191,13 +183,13 @@ pub enum ScreenBank {
     Upper,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RomType {
     INes,
     Nes2,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Region {
     NTSC,
     PAL,

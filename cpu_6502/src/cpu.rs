@@ -108,7 +108,7 @@ pub enum Mode {
     NoPBIndY,
 }
 
-impl <M: Memory> Cpu<M> {
+impl<M: Memory> Cpu<M> {
     pub fn new(mmu: M) -> Cpu<M> {
         let mut cpu = Cpu {
             cycle_count: 0,
@@ -121,7 +121,7 @@ impl <M: Memory> Cpu<M> {
                 sp: 0xFD,
                 flags: Flags(0b00100100),
             },
-            mmu: mmu,
+            mmu,
         };
         cpu.regs.pc.set_addr(cpu.mmu.ld16(RESET_VEC, 0));
         cpu
@@ -175,13 +175,11 @@ impl <M: Memory> Cpu<M> {
             }
             Mode::NoPBAbsX => {
                 let base = self.ld16_pc_up();
-                let tmp = base + self.regs.x as u16;
-                tmp
+                base + self.regs.x as u16
             }
             Mode::NoPBAbsY => {
                 let base = self.ld16_pc_up();
-                let tmp = base.wrapping_add(self.regs.y as u16);
-                tmp
+                base.wrapping_add(self.regs.y as u16)
             }
             Mode::JmpIndir => {
                 let tmp = self.ld16_pc_up();
@@ -206,8 +204,7 @@ impl <M: Memory> Cpu<M> {
             Mode::IndY => {
                 let base = self.ld8_pc_up();
                 let tmp = if base == 0xFF {
-                    (self.mmu.ld8(0, self.cc) as u16) << 8
-                        | (self.mmu.ld8(0xFF, self.cc) as u16)
+                    (self.mmu.ld8(0, self.cc) as u16) << 8 | (self.mmu.ld8(0xFF, self.cc) as u16)
                 } else {
                     self.mmu.ld16(base as u16, self.cc)
                 };
@@ -218,13 +215,11 @@ impl <M: Memory> Cpu<M> {
             Mode::NoPBIndY => {
                 let base = self.ld8_pc_up();
                 let tmp = if base == 0xFF {
-                    (self.mmu.ld8(0, self.cc) as u16) << 8
-                        | (self.mmu.ld8(0xFF, self.cc) as u16)
+                    (self.mmu.ld8(0, self.cc) as u16) << 8 | (self.mmu.ld8(0xFF, self.cc) as u16)
                 } else {
                     self.mmu.ld16(base as u16, self.cc)
                 };
-                let addr = tmp.wrapping_add(self.regs.y as u16);
-                addr
+                tmp.wrapping_add(self.regs.y as u16)
             }
         }
     }
@@ -283,9 +278,9 @@ impl <M: Memory> Cpu<M> {
         let acc = self.regs.acc;
         let tmp = acc as u16 + val as u16 + self.regs.flags.carry() as u16;
         self.regs.flags.set_carry(tmp > 0xFF);
-        self.regs.flags.set_overflow(
-            ((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0,
-        );
+        self.regs
+            .flags
+            .set_overflow(((acc as u16 ^ tmp) & (val as u16 ^ tmp) & 0x80) != 0);
         let tmp = tmp as u8;
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -320,8 +315,7 @@ impl <M: Memory> Cpu<M> {
     }
 
     fn ror_acc(&mut self) {
-        let (tmp, n_flag) =
-            Cpu::<M>::get_ror(self.regs.flags.carry(), self.regs.acc);
+        let (tmp, n_flag) = Cpu::<M>::get_ror(self.regs.flags.carry(), self.regs.acc);
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -329,8 +323,7 @@ impl <M: Memory> Cpu<M> {
 
     fn ror_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let (tmp, n_flag) =
-            Cpu::<M>::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
+        let (tmp, n_flag) = Cpu::<M>::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -341,8 +334,7 @@ impl <M: Memory> Cpu<M> {
     }
 
     fn rol_acc(&mut self) {
-        let (tmp, n_flag) =
-            Cpu::<M>::get_rol(self.regs.flags.carry(), self.regs.acc);
+        let (tmp, n_flag) = Cpu::<M>::get_rol(self.regs.flags.carry(), self.regs.acc);
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.regs.acc = tmp;
@@ -350,8 +342,7 @@ impl <M: Memory> Cpu<M> {
 
     fn rol_addr(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let (tmp, n_flag) =
-            Cpu::<M>::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
+        let (tmp, n_flag) = Cpu::<M>::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -554,8 +545,7 @@ impl <M: Memory> Cpu<M> {
 
     fn rla(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let (tmp, n_flag) =
-            Cpu::<M>::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
+        let (tmp, n_flag) = Cpu::<M>::get_rol(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.store(addr, tmp);
 
@@ -578,8 +568,7 @@ impl <M: Memory> Cpu<M> {
 
     fn rra(&mut self, mode: Mode) {
         let addr = self.address_mem(mode);
-        let (tmp, n_flag) =
-            Cpu::<M>::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
+        let (tmp, n_flag) = Cpu::<M>::get_ror(self.regs.flags.carry(), self.mmu.ld8(addr, self.cc));
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp);
@@ -921,8 +910,8 @@ impl <M: Memory> Cpu<M> {
             CLD => self.regs.flags.set_dec(false),
             NOP | 0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => (),
             // DOP: Double NOP
-            0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89
-            | 0xC2 | 0xD4 | 0xE2 | 0xF4 | 0x04 => {
+            0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89 | 0xC2 | 0xD4 | 0xE2
+            | 0xF4 | 0x04 => {
                 self.regs.pc.add_signed(1);
             }
             // TOP: Triple NOP

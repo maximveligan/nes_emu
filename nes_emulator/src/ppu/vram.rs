@@ -1,8 +1,8 @@
 use mapper::Mapper;
+use rom::ScreenBank;
+use rom::ScreenMode;
 use std::cell::RefCell;
 use std::rc::Rc;
-use rom::ScreenMode;
-use rom::ScreenBank;
 
 const VRAM_SIZE: usize = 0x800;
 
@@ -26,9 +26,9 @@ impl Vram {
     pub fn new(mapper: Rc<RefCell<Mapper>>) -> Vram {
         Vram {
             vram: Box::new([0; VRAM_SIZE]),
-            mapper: mapper,
             palette: [0; 0x20],
             ppudata_buff: 0,
+            mapper,
         }
     }
 

@@ -1,13 +1,13 @@
-use serde::Serialize;
-use serde::Deserialize;
+use mapper::axrom::*;
+use mapper::cnrom::*;
+use mapper::nrom::*;
+use mapper::sxrom::*;
+use mapper::txrom::*;
+use mapper::unrom::*;
 use rom::Rom;
 use rom::ScreenMode;
-use mapper::sxrom::*;
-use mapper::unrom::*;
-use mapper::nrom::*;
-use mapper::axrom::*;
-use mapper::txrom::*;
-use mapper::cnrom::*;
+use serde::Deserialize;
+use serde::Serialize;
 
 pub mod axrom;
 pub mod cnrom;
@@ -35,12 +35,12 @@ impl Mapper {
     pub fn from_rom(mut rom: Rom) -> Mapper {
         let mem_type = match rom.header.mapper {
             0 => {
-                let use_chr_ram = rom.chr_ram.len() != 0;
+                let use_chr_ram = !rom.chr_ram.is_empty();
                 MemType::Nrom(Nrom::new(rom.prg_rom.len(), use_chr_ram))
             }
             1 => {
                 rom.fill_prg_ram();
-                let use_chr_ram = rom.chr_ram.len() != 0;
+                let use_chr_ram = !rom.chr_ram.is_empty();
                 let last_page_start = rom.prg_rom.len() - 0x4000;
                 MemType::Sxrom(Sxrom::new(use_chr_ram, last_page_start))
             }
@@ -49,12 +49,12 @@ impl Mapper {
                 MemType::Unrom(Unrom::new(last_page_start))
             }
             3 => {
-                let use_chr_ram = rom.chr_ram.len() != 0;
+                let use_chr_ram = !rom.chr_ram.is_empty();
                 MemType::Cnrom(Cnrom::new(rom.prg_rom.len(), use_chr_ram))
             }
             4 => {
                 let last_page_start = rom.prg_rom.len() - 0x4000;
-                let use_chr_ram = rom.chr_ram.len() != 0;
+                let use_chr_ram = !rom.chr_ram.is_empty();
                 MemType::Txrom(Txrom::new(use_chr_ram, last_page_start))
             }
             7 => {
@@ -63,10 +63,7 @@ impl Mapper {
             }
             m => panic!("Mapper {} not supported", m),
         };
-        Mapper {
-            rom: rom,
-            mem_type: mem_type,
-        }
+        Mapper { rom, mem_type }
     }
 
     pub fn ld_prg(&self, addr: u16) -> u8 {

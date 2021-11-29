@@ -1,7 +1,7 @@
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Apu {
     pulse1: u8,
     pulse2: u8,
@@ -14,19 +14,6 @@ pub struct Apu {
 }
 
 impl Apu {
-    pub fn new() -> Apu {
-        Apu {
-            pulse1: 0,
-            pulse2: 0,
-            triangle: 0,
-            noise: 0,
-            dmc: 0,
-            control: 0,
-            status: 0,
-            frame_counter: 0,
-        }
-    }
-
     pub fn load(&mut self, addr: u16) -> u8 {
         match addr {
             0x15 => self.read_status(),

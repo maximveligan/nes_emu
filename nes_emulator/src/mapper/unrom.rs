@@ -1,5 +1,5 @@
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 
 const SIXTEEN_KB: usize = 0x4000;
 
@@ -29,7 +29,7 @@ impl Unrom {
         }
     }
 
-    pub fn ld_prg(&self, address: u16, prg_rom: &Vec<u8>) -> u8 {
+    pub fn ld_prg(&self, address: u16, prg_rom: &[u8]) -> u8 {
         if address < 0x8000 {
             info!("Reading from unmapped prg_rom address: {:X}", address);
             0
@@ -42,7 +42,7 @@ impl Unrom {
         }
     }
 
-    pub fn ld_chr(&self, address: u16, chr_ram: &Vec<u8>) -> u8 {
+    pub fn ld_chr(&self, address: u16, chr_ram: &[u8]) -> u8 {
         chr_ram[address as usize]
     }
 
