@@ -1,4 +1,5 @@
 [package]
+edition = "2021"
 name = "nes_emu"
 version = "0.1.0"
 authors = ["maximveligan <maximveligan@gmail.com>"]

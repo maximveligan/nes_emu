@@ -1,4 +1,5 @@
 [package]
+edition = "2021"
 name = "nes_emu_frontend"
 version = "0.1.0"
 authors = ["maximveligan <maximveligan@gmail.com>"]
@@ -9,9 +10,12 @@ log = "*"
 env_logger = "*"
 serde = { version = "*", features = ["derive"] }
 serde_bytes = "*"
-sdl2 = "0.35.*"
 toml = "*"
 bincode = "*"
 itertools = "*"
 sha3 = "*"
 hex = "*"
+glfw = "0.42.0"
+luminance = "0.45.0"
+luminance-glfw = "0.17.0"
+luminance-windowing = "0.10"

@@ -1,6 +1,6 @@
-use mapper::Mapper;
-use rom::ScreenBank;
-use rom::ScreenMode;
+use crate::mapper::Mapper;
+use crate::rom::ScreenBank;
+use crate::rom::ScreenMode;
 use std::cell::RefCell;
 use std::rc::Rc;
 

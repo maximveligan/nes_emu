@@ -1,13 +1,14 @@
+use crate::mapper::MemType;
+use crate::mmu::Ram;
+use crate::ppu::PpuState;
+use crate::rom::ScreenMode;
+use cpu_6502::cpu::Registers;
+use failure::Error;
+use serde::Deserialize;
+use serde::Serialize;
 use std::io::Read;
 use std::io::Write;
-use mmu::Ram;
-use cpu_6502::cpu::Registers;
-use rom::ScreenMode;
-use mapper::MemType;
-use failure::Error;
-use serde::Serialize;
-use serde::Deserialize;
-use ppu::PpuState;
+use failure::Fail;
 
 #[derive(Serialize, Deserialize)]
 pub struct State {

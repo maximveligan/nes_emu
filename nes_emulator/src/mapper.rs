@@ -1,11 +1,11 @@
-use mapper::axrom::*;
-use mapper::cnrom::*;
-use mapper::nrom::*;
-use mapper::sxrom::*;
-use mapper::txrom::*;
-use mapper::unrom::*;
-use rom::Rom;
-use rom::ScreenMode;
+use crate::mapper::axrom::*;
+use crate::mapper::cnrom::*;
+use crate::mapper::nrom::*;
+use crate::mapper::sxrom::*;
+use crate::mapper::txrom::*;
+use crate::mapper::unrom::*;
+use crate::rom::Rom;
+use crate::rom::ScreenMode;
 use serde::Deserialize;
 use serde::Serialize;
 

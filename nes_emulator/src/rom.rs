@@ -1,6 +1,5 @@
 use failure::Error;
-use nom::be_u8;
-use nom::IResult;
+use nom::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -11,7 +10,7 @@ const CHR_ROM_PAGE_SIZE: usize = 8192;
 const CHR_RAM_PAGE_SIZE: usize = 8192;
 const TRAINER_LEN: usize = 512;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, failure::Fail)]
 pub enum LoadRomError {
     #[fail(display = "Rom not supported: {}", _0)]
     Unsupported(String),
@@ -80,7 +79,7 @@ pub fn load_rom(rom_bytes: &[u8]) -> Result<Rom, Error> {
     let rom = match parse_rom(rom_bytes) {
         Ok((_, rom)) => rom,
         Err(e) => {
-            debug!("Nom parse error message {}", e.to_string());
+            log::debug!("Nom parse error message {}", e.to_string());
             return Err(Error::from(LoadRomError::ParseError));
         }
     };

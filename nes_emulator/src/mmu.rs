@@ -1,8 +1,8 @@
-use apu::Apu;
-use controller::Controller;
+use crate::apu::Apu;
+use crate::controller::Controller;
+use crate::mapper::Mapper;
+use crate::ppu::Ppu;
 use cpu_6502::Memory;
-use mapper::Mapper;
-use ppu::Ppu;
 use serde::Deserialize;
 use serde::Serialize;
 use std::cell::RefCell;
@@ -68,7 +68,7 @@ impl Memory for Mmu {
             0x4016 => self.ctrl0.ld8(),
             0x4017 => self.ctrl1.ld8(),
             0x4000..=0x4014 | 0x4018..=0x401F => {
-                debug!("Tried to read from {:X}", address);
+                log::debug!("Tried to read from {:X}", address);
                 0
             }
             ROM_START..=ROM_END => {
@@ -91,7 +91,11 @@ impl Memory for Mmu {
             0x4016 => self.ctrl_store(val),
             0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
             0x4018..=0x401F => {
-                debug!("Tried to write to {:X} with value {:X}", address, val);
+                log::debug!(
+                    "Tried to write to {:X} with value {:X}",
+                    address,
+                    val
+                );
             }
             ROM_START..=ROM_END => {
                 self.mapper.borrow_mut().store_prg(address, val)

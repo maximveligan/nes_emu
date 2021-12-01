@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
+use log::*;
 
 const UNMIRRORED_MASK: usize = 0x7FFF;
 const MIRRORED_MASK: usize = 0x3FFF;

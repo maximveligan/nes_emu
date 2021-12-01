@@ -1,17 +1,3 @@
-#![feature(nll)]
-#[macro_use]
-extern crate nom;
-extern crate bincode;
-extern crate env_logger;
-extern crate serde;
-#[macro_use]
-extern crate bitfield;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate log;
-extern crate cpu_6502;
-
 pub mod apu;
 pub mod controller;
 pub mod mapper;
@@ -37,6 +23,11 @@ const NTSC_CPU_CLOCK_SPEED: usize = 1789773; // measured in hertz
 
 pub struct NesEmulator {
     pub cpu: Cpu<Mmu>,
+}
+
+pub enum PlayerController {
+    One,
+    Two,
 }
 
 impl NesEmulator {
@@ -102,5 +93,21 @@ impl NesEmulator {
 
     pub fn get_pixel_buffer(&self) -> &[u8] {
         self.cpu.mmu.ppu.get_buffer()
+    }
+
+    pub fn set_button(
+        &mut self,
+        button: crate::controller::Button,
+        state: bool,
+        controller: PlayerController,
+    ) {
+        match controller {
+            PlayerController::One => {
+                self.cpu.mmu.ctrl0.set_button_state(button, state)
+            }
+            PlayerController::Two => {
+                self.cpu.mmu.ctrl0.set_button_state(button, state)
+            }
+        }
     }
 }

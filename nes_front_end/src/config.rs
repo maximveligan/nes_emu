@@ -1,5 +1,5 @@
+use glfw::Key;
 use nes_emu::controller::Button;
-use sdl2::keyboard::Keycode;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -34,47 +34,47 @@ pub struct ButtonLayout {
     select: String,
 }
 
-fn str_to_keycode(input: &str) -> Result<Keycode, Box<dyn Error>> {
+fn str_to_keycode(input: &str) -> Result<Key, Box<dyn Error>> {
     match input {
-        "A" => Ok(Keycode::A),
-        "B" => Ok(Keycode::B),
-        "C" => Ok(Keycode::C),
-        "D" => Ok(Keycode::D),
-        "E" => Ok(Keycode::E),
-        "F" => Ok(Keycode::F),
-        "G" => Ok(Keycode::G),
-        "H" => Ok(Keycode::H),
-        "I" => Ok(Keycode::I),
-        "J" => Ok(Keycode::J),
-        "K" => Ok(Keycode::K),
-        "L" => Ok(Keycode::L),
-        "M" => Ok(Keycode::M),
-        "N" => Ok(Keycode::N),
-        "O" => Ok(Keycode::O),
-        "P" => Ok(Keycode::P),
-        "Q" => Ok(Keycode::Q),
-        "R" => Ok(Keycode::R),
-        "S" => Ok(Keycode::S),
-        "T" => Ok(Keycode::T),
-        "U" => Ok(Keycode::U),
-        "V" => Ok(Keycode::V),
-        "W" => Ok(Keycode::W),
-        "X" => Ok(Keycode::X),
-        "Y" => Ok(Keycode::Y),
-        "Z" => Ok(Keycode::Z),
-        "Left" => Ok(Keycode::Left),
-        "Down" => Ok(Keycode::Down),
-        "Up" => Ok(Keycode::Up),
-        "Right" => Ok(Keycode::Right),
-        "LShift" => Ok(Keycode::LShift),
-        "RShift" => Ok(Keycode::RShift),
-        "Enter" => Ok(Keycode::Return),
+        "A" => Ok(Key::A),
+        "B" => Ok(Key::B),
+        "C" => Ok(Key::C),
+        "D" => Ok(Key::D),
+        "E" => Ok(Key::E),
+        "F" => Ok(Key::F),
+        "G" => Ok(Key::G),
+        "H" => Ok(Key::H),
+        "I" => Ok(Key::I),
+        "J" => Ok(Key::J),
+        "K" => Ok(Key::K),
+        "L" => Ok(Key::L),
+        "M" => Ok(Key::M),
+        "N" => Ok(Key::N),
+        "O" => Ok(Key::O),
+        "P" => Ok(Key::P),
+        "Q" => Ok(Key::Q),
+        "R" => Ok(Key::R),
+        "S" => Ok(Key::S),
+        "T" => Ok(Key::T),
+        "U" => Ok(Key::U),
+        "V" => Ok(Key::V),
+        "W" => Ok(Key::W),
+        "X" => Ok(Key::X),
+        "Y" => Ok(Key::Y),
+        "Z" => Ok(Key::Z),
+        "Left" => Ok(Key::Left),
+        "Down" => Ok(Key::Down),
+        "Up" => Ok(Key::Up),
+        "Right" => Ok(Key::Right),
+        "LShift" => Ok(Key::LeftShift),
+        "RShift" => Ok(Key::RightShift),
+        "Enter" => Ok(Key::Enter),
         k => Err(format!("Unsupported character {}", k).into()),
     }
 }
 
 impl ButtonLayout {
-    pub fn make_ctrl_map(&self) -> Result<HashMap<Keycode, Button>, Box<dyn Error>> {
+    pub fn make_ctrl_map(&self) -> Result<HashMap<Key, Button>, Box<dyn Error>> {
         let mut button_map = HashMap::new();
         button_map.insert(str_to_keycode(&self.left)?, Button::Left);
         button_map.insert(str_to_keycode(&self.right)?, Button::Right);

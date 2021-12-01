@@ -1,15 +1,3 @@
-#[macro_use]
-extern crate log;
-extern crate hex;
-extern crate nes_emu;
-extern crate sdl2;
-extern crate serde;
-extern crate sha3;
-
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::PixelFormatEnum;
-use sdl2::render::TextureAccess;
 use std::path::Path;
 
 use config::ButtonLayout;
@@ -17,20 +5,42 @@ use config::Config;
 use nes_emu::controller::Button;
 use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
-use sha3::Digest;
-use sha3::Sha3_256;
-use std::collections::HashMap;
-use std::env;
+// use sha3::Digest;
+// use sha3::Sha3_256;
+use std::convert::Infallible;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 
+use glfw::{Action, Context, Key, SwapInterval, WindowEvent, WindowMode};
+use luminance::context::GraphicsContext;
+use luminance::pipeline::{PipelineState, TextureBinding};
+use luminance::pixel::{NormRGB8UI, NormUnsigned};
+use luminance::render_state::RenderState;
+use luminance::shader::Uniform;
+use luminance::tess::Mode;
+use luminance::texture::{Dim2, MagFilter, MinFilter, Sampler, TexelUpload, Texture};
+use luminance::UniformInterface;
+use luminance_glfw::{GlfwSurface, GlfwSurfaceError};
+use std::collections::HashMap;
+
+use log::*;
+
 pub mod config;
 
-const SCREEN_WIDTH: usize = 256;
-const SCREEN_HEIGHT: usize = 240;
+const NES_SCREEN_WIDTH: u32 = 256;
+const NES_SCREEN_HEIGHT: u32 = 240;
+const WINDOW_SCALE: f32 = 3.;
 
-fn get_save_state_name(rom_path: &Path) -> Result<&str, Box<dyn Error>> {
+const VS: &str = include_str!("shaders/vs.glsl");
+const FS: &str = include_str!("shaders/fs.glsl");
+
+#[derive(UniformInterface)]
+struct ShaderInterface {
+    tex: Uniform<TextureBinding<Dim2, NormUnsigned>>,
+}
+
+fn _get_save_state_name(rom_path: &Path) -> Result<&str, Box<dyn Error>> {
     if let Some(os_stem) = rom_path.file_stem() {
         Ok(os_stem.to_str().ok_or("Failed to convert from utf-8")?)
     } else {
@@ -39,253 +49,160 @@ fn get_save_state_name(rom_path: &Path) -> Result<&str, Box<dyn Error>> {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
-    let str_path = env::args().nth(1).ok_or("No given path")?;
-    let rom_path = Path::new(&str_path);
-    if !rom_path.is_file() {
-        Err("Given path is not a file".into())
-    } else {
-        start_emulator(
-            rom_path
-                .to_str()
-                .expect("Checked for this in get_save_state_name"),
-            get_save_state_name(rom_path)?,
-        )
-    }
-}
-
-struct NesFrontEnd<'a> {
-    pause: bool,
-    ctrl0: HashMap<Keycode, Button>,
-    ctrl1: HashMap<Keycode, Button>,
-    save_name: String,
-    canvas: sdl2::render::Canvas<sdl2::video::Window>,
-    texture: sdl2::render::Texture<'a>,
-}
-
-enum EventRes {
-    StateRes(String),
-    Next,
-    Quit,
-    Hash,
-}
-
-impl NesFrontEnd<'_> {
-    fn handle_event(
-        &mut self,
-        event: sdl2::event::Event,
-        nes: &mut NesEmulator,
-    ) -> Option<EventRes> {
-        match event {
-            Event::Quit { .. }
-            | Event::KeyDown {
-                keycode: Some(Keycode::Escape),
-                ..
-            } => Some(EventRes::Quit),
-            Event::KeyDown {
-                keycode: Some(Keycode::P),
-                ..
-            } => {
-                self.switch_pause();
-                None
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::N),
-                ..
-            } => {
-                if self.pause {
-                    Some(EventRes::Next)
-                } else {
-                    None
-                }
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::H),
-                ..
-            } => {
-                if self.pause {
-                    Some(EventRes::Hash)
-                } else {
-                    None
-                }
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::R),
-                ..
-            } => {
-                nes.reset();
-                None
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Q),
-                ..
-            } => {
-                let state_res = match self.save_state(nes) {
-                    Ok(res) => res,
-                    Err(e) => e.to_string(),
-                };
-                Some(EventRes::StateRes(state_res))
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::E),
-                ..
-            } => {
-                let state_res = match self.load_state(nes) {
-                    Ok(res) => res,
-                    Err(e) => e.to_string(),
-                };
-                Some(EventRes::StateRes(state_res))
-            }
-            Event::KeyDown {
-                keycode: Some(key), ..
-            } => {
-                self.set_ctrl0_state(key, true, nes);
-                self.set_ctrl1_state(key, true, nes);
-                None
-            }
-            Event::KeyUp {
-                keycode: Some(key), ..
-            } => {
-                self.set_ctrl0_state(key, false, nes);
-                self.set_ctrl1_state(key, false, nes);
-                None
-            }
-            _ => None,
-        }
-    }
-
-    fn set_ctrl0_state(&mut self, key: Keycode, state: bool, nes: &mut NesEmulator) {
-        if let Some(button) = self.ctrl0.get(&key) {
-            nes.cpu.mmu.ctrl0.set_button_state(*button, state);
-        }
-    }
-
-    fn set_ctrl1_state(&mut self, key: Keycode, state: bool, nes: &mut NesEmulator) {
-        if let Some(button) = self.ctrl1.get(&key) {
-            nes.cpu.mmu.ctrl1.set_button_state(*button, state);
-        }
-    }
-
-    fn switch_pause(&mut self) {
-        self.pause = !self.pause;
-    }
-
-    fn save_state(&mut self, nes: &mut NesEmulator) -> Result<String, Box<dyn Error>> {
-        let mut file = File::create(&self.save_name)?;
-        nes.get_state().save(&mut file)?;
-        Ok(format!("Successfully saved state: {}", &self.save_name))
-    }
-
-    fn load_state(&mut self, nes: &mut NesEmulator) -> Result<String, Box<dyn Error>> {
-        let mut file = File::open(&self.save_name)?;
-        let state = nes_emu::state::State::load(&mut file)?;
-        nes.load_state(state);
-        Ok("Loaded state successfully".to_string())
-    }
-
-    fn next_frame(&mut self, top: usize, bottom: usize, framebuffer: &[u8]) {
-        self.texture
-            .update(
-                None,
-                &framebuffer
-                    [top * 3 * SCREEN_WIDTH..(SCREEN_WIDTH * SCREEN_HEIGHT - bottom as usize) * 3],
-                SCREEN_WIDTH * 3,
-            )
-            .unwrap();
-        self.canvas.clear();
-        self.canvas.copy(&self.texture, None, None).unwrap();
-        self.canvas.present();
-    }
-}
-
-fn start_emulator(path_in: &str, rom_stem: &str) -> Result<(), Box<dyn Error>> {
-    let mut frame_counter: usize = 0;
-    let config = Config::load_config("./config.toml".to_string())?;
-
-    let screen_height =
-        SCREEN_HEIGHT as u32 - config.overscan.bottom as u32 - config.overscan.top as u32;
-
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
-
-    let window = video_subsystem
-        .window(
-            "Res",
-            (SCREEN_WIDTH * config.pixel_scale) as u32,
-            screen_height * config.pixel_scale as u32,
-        )
-        .position_centered()
-        .build()
-        .unwrap();
-
-    let canvas = window
-        .into_canvas()
-        .present_vsync()
-        .accelerated()
-        .build()
-        .unwrap();
-
-    let texture_creator = canvas.texture_creator();
-    let texture = texture_creator
-        .create_texture(
-            PixelFormatEnum::RGB24,
-            TextureAccess::Streaming,
-            SCREEN_WIDTH as u32,
-            screen_height,
-        )
-        .unwrap();
-
-    let mut event_pump = sdl_context.event_pump().unwrap();
+fn init_emulator(path: &std::path::Path) -> Result<NesEmulator, Box<dyn Error>> {
+    let mut raw_rom = File::open(path)?;
     let mut raw_bytes = Vec::new();
-    let mut raw_rom = File::open(path_in)?;
     raw_rom.read_to_end(&mut raw_bytes)?;
 
     let rom = load_rom(&raw_bytes)?;
 
-    let mut nes = NesEmulator::new(rom);
+    Ok(NesEmulator::new(rom))
+}
 
-    let mut nes_frontend = NesFrontEnd {
-        pause: false,
-        ctrl0: ButtonLayout::make_ctrl_map(&config.ctrl1_layout)?,
-        ctrl1: ButtonLayout::make_ctrl_map(&config.ctrl2_layout)?,
-        save_name: rom_stem.to_string() + ".sav",
-        canvas,
-        texture,
+fn set_ctrl_state(
+    key: Key,
+    action: Action,
+    nes: &mut NesEmulator,
+    ctrl1: &HashMap<Key, Button>,
+    ctrl2: &HashMap<Key, Button>,
+) {
+    let state = action != Action::Release;
+    if let Some(button) = ctrl1.get(&key) {
+        nes.cpu.mmu.ctrl0.set_button_state(*button, state);
+    }
+
+    if let Some(button) = ctrl2.get(&key) {
+        nes.cpu.mmu.ctrl1.set_button_state(*button, state);
+    }
+}
+
+fn _save_state(save_name: &str, nes: &NesEmulator) -> Result<String, Box<dyn Error>> {
+    let mut file = File::create(save_name)?;
+    nes.get_state().save(&mut file)?;
+    Ok(format!("Successfully saved state: {}", save_name))
+}
+
+fn _load_state(save_name: &str, nes: &mut NesEmulator) -> Result<String, Box<dyn Error>> {
+    let mut file = File::open(save_name)?;
+    let state = nes_emu::state::State::load(&mut file)?;
+    nes.load_state(state);
+    Ok("Loaded state successfully".to_string())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
+
+    let config = Config::load_config("./config.toml".to_string())?;
+
+    let ctrl0 = ButtonLayout::make_ctrl_map(&config.ctrl1_layout)?;
+    let ctrl1 = ButtonLayout::make_ctrl_map(&config.ctrl2_layout)?;
+
+    let surface = GlfwSurface::new(|glfw| {
+        let (mut window, events) = glfw
+            .create_window(
+                (NES_SCREEN_WIDTH as f32 * WINDOW_SCALE).ceil() as u32,
+                (NES_SCREEN_HEIGHT as f32 * WINDOW_SCALE).ceil() as u32,
+                "res",
+                WindowMode::Windowed,
+            )
+            .unwrap();
+        window.make_current();
+        window.set_all_polling(true);
+        glfw.set_swap_interval(SwapInterval::Sync(1));
+
+        Ok::<_, GlfwSurfaceError<Infallible>>((window, events))
+    })
+    .expect("GLFW surface creation");
+
+    let mut context = surface.context;
+    let events = surface.events_rx;
+    let back_buffer = context.back_buffer().expect("back buffer");
+
+    let mut program = context
+        .new_shader_program::<(), (), ShaderInterface>()
+        .from_strings(VS, None, None, FS)
+        .expect("program creation")
+        .ignore_warnings();
+
+    let tess = context
+        .new_tess()
+        .set_render_vertex_nb(4)
+        .set_mode(Mode::TriangleFan)
+        .build()
+        .unwrap();
+
+    let nearest_sampler = Sampler {
+        min_filter: MinFilter::Nearest,
+        mag_filter: MagFilter::Nearest,
+        ..Sampler::default()
     };
 
-    loop {
-        if !nes_frontend.pause {
-            nes_frontend.next_frame(
-                config.overscan.top as usize,
-                config.overscan.bottom as usize,
-                nes.next_frame(),
-            );
-            frame_counter += 1;
-        }
+    let mut nes_fb_texture: Texture<_, Dim2, NormRGB8UI> = Texture::new(
+        &mut context,
+        [NES_SCREEN_WIDTH, NES_SCREEN_HEIGHT],
+        nearest_sampler,
+        TexelUpload::base_level_without_mipmaps(
+            &[[0, 0, 0]; (NES_SCREEN_WIDTH * NES_SCREEN_HEIGHT) as usize],
+        ),
+    )?;
 
-        for event in event_pump.poll_iter() {
-            if let Some(result) = nes_frontend.handle_event(event, &mut nes) {
-                match result {
-                    EventRes::StateRes(r) => println!("{}", r),
-                    EventRes::Quit => return Ok(()),
-                    EventRes::Next => {
-                        nes_frontend.next_frame(
-                            config.overscan.top as usize,
-                            config.overscan.bottom as usize,
-                            nes.next_frame(),
+    let mut nes = None;
+
+    'app: loop {
+        context.window.glfw.poll_events();
+
+        for (_, event) in glfw::flush_messages(&events) {
+            match event {
+                WindowEvent::Close => break 'app,
+                WindowEvent::FileDrop(f) => {
+                    if f.len() > 1 {
+                        warn!(
+                            "Expected one file, got {}. Defaulting to first file, {:?}",
+                            f.len(),
+                            f[0].to_str()
                         );
-                        frame_counter += 1;
                     }
-                    EventRes::Hash => {
-                        println!(
-                            "Hash: {} Frame number: {}",
-                            hex::encode(Sha3_256::digest(nes.get_pixel_buffer())),
-                            frame_counter
-                        );
+                    nes = Some(init_emulator(&f[0])?);
+                }
+                WindowEvent::Key(k, _, a, _) => {
+                    if let Some(n) = &mut nes {
+                        set_ctrl_state(k, a, n, &ctrl0, &ctrl1);
                     }
                 }
+                _ => (),
             }
         }
+
+        if let Some(n) = &mut nes {
+            let nes_buffer = n.next_frame();
+            nes_fb_texture.upload_raw(TexelUpload::base_level_without_mipmaps(nes_buffer))?;
+        }
+
+        let render = context
+            .new_pipeline_gate()
+            .pipeline(
+                &back_buffer,
+                &PipelineState::default(),
+                |pipeline, mut shd_gate| {
+                    let bound_tex = pipeline.bind_texture(&mut nes_fb_texture)?;
+
+                    shd_gate.shade(&mut program, |mut iface, uni, mut rdr_gate| {
+                        iface.set(&uni.tex, bound_tex.binding());
+
+                        rdr_gate.render(&RenderState::default(), |mut tess_gate| {
+                            tess_gate.render(&tess)
+                        })
+                    })
+                },
+            )
+            .assume();
+
+        if render.is_ok() {
+            context.window.swap_buffers();
+        } else {
+            break 'app;
+        }
     }
+
+    Ok(())
 }

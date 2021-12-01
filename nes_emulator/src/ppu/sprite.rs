@@ -1,4 +1,5 @@
 use super::pregisters::Ctrl;
+use bitfield::bitfield;
 
 const SPRITE_ATTR: usize = 4;
 

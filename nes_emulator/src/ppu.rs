@@ -1,16 +1,16 @@
-use mapper::Mapper;
+use crate::mapper::Mapper;
 use serde::Deserialize;
 use serde::Serialize;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ppu::pregisters::Ctrl;
-use ppu::pregisters::PRegisters;
-use ppu::pregisters::VramAddr;
-use ppu::shift_regs::InternalRegs;
-use ppu::sprite::Priority;
-use ppu::sprite::Sprite;
-use ppu::vram::*;
+use crate::ppu::pregisters::PRegisters;
+use crate::ppu::pregisters::VramAddr;
+use crate::ppu::pregisters::Ctrl;
+use crate::ppu::shift_regs::InternalRegs;
+use crate::ppu::sprite::Priority;
+use crate::ppu::sprite::Sprite;
+use crate::ppu::vram::*;
 
 pub mod pregisters;
 pub mod shift_regs;

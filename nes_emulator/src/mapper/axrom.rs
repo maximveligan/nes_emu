@@ -1,9 +1,10 @@
-// BattleToads and BattleToads Double Dragon boot and show intro screen,
-// but then hang indefinetely. Almost certainly timing issues, as this mapper is
+// BattleToads and Double Dragon boot and show intro screen,
+// but then hang indefinitely. Almost certainly timing issues, as this mapper is
 // very simple. Marble Madness works fine.
 
-use rom::ScreenBank;
-use rom::ScreenMode;
+use crate::rom::ScreenBank;
+use crate::rom::ScreenMode;
+use log::*;
 use serde::Deserialize;
 use serde::Serialize;
 

@@ -918,6 +918,8 @@ impl<M: Memory> Cpu<M> {
             0x0C => {
                 self.address_mem(Mode::Abs);
             }
+            // The memory access here is necessary, since even though we don't use the u16 retrieved,
+            // we need to emulate the absolute X retrieval in case there is a page boundary cross
             0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
                 self.address_mem(Mode::AbsX);
             }

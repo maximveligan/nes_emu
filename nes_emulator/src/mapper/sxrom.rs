@@ -5,8 +5,10 @@
 // This could be due to timing issues/accuracy issues in other emulator
 // components but it's hard to tell
 
-use rom::ScreenBank;
-use rom::ScreenMode;
+use crate::rom::ScreenBank;
+use crate::rom::ScreenMode;
+use bitfield::bitfield;
+use log::*;
 use serde::Deserialize;
 use serde::Serialize;
 
