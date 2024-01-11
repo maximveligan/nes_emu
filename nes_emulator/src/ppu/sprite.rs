@@ -28,7 +28,7 @@ impl Sprite {
         Sprite {
             index: index as u8,
             x: oam[(index * SPRITE_ATTR) + 3],
-            y: oam[(index * SPRITE_ATTR)],
+            y: oam[index * SPRITE_ATTR],
             pt_index: oam[(index * SPRITE_ATTR) + 1],
             attributes: SpriteAttr(oam[(index * SPRITE_ATTR) + 2]),
             low_byte: 0,

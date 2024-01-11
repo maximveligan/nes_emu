@@ -1,3 +1,5 @@
+#version 330 core
+
 const vec2[4] TRIANGLE_POS = vec2[](
     vec2(-1., -1.),
     vec2(-1., 1.),
