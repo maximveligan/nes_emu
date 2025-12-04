@@ -1,8 +1,16 @@
-use failure::Error;
-use nom::*;
+use anyhow::Result;
+use log::Level;
+use log::log_enabled;
+use nom::IResult;
+use nom::Parser;
+use nom::bytes::complete::tag;
+use nom::bytes::complete::take;
+use nom::combinator::cond;
+use nom::number::be_u8;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
+use thiserror::Error;
 
 const PRG_ROM_PAGE_SIZE: usize = 16384;
 const PRG_RAM_PAGE_SIZE: usize = 8192;
@@ -10,77 +18,87 @@ const CHR_ROM_PAGE_SIZE: usize = 8192;
 const CHR_RAM_PAGE_SIZE: usize = 8192;
 const TRAINER_LEN: usize = 512;
 
-#[derive(Debug, failure::Fail)]
+#[derive(Debug, Error)]
 pub enum LoadRomError {
-    #[fail(display = "Rom not supported: {}", _0)]
+    #[error("Rom not supported: {0}")]
     Unsupported(String),
-    #[fail(display = "Parse error: invalid rom")]
+    #[error("Parse error: invalid rom")]
     ParseError,
 }
 
 fn parse_rom(src: &[u8]) -> IResult<&[u8], Rom> {
-    do_parse!(
+    let (
         src,
-        tag!(b"NES\x1A")
-            >> prg_pgs: be_u8
-            >> chr_pgs: be_u8
-            >> flag6: be_u8
-            >> flag7: be_u8
-            >> prg_ram_pgs: be_u8
-            >> flag9: be_u8
-            >> flag10: be_u8
-            >> take!(5)
-            >> cond!((flag6 & 0b100) != 0, take!(TRAINER_LEN))
-            >> prg_rom: take!(prg_pgs as usize * PRG_ROM_PAGE_SIZE)
-            >> chr_rom: take!(chr_pgs as usize * CHR_ROM_PAGE_SIZE)
-            >> (Rom {
-                header: Header {
-                    mapper: flag7 & 0xF0 | ((flag6 & 0xF0) >> 4),
-                    screen: if flag6 & 0b1000 != 0 {
-                        ScreenMode::FourScreen
-                    } else if flag6 & 0b01 == 1 {
-                        ScreenMode::Vertical
-                    } else {
-                        ScreenMode::Horizontal
-                    },
-                    save_ram: flag6 & 0b10 != 0,
-                    vs_unisystem: flag7 & 0b01 == 1,
-                    playchoice10: flag7 & 0b10 != 0,
-                    region: if flag9 & 0b01 == 1 {
-                        Region::PAL
-                    } else {
-                        Region::NTSC
-                    },
-                    flag10,
-                    rom_type: if flag7 & 0b1100 == 0b1000 {
-                        RomType::Nes2
-                    } else {
-                        RomType::INes
-                    },
-                },
-                prg_rom: prg_rom.into(),
-                chr_rom: chr_rom.into(),
-                prg_ram_size: if prg_ram_pgs != 0 {
-                    PRG_RAM_PAGE_SIZE * prg_ram_pgs as usize
-                } else {
-                    PRG_RAM_PAGE_SIZE as usize
-                },
-                prg_ram: Vec::new(),
-                chr_ram: if chr_pgs == 0 {
-                    vec![0; CHR_RAM_PAGE_SIZE]
-                } else {
-                    Vec::new()
-                },
-            })
+        (_, prg_pgs, chr_pgs, flag6, flag7, prg_ram_pgs, flag9, flag10, _),
+    ) = (
+        tag(&b"NES\x1A"[..]),
+        be_u8(),
+        be_u8(),
+        be_u8(),
+        be_u8(),
+        be_u8(),
+        be_u8(),
+        be_u8(),
+        take(5usize),
     )
+        .parse(src)?;
+    let (_, (_, prg_rom, chr_rom)) = (
+        cond((flag6 & 0b100) != 0, take(TRAINER_LEN)),
+        take(prg_pgs as usize * PRG_ROM_PAGE_SIZE),
+        take(chr_pgs as usize * CHR_ROM_PAGE_SIZE),
+    )
+        .parse(src)?;
+
+    Ok((
+        src,
+        Rom {
+            header: Header {
+                mapper: flag7 & 0xF0 | ((flag6 & 0xF0) >> 4),
+                screen: if flag6 & 0b1000 != 0 {
+                    ScreenMode::FourScreen
+                } else if flag6 & 0b01 == 1 {
+                    ScreenMode::Vertical
+                } else {
+                    ScreenMode::Horizontal
+                },
+                save_ram: flag6 & 0b10 != 0,
+                vs_unisystem: flag7 & 0b01 == 1,
+                playchoice10: flag7 & 0b10 != 0,
+                region: if flag9 & 0b01 == 1 {
+                    Region::PAL
+                } else {
+                    Region::NTSC
+                },
+                flag10,
+                rom_type: if flag7 & 0b1100 == 0b1000 {
+                    RomType::Nes2
+                } else {
+                    RomType::INes
+                },
+            },
+            prg_rom: prg_rom.into(),
+            chr_rom: chr_rom.into(),
+            prg_ram_size: if prg_ram_pgs != 0 {
+                PRG_RAM_PAGE_SIZE * prg_ram_pgs as usize
+            } else {
+                PRG_RAM_PAGE_SIZE as usize
+            },
+            prg_ram: Vec::new(),
+            chr_ram: if chr_pgs == 0 {
+                vec![0; CHR_RAM_PAGE_SIZE]
+            } else {
+                Vec::new()
+            },
+        },
+    ))
 }
 
-pub fn load_rom(rom_bytes: &[u8]) -> Result<Rom, Error> {
+pub fn load_rom(rom_bytes: &[u8]) -> Result<Rom> {
     let rom = match parse_rom(rom_bytes) {
         Ok((_, rom)) => rom,
         Err(e) => {
             log::debug!("Nom parse error message {}", e.to_string());
-            return Err(Error::from(LoadRomError::ParseError));
+            return Err(LoadRomError::ParseError.into());
         }
     };
 
@@ -130,10 +148,10 @@ pub struct Rom {
 
 impl Rom {
     fn check_invalid(&self) -> Result<(), LoadRomError> {
-        if self.header.rom_type == RomType::Nes2 {
-            return Err(LoadRomError::Unsupported(
-                "Unsupported rom type NES2.0!".to_string(),
-            ));
+        if log_enabled!(Level::Warn) {
+            if self.header.rom_type == RomType::Nes2 {
+                println!("Warning! Unsupported rom type NES2.0!");
+            }
         }
 
         if self.header.region == Region::PAL {

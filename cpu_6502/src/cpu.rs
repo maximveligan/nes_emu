@@ -1,9 +1,9 @@
-use cpu_const::*;
+use crate::Memory;
+use crate::cpu_const::*;
 use log::Level;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
-use Memory;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Registers {

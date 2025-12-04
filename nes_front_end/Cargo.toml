@@ -1,10 +1,11 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "nes_emu_frontend"
 version = "0.1.0"
 authors = ["maximveligan <maximveligan@gmail.com>"]
 
 [dependencies]
+anyhow = "*"
 nes_emu = { path = "../nes_emulator" }
 log = "*"
 env_logger = "*"
@@ -15,5 +16,5 @@ bincode = "*"
 itertools = "*"
 sha3 = "*"
 hex = "*"
-glfw = "*"
+glfw = { version = "*", features = ["wayland"] }
 gl = "*"

@@ -2,13 +2,23 @@ use crate::mapper::MemType;
 use crate::mmu::Ram;
 use crate::ppu::PpuState;
 use crate::rom::ScreenMode;
+use anyhow::Result;
+use bincode::error::DecodeError;
+use bincode::error::EncodeError;
 use cpu_6502::cpu::Registers;
-use failure::Error;
 use serde::Deserialize;
 use serde::Serialize;
 use std::io::Read;
 use std::io::Write;
-use failure::Fail;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum StateFileError {
+    #[error("Encountered an error while loading state: {0}")]
+    LoadState(DecodeError),
+    #[error("Encountered an error while saving state: {0}")]
+    SaveState(EncodeError),
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct State {
@@ -20,24 +30,25 @@ pub struct State {
     pub ram: Ram,
 }
 
-#[derive(Debug, Fail)]
-pub enum StateFileError {
-    #[fail(display = "Unable to parse state from file: {}", _0)]
-    ParseError(std::boxed::Box<bincode::ErrorKind>),
-}
-
 impl State {
-    pub fn save<T: Write>(&self, writer: &mut T) -> Result<(), Error> {
-        match bincode::serialize_into(writer, &self) {
-            Ok(()) => Ok(()),
-            Err(e) => Err(Error::from(StateFileError::ParseError(e))),
+    pub fn save<T: Write>(&self, writer: &mut T) -> Result<()> {
+        match bincode::serde::encode_into_std_write(
+            &self,
+            writer,
+            bincode::config::standard(),
+        ) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(StateFileError::SaveState(e).into()),
         }
     }
 
-    pub fn load<T: Read>(reader: &mut T) -> Result<State, Error> {
-        match bincode::deserialize_from(reader) {
+    pub fn load<T: Read>(reader: &mut T) -> Result<State> {
+        match bincode::serde::decode_from_std_read(
+            reader,
+            bincode::config::standard(),
+        ) {
             Ok(state) => Ok(state),
-            Err(e) => Err(Error::from(StateFileError::ParseError(e))),
+            Err(e) => Err(StateFileError::LoadState(e).into()),
         }
     }
 }

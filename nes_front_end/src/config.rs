@@ -1,19 +1,46 @@
+use anyhow::{Result, anyhow};
 use glfw::Key;
+use log::*;
 use nes_emu::controller::Button;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum GpuBackend {
+    OpenGL,
+    Vulkan,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
-    pub pixel_scale: usize,
     pub ctrl1_layout: ButtonLayout,
     pub ctrl2_layout: ButtonLayout,
+    pub emu_ctrl_layout: EmuControlLayout,
     pub overscan: Overscan,
+    pub gpu_backend: GpuBackend,
+    pub vsync: bool,
+}
+
+pub enum EmuControl {
+    Pause,
+    Reset,
+    SpeedSwap,
+    SaveState,
+    LoadState,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EmuControlLayout {
+    pause: String,
+    reset: String,
+    speed_swap: String,
+    stop: String,
+    save_state: String,
+    load_state: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,7 +61,7 @@ pub struct ButtonLayout {
     select: String,
 }
 
-fn str_to_keycode(input: &str) -> Result<Key, Box<dyn Error>> {
+fn str_to_keycode(input: &str) -> Result<Key> {
     match input {
         "A" => Ok(Key::A),
         "B" => Ok(Key::B),
@@ -69,12 +96,14 @@ fn str_to_keycode(input: &str) -> Result<Key, Box<dyn Error>> {
         "LShift" => Ok(Key::LeftShift),
         "RShift" => Ok(Key::RightShift),
         "Enter" => Ok(Key::Enter),
-        k => Err(format!("Unsupported character {}", k).into()),
+        "Space" => Ok(Key::Space),
+        "Escape" => Ok(Key::Escape),
+        k => Err(anyhow!("Unsupported character {}", k)),
     }
 }
 
 impl ButtonLayout {
-    pub fn make_ctrl_map(&self) -> Result<HashMap<Key, Button>, Box<dyn Error>> {
+    pub fn make_ctrl_map(&self) -> Result<HashMap<Key, Button>> {
         let mut button_map = HashMap::new();
         button_map.insert(str_to_keycode(&self.left)?, Button::Left);
         button_map.insert(str_to_keycode(&self.right)?, Button::Right);
@@ -88,6 +117,18 @@ impl ButtonLayout {
     }
 }
 
+impl EmuControlLayout {
+    pub fn make_emu_ctrl_map(&self) -> Result<HashMap<Key, EmuControl>> {
+        let mut emu_ctrl_map = HashMap::new();
+        emu_ctrl_map.insert(str_to_keycode(&self.pause)?, EmuControl::Pause);
+        emu_ctrl_map.insert(str_to_keycode(&self.reset)?, EmuControl::Reset);
+        emu_ctrl_map.insert(str_to_keycode(&self.speed_swap)?, EmuControl::SpeedSwap);
+        emu_ctrl_map.insert(str_to_keycode(&self.save_state)?, EmuControl::SaveState);
+        emu_ctrl_map.insert(str_to_keycode(&self.load_state)?, EmuControl::LoadState);
+        Ok(emu_ctrl_map)
+    }
+}
+
 #[derive(Debug)]
 pub enum ConfigError {
     FileError(std::io::Error),
@@ -96,7 +137,7 @@ pub enum ConfigError {
 
 impl Config {
     pub fn generate_config() -> Config {
-        let layout1 = ButtonLayout {
+        let ctrl1_layout = ButtonLayout {
             left: "A".to_string(),
             up: "W".to_string(),
             down: "S".to_string(),
@@ -107,7 +148,7 @@ impl Config {
             select: "Y".to_string(),
         };
 
-        let layout2 = ButtonLayout {
+        let ctrl2_layout = ButtonLayout {
             left: "Left".to_string(),
             up: "Up".to_string(),
             down: "Down".to_string(),
@@ -115,28 +156,44 @@ impl Config {
             a: "RShift".to_string(),
             b: "Enter".to_string(),
             start: "B".to_string(),
-            select: "B".to_string(),
+            select: "N".to_string(),
+        };
+
+        let emu_ctrl_layout = EmuControlLayout {
+            speed_swap: "Space".to_string(),
+            stop: "Escape".to_string(),
+            pause: "P".to_string(),
+            reset: "R".to_string(),
+            save_state: "E".to_string(),
+            load_state: "Q".to_string(),
         };
 
         let overscan = Overscan { top: 8, bottom: 8 };
 
         Config {
-            pixel_scale: 6,
-            ctrl1_layout: layout1,
-            ctrl2_layout: layout2,
+            ctrl1_layout,
+            ctrl2_layout,
             overscan,
+            emu_ctrl_layout,
+            gpu_backend: GpuBackend::OpenGL,
+            vsync: true,
         }
     }
 
-    pub fn load_config(config_path: String) -> Result<Config, Box<dyn Error>> {
+    pub fn load_config(config_path: String) -> Result<Config> {
         if Path::new(&config_path).exists() {
             let mut file = File::open(config_path)?;
             let mut config_string = String::new();
             file.read_to_string(&mut config_string)?;
             let config = toml::from_str(&config_string)?;
-            println!("Loading config: {:#?}", config);
+            if log_enabled!(Level::Debug) {
+                debug!("Loading config: {:#?}", config);
+            }
             Ok(config)
         } else {
+            if log_enabled!(Level::Warn) {
+                warn!("Did not find a Config.toml for  the controls! Generating defaults");
+            }
             Ok(Config::generate_config())
         }
     }
