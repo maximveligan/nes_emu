@@ -4,9 +4,9 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ppu::pregisters::Ctrl;
 use crate::ppu::pregisters::PRegisters;
 use crate::ppu::pregisters::VramAddr;
-use crate::ppu::pregisters::Ctrl;
 use crate::ppu::shift_regs::InternalRegs;
 use crate::ppu::sprite::Priority;
 use crate::ppu::sprite::Sprite;
@@ -35,12 +35,6 @@ pub const PALETTE: [u32; 64] = [
     0x111111,
 ];
 
-#[derive(Debug)]
-pub enum PpuRes {
-    Nmi,
-    Draw,
-}
-
 #[derive(Copy, Clone)]
 struct Rgb {
     data: [u8; 3],
@@ -63,6 +57,8 @@ pub struct PpuState {
 
 pub struct Ppu {
     pub regs: PRegisters,
+    pub frame_ready: bool,
+    pub nmi_pending: bool,
     vram: Vram,
     // multiply by 3 to account for r g b
     screen_buff: Box<[u8]>,
@@ -114,6 +110,8 @@ impl Ppu {
             at_entry: 0,
             internal_regs: InternalRegs::default(),
             odd_frame: false,
+            frame_ready: false,
+            nmi_pending: false,
         }
     }
 
@@ -489,34 +487,27 @@ impl Ppu {
         }
     }
 
-    fn step(&mut self) -> Option<PpuRes> {
-        let mut res = match self.scanline {
+    fn step(&mut self) {
+        match self.scanline {
             0..=239 => {
                 self.step_sprites();
                 self.render_pixel();
                 self.step_bg_regs();
-                None
             }
             240 => {
                 if self.cc == 0 {
-                    Some(PpuRes::Draw)
-                } else {
-                    None
+                    self.frame_ready = true;
                 }
             }
             241 => {
                 if self.cc == 1 && !self.vblank_off {
                     self.regs.status.set_vblank(true);
                     if self.regs.ctrl.nmi_on() {
-                        Some(PpuRes::Nmi)
-                    } else {
-                        None
+                        self.nmi_pending = true;
                     }
-                } else {
-                    None
                 }
             }
-            242..=260 => None,
+            242..=260 => (),
             PRERENDER => {
                 if self.cc == 1 {
                     self.regs.status.set_vblank(false);
@@ -526,7 +517,6 @@ impl Ppu {
                 self.step_sprites();
                 self.render_pixel();
                 self.step_bg_regs();
-                None
             }
             _ => panic!(
                 "Scanline can't get here {}. Check emulate_cycles",
@@ -535,29 +525,18 @@ impl Ppu {
         };
 
         // This is the logic for forcing nmi
-        if self.trip_nmi && self.regs.status.vblank() && !self.vblank_off {
-            match res {
-                None => {
-                    res = Some(PpuRes::Nmi);
-                }
-                _ => panic!("This shouldn't be possible"),
-            }
-        };
+        self.nmi_pending |=
+            self.trip_nmi && self.regs.status.vblank() && !self.vblank_off;
 
         self.trip_nmi = false;
         self.vblank_off = false;
 
         self.step_cc();
-        res
     }
 
-    pub fn emulate_cycles(&mut self, cyc_elapsed: u16) -> Option<PpuRes> {
-        let mut ppu_res = None;
+    pub fn emulate_cycles(&mut self, cyc_elapsed: usize) {
         for _ in 0..(cyc_elapsed * 3) {
-            if let Some(res) = self.step() {
-                ppu_res = Some(res);
-            }
+            self.step();
         }
-        ppu_res
     }
 }

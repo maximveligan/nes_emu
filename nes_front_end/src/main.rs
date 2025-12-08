@@ -92,11 +92,11 @@ impl NesFrontEnd {
     fn set_ctrl_state(&mut self, key: Key, action: Action) {
         let state = action != Action::Release;
         if let Some(button) = self.ctrl1.get(&key) {
-            self.nes.cpu.mmu.ctrl0.set_button_state(*button, state);
+            self.nes.mmu.ctrl0.set_button_state(*button, state);
         }
 
         if let Some(button) = self.ctrl2.get(&key) {
-            self.nes.cpu.mmu.ctrl1.set_button_state(*button, state);
+            self.nes.mmu.ctrl1.set_button_state(*button, state);
         }
     }
 

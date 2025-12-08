@@ -11,3 +11,7 @@ serde = { version = "*", features = ["derive"] }
 serde_bytes = "*"
 itertools = "*"
 bitfield = "*"
+
+[dev-dependencies]
+serde_json = "*"
+serde = { version = "*" }

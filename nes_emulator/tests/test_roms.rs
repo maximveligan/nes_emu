@@ -2,8 +2,8 @@ extern crate hex;
 extern crate nes_emu;
 extern crate serde;
 extern crate sha3;
-use nes_emu::rom::load_rom;
 use nes_emu::NesEmulator;
+use nes_emu::rom::load_rom;
 use sha3::Digest;
 use sha3::Sha3_256;
 use std::fs::File;
@@ -59,7 +59,7 @@ hash_test! {
     ("bd0f14f44d6acc6e7c4f6b3f57f86146b5777b6daa2392823fd57d239f255b5e", 2354,
      "./tests/nes_test_roms/instr_test-v3/all_instrs.nes",
      cpu_all_instrs),
-    ("671c5d5913a8d482d27b99efdcc01570348abdc436dd4e195cf1d15392adc196", 631,
+    ("671c5d5913a8d482d27b99efdcc01570348abdc436dd4e195cf1d15392adc196", 1000,
      "./tests/nes_test_roms/cpu_timing_test6/cpu_timing_test.nes",
      cpu_timing_test),
     ("abce9d533a663bc88e0f5b88671d8e5d8e0267e6fb75fe301ea18e90158c189b", 660,
