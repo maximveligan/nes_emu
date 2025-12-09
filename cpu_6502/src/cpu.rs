@@ -151,11 +151,13 @@ impl Cpu {
         self.regs.reset(addr);
     }
 
-    fn check_pb<M: Memory>(&mut self, base: u16, base_offset: u16, mem: &mut M) {
-        if (base & 0xFF00) != (base_offset & 0xFF00) {
-            mem.ld8(base);
+    fn check_pb<M: Memory>(&mut self, low: u8, high: u8, offset: u8, mem: &mut M) -> u16 {
+        let (new_low, overflowed) = low.overflowing_add(offset);
+        if overflowed {
+            mem.ld8((high as u16) << 8 | new_low as u16);
             self.incr_cc();
         }
+        ((high as u16) << 8 | (low as u16)) + offset as u16
     }
 
     fn incr_cc(&mut self) {
@@ -182,26 +184,28 @@ impl Cpu {
             }
             Mode::Abs => self.ld16_pc_up(mem),
             Mode::AbsX => {
-                let base = self.ld16_pc_up(mem);
-                let tmp = base + self.regs.x as u16;
-                self.check_pb(base, tmp, mem);
-                tmp
+                let low = self.ld8_pc_up(mem);
+                let high = self.ld8_pc_up(mem);
+                self.check_pb(low, high, self.regs.x, mem)
             }
             Mode::AbsY => {
-                let base = self.ld16_pc_up(mem);
-                let tmp = base.wrapping_add(self.regs.y as u16);
-                self.check_pb(base, tmp, mem);
-                tmp
+                let low = self.ld8_pc_up(mem);
+                let high = self.ld8_pc_up(mem);
+                self.check_pb(low, high, self.regs.y, mem)
             }
             Mode::NoPBAbsX => {
-                let base = self.ld16_pc_up(mem);
-                mem.ld8(base + self.regs.x as u16);
-                base + self.regs.x as u16
+                let low = self.ld8_pc_up(mem);
+                let high = self.ld8_pc_up(mem);
+                let (over_low, _) = low.overflowing_add(self.regs.x);
+                mem.ld8((high as u16) << 8 | over_low as u16);
+                ((high as u16) << 8 | low as u16) + self.regs.x as u16
             }
             Mode::NoPBAbsY => {
-                let base = self.ld16_pc_up(mem);
-                mem.ld8(base + self.regs.y as u16);
-                base.wrapping_add(self.regs.y as u16)
+                let low = self.ld8_pc_up(mem);
+                let high = self.ld8_pc_up(mem);
+                let (over_low, _) = low.overflowing_add(self.regs.y);
+                mem.ld8((high as u16) << 8 | over_low as u16);
+                ((high as u16) << 8 | low as u16) + self.regs.y as u16
             }
             Mode::JmpIndir => {
                 let tmp = self.ld16_pc_up(mem);
@@ -215,7 +219,6 @@ impl Cpu {
             }
             Mode::IndX => {
                 let tmp = self.ld8_pc_up(mem);
-                // ??? I'm not sure why we don't use this??????
                 mem.ld8(tmp as u16);
                 let base_address = tmp.wrapping_add(self.regs.x) as u16;
                 if base_address == 0xFF {
@@ -227,24 +230,22 @@ impl Cpu {
             Mode::IndY => {
                 let base = self.ld8_pc_up(mem);
                 let tmp = if base == 0xFF {
-                    (mem.ld8(0) as u16) << 8 | (mem.ld8(0xFF) as u16)
+                    (mem.ld8(0xFF) as u16) | (mem.ld8(0) as u16) << 8
                 } else {
                     mem.ld16(base as u16)
                 };
-                let addr = tmp.wrapping_add(self.regs.y as u16);
-                self.check_pb(tmp, addr, mem);
-                addr
+                self.check_pb(tmp as u8, (tmp >> 8) as u8, self.regs.y, mem)
             }
             Mode::NoPBIndY => {
                 let base = self.ld8_pc_up(mem);
                 let tmp = if base == 0xFF {
-                    (mem.ld8(0) as u16) << 8 | (mem.ld8(0xFF) as u16)
+                    (mem.ld8(0xFF) as u16) | (mem.ld8(0) as u16) << 8
                 } else {
                     mem.ld16(base as u16)
                 };
-                let tmp = tmp.wrapping_add(self.regs.y as u16);
-                mem.ld8(tmp);
-                tmp
+                let low = (tmp & 0xFF) as u8;
+                mem.ld8((tmp & 0xFF00) | low.wrapping_add(self.regs.y) as u16);
+                tmp.wrapping_add(self.regs.y as u16)
             }
         }
     }
@@ -262,7 +263,7 @@ impl Cpu {
     }
 
     fn write_dma<M: Memory>(&mut self, high_nyb: u8, mem: &mut M) {
-        self.delta_cycles += 513 + (self.delta_cycles % 2);
+        // self.delta_cycles += 513 + (self.delta_cycles % 2);
         let page_num = (high_nyb as u16) << 8;
         for address in page_num..=page_num + 0xFF {
             let tmp = mem.ld8(address);
@@ -271,10 +272,9 @@ impl Cpu {
     }
 
     fn store<M: Memory>(&mut self, addr: u16, val: u8, mem: &mut M) {
+        mem.store(addr, val);
         if addr == DMA_ADDR {
             self.write_dma(val, mem);
-        } else {
-            mem.store(addr, val);
         }
     }
 
@@ -348,7 +348,9 @@ impl Cpu {
 
     fn ror_addr<M: Memory>(&mut self, mode: Mode, mem: &mut M) {
         let addr = self.address_mem(mode, mem);
-        let (tmp, n_flag) = Cpu::get_ror(self.regs.flags.carry(), mem.ld8(addr));
+        let val = mem.ld8(addr);
+        let (tmp, n_flag) = Cpu::get_ror(self.regs.flags.carry(), val);
+        self.store(addr, val, mem);
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp, mem);
@@ -367,7 +369,9 @@ impl Cpu {
 
     fn rol_addr<M: Memory>(&mut self, mode: Mode, mem: &mut M) {
         let addr = self.address_mem(mode, mem);
-        let (tmp, n_flag) = Cpu::get_rol(self.regs.flags.carry(), mem.ld8(addr));
+        let val = mem.ld8(addr);
+        mem.store(addr, val);
+        let (tmp, n_flag) = Cpu::get_rol(self.regs.flags.carry(), val);
         self.regs.flags.set_carry(n_flag);
         self.set_zero_neg(tmp);
         self.store(addr, tmp, mem);
@@ -388,6 +392,7 @@ impl Cpu {
     fn asl_addr<M: Memory>(&mut self, mode: Mode, mem: &mut M) {
         let addr = self.address_mem(mode, mem);
         let val = mem.ld8(addr);
+        self.store(addr, val, mem);
         self.regs.flags.set_carry((val >> 7) != 0);
         let tmp = val << 1;
         self.set_zero_neg(tmp);
@@ -405,6 +410,7 @@ impl Cpu {
     fn lsr_addr<M: Memory>(&mut self, mode: Mode, mem: &mut M) {
         let addr = self.address_mem(mode, mem);
         let val = mem.ld8(addr);
+        self.store(addr, val, mem);
         self.regs.flags.set_carry((val & 0b01) != 0);
         let tmp = val >> 1;
         self.set_zero_neg(tmp);
@@ -436,11 +442,31 @@ impl Cpu {
         let val = self.ld8_pc_up(mem) as i8;
         if flag {
             let addr = self.regs.pc.get_addr();
-            self.regs.pc.add_signed(val);
+            mem.ld8(addr);
+            let low = (addr & 0x00FF) as u8;
+
+            let overflow_low;
+            let carry;
+
+            if val >= 0 {
+                let us_v = val as u8;
+                (overflow_low, carry) = low.overflowing_add(us_v);
+            } else {
+                let us_v = (val * -1) as u8;
+                (overflow_low, carry) = low.overflowing_sub(us_v);
+            }
+
+            if carry {
+                self.incr_cc();
+                mem.ld8((addr & 0xFF00) | overflow_low as u16);
+            }
+
+            self.regs.pc.add_signed(val as i8);
             self.incr_cc();
             let new_addr = self.regs.pc.get_addr();
-            mem.ld8(self.regs.pc.get_addr());
-            self.check_pb(addr, new_addr, mem)
+            mem.ld8(new_addr);
+        } else {
+            mem.store(0, 0);
         }
     }
 
@@ -633,7 +659,9 @@ impl Cpu {
     }
 
     fn rts<M: Memory>(&mut self, mem: &mut M) {
+        mem.ld8(self.regs.sp as u16 | 0x100);
         self.pull_pc(mem);
+        mem.ld8(self.regs.pc.get_addr());
         self.regs.pc.add_unsigned(1);
     }
 
@@ -643,13 +671,15 @@ impl Cpu {
     }
 
     fn jsr<M: Memory>(&mut self, mem: &mut M) {
-        let addr = self.address_mem(Mode::Abs, mem);
-        self.regs.pc.add_signed(-1);
+        let low = self.ld8_pc_up(mem);
+        mem.ld8(self.regs.sp as u16 | 0x100);
         self.push_pc(mem);
-        self.regs.pc.set_addr(addr);
+        let high = self.ld8_pc_up(mem);
+        self.regs.pc.set_addr((high as u16) << 8 | low as u16);
     }
 
     fn pla<M: Memory>(&mut self, mem: &mut M) {
+        mem.ld8(self.regs.sp as u16 | 0x100);
         let acc = self.pop(mem);
         self.regs.acc = acc;
         self.set_zero_neg(acc);
@@ -709,6 +739,7 @@ impl Cpu {
     }
 
     fn pull_status<M: Memory>(&mut self, mem: &mut M) {
+        mem.ld8(self.regs.sp as u16 | 0x100);
         let tmp = self.pop(mem);
         self.regs.flags.set_byte(tmp);
         self.regs.flags.set_unused(true);
@@ -754,198 +785,247 @@ impl Cpu {
         let ram_ptr = self.regs.pc.get_addr();
         self.regs.pc.add_unsigned(2);
         let tmp = mem.ld16(ram_ptr);
-        // ?????? Dummy read I guess?
-        // mem.ld8(self.regs.pc.get_addr());
         tmp
     }
 
     pub fn execute_op<M: Memory>(&mut self, op: u8, mem: &mut M) {
         match op {
             INC_ABSX => self.inc(Mode::NoPBAbsX, mem),
-            INC_ZPX => self.inc(Mode::ZPX, mem),
-            INC_ABS => self.inc(Mode::Abs, mem),
-            INC_ZP => self.inc(Mode::ZP, mem),
-            SBC_IMM | 0xEB => self.sbc(Mode::Imm, mem),
-            SBC_ABSX => self.sbc(Mode::AbsX, mem),
-            SBC_ABSY => self.sbc(Mode::AbsY, mem),
-            SBC_ABS => self.sbc(Mode::Abs, mem),
-            SBC_INDY => self.sbc(Mode::IndY, mem),
-            SBC_INDX => self.sbc(Mode::IndX, mem),
-            SBC_ZPX => self.sbc(Mode::ZPX, mem),
-            SBC_ZP => self.sbc(Mode::ZP, mem),
-            CPX_IMM => self.cpx(Mode::Imm, mem),
-            CPX_ABS => self.cpx(Mode::Abs, mem),
-            CPX_ZP => self.cpx(Mode::ZP, mem),
-            LDX_IMM => self.ldx(Mode::Imm, mem),
-            LDX_ZPY => self.ldx(Mode::ZPY, mem),
-            LDX_ABS => self.ldx(Mode::Abs, mem),
-            LDX_ABSY => self.ldx(Mode::AbsY, mem),
-            LDX_ZP => self.ldx(Mode::ZP, mem),
-            DEC_ZPX => self.dec(Mode::ZPX, mem),
-            DEC_ABS => self.dec(Mode::Abs, mem),
             DEC_ABSX => self.dec(Mode::NoPBAbsX, mem),
-            DEC_ZP => self.dec(Mode::ZP, mem),
-            CMP_IMM => self.cmp(Mode::Imm, mem),
-            CMP_ABSX => self.cmp(Mode::AbsX, mem),
-            CMP_ABSY => self.cmp(Mode::AbsY, mem),
-            CMP_ZPX => self.cmp(Mode::ZPX, mem),
-            CMP_INDY => self.cmp(Mode::IndY, mem),
-            CMP_ABS => self.cmp(Mode::Abs, mem),
-            CMP_ZP => self.cmp(Mode::ZP, mem),
-            CMP_INDX => self.cmp(Mode::IndX, mem),
-            CPY_IMM => self.cpy(Mode::Imm, mem),
-            CPY_ZP => self.cpy(Mode::ZP, mem),
-            CPY_ABS => self.cpy(Mode::Abs, mem),
-            LDA_IMM => self.lda(Mode::Imm, mem),
-            LDA_ABSX => self.lda(Mode::AbsX, mem),
-            LDA_ABSY => self.lda(Mode::AbsY, mem),
-            LDA_ZPX => self.lda(Mode::ZPX, mem),
-            LDA_INDY => self.lda(Mode::IndY, mem),
-            LDA_ABS => self.lda(Mode::Abs, mem),
-            LDA_ZP => self.lda(Mode::ZP, mem),
-            LDA_INDX => self.lda(Mode::IndX, mem),
-            LDY_IMM => self.ldy(Mode::Imm, mem),
-            LDY_ZPX => self.ldy(Mode::ZPX, mem),
-            LDY_ABS => self.ldy(Mode::Abs, mem),
-            LDY_ABSX => self.ldy(Mode::AbsX, mem),
-            LDY_ZP => self.ldy(Mode::ZP, mem),
             STA_ABSX => self.sta(Mode::NoPBAbsX, mem),
-            STA_ABSY => self.sta(Mode::NoPBAbsY, mem),
-            STA_ZPX => self.sta(Mode::ZPX, mem),
-            STA_INDY => self.sta(Mode::NoPBIndY, mem),
-            STA_ABS => self.sta(Mode::Abs, mem),
-            STA_ZP => self.sta(Mode::ZP, mem),
-            STA_INDX => self.sta(Mode::IndX, mem),
-            STX_ABS => self.stx(Mode::Abs, mem),
-            STX_ZP => self.stx(Mode::ZP, mem),
-            STX_ZPY => self.stx(Mode::ZPY, mem),
-            STY_ABS => self.sty(Mode::Abs, mem),
-            STY_ZP => self.sty(Mode::ZP, mem),
-            STY_ZPX => self.sty(Mode::ZPX, mem),
-            ADC_IMM => self.adc(Mode::Imm, mem),
-            ADC_ABSX => self.adc(Mode::AbsX, mem),
-            ADC_ABSY => self.adc(Mode::AbsY, mem),
-            ADC_ZPX => self.adc(Mode::ZPX, mem),
-            ADC_INDY => self.adc(Mode::IndY, mem),
-            ADC_ABS => self.adc(Mode::Abs, mem),
-            ADC_ZP => self.adc(Mode::ZP, mem),
-            ADC_INDX => self.adc(Mode::IndX, mem),
             ROR_ABSX => self.ror_addr(Mode::NoPBAbsX, mem),
-            ROR_ZPX => self.ror_addr(Mode::ZPX, mem),
-            ROR_ZP => self.ror_addr(Mode::ZP, mem),
-            ROR_ABS => self.ror_addr(Mode::Abs, mem),
-            ROR_ACC => self.ror_acc(),
-            EOR_IMM => self.eor(Mode::Imm, mem),
-            EOR_ABSX => self.eor(Mode::AbsX, mem),
-            EOR_ABSY => self.eor(Mode::AbsY, mem),
-            EOR_ZPX => self.eor(Mode::ZPX, mem),
-            EOR_INDY => self.eor(Mode::IndY, mem),
-            EOR_ABS => self.eor(Mode::Abs, mem),
-            EOR_ZP => self.eor(Mode::ZP, mem),
-            EOR_INDX => self.eor(Mode::IndX, mem),
             LSR_ABSX => self.lsr_addr(Mode::NoPBAbsX, mem),
+            ROL_ABSX => self.rol_addr(Mode::NoPBAbsX, mem),
+            0xDF => self.dcp(Mode::NoPBAbsX, mem),
+            ASL_ABSX => self.asl_addr(Mode::NoPBAbsX, mem),
+            0x7F => self.rra(Mode::NoPBAbsX, mem),
+            0x3F => self.rla(Mode::NoPBAbsX, mem),
+            0x1F => self.slo(Mode::NoPBAbsX, mem),
+            0xFF => self.isc(Mode::NoPBAbsX, mem),
+            0x5F => self.sre(Mode::NoPBAbsX, mem),
+
+            0xDB => self.dcp(Mode::NoPBAbsY, mem),
+            STA_ABSY => self.sta(Mode::NoPBAbsY, mem),
+            0xFB => self.isc(Mode::NoPBAbsY, mem),
+            0x1B => self.slo(Mode::NoPBAbsY, mem),
+            0x3B => self.rla(Mode::NoPBAbsY, mem),
+            0x5B => self.sre(Mode::NoPBAbsY, mem),
+            0x7B => self.rra(Mode::NoPBAbsY, mem),
+
+            INC_ZPX => self.inc(Mode::ZPX, mem),
+            SBC_ZPX => self.sbc(Mode::ZPX, mem),
+            DEC_ZPX => self.dec(Mode::ZPX, mem),
+            CMP_ZPX => self.cmp(Mode::ZPX, mem),
+            LDA_ZPX => self.lda(Mode::ZPX, mem),
+            LDY_ZPX => self.ldy(Mode::ZPX, mem),
+            STA_ZPX => self.sta(Mode::ZPX, mem),
+            STY_ZPX => self.sty(Mode::ZPX, mem),
+            ADC_ZPX => self.adc(Mode::ZPX, mem),
+            ROR_ZPX => self.ror_addr(Mode::ZPX, mem),
+            EOR_ZPX => self.eor(Mode::ZPX, mem),
             LSR_ZPX => self.lsr_addr(Mode::ZPX, mem),
+            ROL_ZPX => self.rol_addr(Mode::ZPX, mem),
+            AND_ZPX => self.and(Mode::ZPX, mem),
+            ORA_ZPX => self.ora(Mode::ZPX, mem),
+            ASL_ZPX => self.asl_addr(Mode::ZPX, mem),
+            0xD7 => self.dcp(Mode::ZPX, mem),
+            0xF7 => self.isc(Mode::ZPX, mem),
+            0x17 => self.slo(Mode::ZPX, mem),
+            0x37 => self.rla(Mode::ZPX, mem),
+            0x57 => self.sre(Mode::ZPX, mem),
+            0x77 => self.rra(Mode::ZPX, mem),
+
+            INC_ABS => self.inc(Mode::Abs, mem),
+            SBC_ABS => self.sbc(Mode::Abs, mem),
+            CPX_ABS => self.cpx(Mode::Abs, mem),
+            LDX_ABS => self.ldx(Mode::Abs, mem),
+            DEC_ABS => self.dec(Mode::Abs, mem),
+            CMP_ABS => self.cmp(Mode::Abs, mem),
+            CPY_ABS => self.cpy(Mode::Abs, mem),
+            LDA_ABS => self.lda(Mode::Abs, mem),
+            LDY_ABS => self.ldy(Mode::Abs, mem),
+            STA_ABS => self.sta(Mode::Abs, mem),
+            STX_ABS => self.stx(Mode::Abs, mem),
+            STY_ABS => self.sty(Mode::Abs, mem),
+            ADC_ABS => self.adc(Mode::Abs, mem),
+            ROR_ABS => self.ror_addr(Mode::Abs, mem),
+            EOR_ABS => self.eor(Mode::Abs, mem),
             LSR_ABS => self.lsr_addr(Mode::Abs, mem),
-            LSR_ZP => self.lsr_addr(Mode::ZP, mem),
-            LSR_ACC => self.lsr_acc(),
             JMP_ABS => self.jmp(Mode::Abs, mem),
             ROL_ABS => self.rol_addr(Mode::Abs, mem),
-            ROL_ABSX => self.rol_addr(Mode::NoPBAbsX, mem),
-            ROL_ZPX => self.rol_addr(Mode::ZPX, mem),
-            ROL_ZP => self.rol_addr(Mode::ZP, mem),
-            ROL_ACC => self.rol_acc(),
-            AND_IMM => self.and(Mode::Imm, mem),
-            AND_ZP => self.and(Mode::ZP, mem),
-            AND_ABSX => self.and(Mode::AbsX, mem),
-            AND_ABSY => self.and(Mode::AbsY, mem),
-            AND_INDY => self.and(Mode::IndY, mem),
             AND_ABS => self.and(Mode::Abs, mem),
-            AND_INDX => self.and(Mode::IndX, mem),
-            AND_ZPX => self.and(Mode::ZPX, mem),
             BIT_ABS => self.bit(Mode::Abs, mem),
-            BIT_ZP => self.bit(Mode::ZP, mem),
-            ORA_IMM => self.ora(Mode::Imm, mem),
-            ORA_ABSX => self.ora(Mode::AbsX, mem),
-            ORA_ABSY => self.ora(Mode::AbsY, mem),
-            ORA_ZPX => self.ora(Mode::ZPX, mem),
-            ORA_INDY => self.ora(Mode::IndY, mem),
             ORA_ABS => self.ora(Mode::Abs, mem),
-            ORA_ZP => self.ora(Mode::ZP, mem),
-            ORA_INDX => self.ora(Mode::IndX, mem),
-            ASL_ABSX => self.asl_addr(Mode::NoPBAbsX, mem),
             ASL_ABS => self.asl_addr(Mode::Abs, mem),
-            ASL_ZP => self.asl_addr(Mode::ZP, mem),
-            ASL_ZPX => self.asl_addr(Mode::ZPX, mem),
-            ASL_ACC => self.asl_acc(),
-            0x0B | 0x2B => self.aac(Mode::Imm, mem),
-            0x87 => self.aax(Mode::ZP, mem),
-            0x97 => self.aax(Mode::ZPY, mem),
-            0x83 => self.aax(Mode::IndX, mem),
             0x8F => self.aax(Mode::Abs, mem),
-            0x6B => self.arr(Mode::Imm, mem),
-            0xA7 => self.lax(Mode::ZP, mem),
-            0xB7 => self.lax(Mode::ZPY, mem),
             0xAF => self.lax(Mode::Abs, mem),
-            0xBF => self.lax(Mode::AbsY, mem),
-            0xA3 => self.lax(Mode::IndX, mem),
-            0xB3 => self.lax(Mode::IndY, mem),
-            0xCB => self.axs(Mode::Imm, mem),
-            0xC7 => self.dcp(Mode::ZP, mem),
-            0xD7 => self.dcp(Mode::ZPX, mem),
             0xCF => self.dcp(Mode::Abs, mem),
-            0xDF => self.dcp(Mode::NoPBAbsX, mem),
-            0xDB => self.dcp(Mode::NoPBAbsY, mem),
-            0xC3 => self.dcp(Mode::IndX, mem),
-            0xD3 => self.dcp(Mode::NoPBIndY, mem),
-            0xE7 => self.isc(Mode::ZP, mem),
-            0xF7 => self.isc(Mode::ZPX, mem),
             0xEF => self.isc(Mode::Abs, mem),
-            0xFF => self.isc(Mode::NoPBAbsX, mem),
-            0xFB => self.isc(Mode::NoPBAbsY, mem),
-            0xE3 => self.isc(Mode::IndX, mem),
-            0xF3 => self.isc(Mode::NoPBIndY, mem),
-            0x07 => self.slo(Mode::ZP, mem),
-            0x17 => self.slo(Mode::ZPX, mem),
             0x0F => self.slo(Mode::Abs, mem),
-            0x1F => self.slo(Mode::NoPBAbsX, mem),
-            0x1B => self.slo(Mode::NoPBAbsY, mem),
-            0x03 => self.slo(Mode::IndX, mem),
-            0x13 => self.slo(Mode::NoPBIndY, mem),
-            0x27 => self.rla(Mode::ZP, mem),
-            0x37 => self.rla(Mode::ZPX, mem),
             0x2F => self.rla(Mode::Abs, mem),
-            0x3F => self.rla(Mode::NoPBAbsX, mem),
-            0x3B => self.rla(Mode::NoPBAbsY, mem),
-            0x23 => self.rla(Mode::IndX, mem),
-            0x33 => self.rla(Mode::NoPBIndY, mem),
-            0x47 => self.sre(Mode::ZP, mem),
-            0x57 => self.sre(Mode::ZPX, mem),
             0x4F => self.sre(Mode::Abs, mem),
-            0x5F => self.sre(Mode::NoPBAbsX, mem),
-            0x5B => self.sre(Mode::NoPBAbsY, mem),
-            0x53 => self.sre(Mode::NoPBIndY, mem),
-            0x43 => self.sre(Mode::IndX, mem),
-            0x67 => self.rra(Mode::ZP, mem),
-            0x77 => self.rra(Mode::ZPX, mem),
             0x6F => self.rra(Mode::Abs, mem),
-            0x7F => self.rra(Mode::NoPBAbsX, mem),
-            0x7B => self.rra(Mode::NoPBAbsY, mem),
-            0x63 => self.rra(Mode::IndX, mem),
-            0x73 => self.rra(Mode::NoPBIndY, mem),
-            0x4B => self.alr(Mode::Imm, mem),
-            0xAB => self.atx(Mode::Imm, mem),
-            0x9C => self.sna(Mode::AbsX, self.regs.y, self.regs.x, mem), //sya
-            0x9E => self.sna(Mode::AbsY, self.regs.x, self.regs.y, mem), //sxa
-            RTS => self.rts(mem),
-            RTI => self.rti(mem),
-            SED => {
-                self.regs.flags.set_dec(true);
-                mem.ld8(self.regs.pc.get_addr());
+            // TOP: Triple NOP
+            0x0C => {
+                self.address_mem(Mode::Abs, mem);
             }
-            CLC => self.regs.flags.set_carry(false),
-            SEC => self.regs.flags.set_carry(true),
-            CLI => self.regs.flags.set_itr(false),
-            SEI => self.regs.flags.set_itr(true),
+
+            EOR_ZP => self.eor(Mode::ZP, mem),
+            ROR_ZP => self.ror_addr(Mode::ZP, mem),
+            LSR_ZP => self.lsr_addr(Mode::ZP, mem),
+            ROL_ZP => self.rol_addr(Mode::ZP, mem),
+            AND_ZP => self.and(Mode::ZP, mem),
+            BIT_ZP => self.bit(Mode::ZP, mem),
+            ORA_ZP => self.ora(Mode::ZP, mem),
+            ASL_ZP => self.asl_addr(Mode::ZP, mem),
+            0x87 => self.aax(Mode::ZP, mem),
+            0xA7 => self.lax(Mode::ZP, mem),
+            0xC7 => self.dcp(Mode::ZP, mem),
+            0xE7 => self.isc(Mode::ZP, mem),
+            0x07 => self.slo(Mode::ZP, mem),
+            0x27 => self.rla(Mode::ZP, mem),
+            0x47 => self.sre(Mode::ZP, mem),
+            0x67 => self.rra(Mode::ZP, mem),
+            INC_ZP => self.inc(Mode::ZP, mem),
+            CPX_ZP => self.cpx(Mode::ZP, mem),
+            LDX_ZP => self.ldx(Mode::ZP, mem),
+            DEC_ZP => self.dec(Mode::ZP, mem),
+            CMP_ZP => self.cmp(Mode::ZP, mem),
+            CPY_ZP => self.cpy(Mode::ZP, mem),
+            LDA_ZP => self.lda(Mode::ZP, mem),
+            LDY_ZP => self.ldy(Mode::ZP, mem),
+            STA_ZP => self.sta(Mode::ZP, mem),
+            STX_ZP => self.stx(Mode::ZP, mem),
+            STY_ZP => self.sty(Mode::ZP, mem),
+            ADC_ZP => self.adc(Mode::ZP, mem),
+            SBC_ZP => self.sbc(Mode::ZP, mem),
+
+            LDY_IMM => self.ldy(Mode::Imm, mem),
+            SBC_IMM | 0xEB => self.sbc(Mode::Imm, mem),
+            0x6B => self.arr(Mode::Imm, mem),
+            0xCB => self.axs(Mode::Imm, mem),
+            ADC_IMM => self.adc(Mode::Imm, mem),
+            0x4B => self.alr(Mode::Imm, mem),
+            EOR_IMM => self.eor(Mode::Imm, mem),
+            0xAB => self.atx(Mode::Imm, mem),
+            AND_IMM => self.and(Mode::Imm, mem),
+            ORA_IMM => self.ora(Mode::Imm, mem),
+            CPX_IMM => self.cpx(Mode::Imm, mem),
+            LDX_IMM => self.ldx(Mode::Imm, mem),
+            0x0B | 0x2B => self.aac(Mode::Imm, mem),
+            CMP_IMM => self.cmp(Mode::Imm, mem),
+            CPY_IMM => self.cpy(Mode::Imm, mem),
+            LDA_IMM => self.lda(Mode::Imm, mem),
+
+            SBC_ABSX => self.sbc(Mode::AbsX, mem),
+            CMP_ABSX => self.cmp(Mode::AbsX, mem),
+            LDA_ABSX => self.lda(Mode::AbsX, mem),
+            LDY_ABSX => self.ldy(Mode::AbsX, mem),
+            ADC_ABSX => self.adc(Mode::AbsX, mem),
+            EOR_ABSX => self.eor(Mode::AbsX, mem),
+            AND_ABSX => self.and(Mode::AbsX, mem),
+            ORA_ABSX => self.ora(Mode::AbsX, mem),
+            0x9C => self.sna(Mode::AbsX, self.regs.y, self.regs.x, mem), //sya
+            // The memory access here is necessary, since even though we don't use the u16 retrieved,
+            // we need to emulate the absolute X retrieval in case there is a page boundary cross
+            0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
+                self.address_mem(Mode::AbsX, mem);
+            }
+
+            SBC_ABSY => self.sbc(Mode::AbsY, mem),
+            LDX_ABSY => self.ldx(Mode::AbsY, mem),
+            CMP_ABSY => self.cmp(Mode::AbsY, mem),
+            LDA_ABSY => self.lda(Mode::AbsY, mem),
+            ADC_ABSY => self.adc(Mode::AbsY, mem),
+            EOR_ABSY => self.eor(Mode::AbsY, mem),
+            AND_ABSY => self.and(Mode::AbsY, mem),
+            ORA_ABSY => self.ora(Mode::AbsY, mem),
+            0xBF => self.lax(Mode::AbsY, mem),
+            0x9E => self.sna(Mode::AbsY, self.regs.x, self.regs.y, mem), //sxa
+
+            EOR_INDY => self.eor(Mode::IndY, mem),
+            AND_INDY => self.and(Mode::IndY, mem),
+            ORA_INDY => self.ora(Mode::IndY, mem),
+            SBC_INDY => self.sbc(Mode::IndY, mem),
+            CMP_INDY => self.cmp(Mode::IndY, mem),
+            LDA_INDY => self.lda(Mode::IndY, mem),
+            ADC_INDY => self.adc(Mode::IndY, mem),
+            0xB3 => self.lax(Mode::IndY, mem),
+
+            SBC_INDX => self.sbc(Mode::IndX, mem),
+            CMP_INDX => self.cmp(Mode::IndX, mem),
+            LDA_INDX => self.lda(Mode::IndX, mem),
+            STA_INDX => self.sta(Mode::IndX, mem),
+            ADC_INDX => self.adc(Mode::IndX, mem),
+            EOR_INDX => self.eor(Mode::IndX, mem),
+            AND_INDX => self.and(Mode::IndX, mem),
+            ORA_INDX => self.ora(Mode::IndX, mem),
+            0x83 => self.aax(Mode::IndX, mem),
+            0xA3 => self.lax(Mode::IndX, mem),
+            0xC3 => self.dcp(Mode::IndX, mem),
+            0xE3 => self.isc(Mode::IndX, mem),
+            0x03 => self.slo(Mode::IndX, mem),
+            0x23 => self.rla(Mode::IndX, mem),
+            0x43 => self.sre(Mode::IndX, mem),
+            0x63 => self.rra(Mode::IndX, mem),
+
+            LDX_ZPY => self.ldx(Mode::ZPY, mem),
+            STX_ZPY => self.stx(Mode::ZPY, mem),
+            0x97 => self.aax(Mode::ZPY, mem),
+            0xB7 => self.lax(Mode::ZPY, mem),
+
+            STA_INDY => self.sta(Mode::NoPBIndY, mem),
+            0xD3 => self.dcp(Mode::NoPBIndY, mem),
+            0xF3 => self.isc(Mode::NoPBIndY, mem),
+            0x13 => self.slo(Mode::NoPBIndY, mem),
+            0x33 => self.rla(Mode::NoPBIndY, mem),
+            0x53 => self.sre(Mode::NoPBIndY, mem),
+            0x73 => self.rra(Mode::NoPBIndY, mem),
+
+            ROR_ACC => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.ror_acc();
+            }
+            LSR_ACC => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.lsr_acc();
+            }
+            ROL_ACC => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.rol_acc();
+            }
+            ASL_ACC => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.asl_acc();
+            }
+            RTS => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.rts(mem);
+            }
+            RTI => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.rti(mem);
+            }
+            SED => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.regs.flags.set_dec(true);
+            }
+            CLC => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.regs.flags.set_carry(false);
+            }
+            SEC => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.regs.flags.set_carry(true);
+            }
+            CLI => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.regs.flags.set_itr(false);
+            }
+            SEI => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.regs.flags.set_itr(true);
+            }
             CLV => {
                 mem.ld8(self.regs.pc.get_addr());
                 self.regs.flags.set_overflow(false);
@@ -961,15 +1041,6 @@ impl Cpu {
             0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89 | 0xC2 | 0xD4 | 0xE2
             | 0xF4 | 0x04 => {
                 self.ld8_pc_up(mem);
-            }
-            // TOP: Triple NOP
-            0x0C => {
-                self.address_mem(Mode::Abs, mem);
-            }
-            // The memory access here is necessary, since even though we don't use the u16 retrieved,
-            // we need to emulate the absolute X retrieval in case there is a page boundary cross
-            0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => {
-                self.address_mem(Mode::AbsX, mem);
             }
             BRK => self.brk(mem),
             TAX => {
@@ -1012,10 +1083,22 @@ impl Cpu {
                 mem.ld8(self.regs.pc.get_addr());
                 self.regs.sp = self.regs.x;
             }
-            PHA => self.push(self.regs.acc, mem),
-            PLA => self.pla(mem),
-            PHP => self.push(self.regs.flags.as_byte() | 0b10000, mem),
-            PLP => self.pull_status(mem),
+            PHA => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.push(self.regs.acc, mem);
+            }
+            PLA => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.pla(mem);
+            }
+            PHP => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.push(self.regs.flags.as_byte() | 0b10000, mem);
+            }
+            PLP => {
+                mem.ld8(self.regs.pc.get_addr());
+                self.pull_status(mem);
+            }
             BVS => self.generic_branch(self.regs.flags.overflow(), mem),
             BVC => self.generic_branch(!self.regs.flags.overflow(), mem),
             BMI => self.generic_branch(self.regs.flags.neg(), mem),

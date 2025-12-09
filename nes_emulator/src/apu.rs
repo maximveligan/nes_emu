@@ -32,7 +32,10 @@ impl Apu {
             0x10..=0x13 => {}
             0x15 => {}
             0x17 => {}
-            _ => panic!("Can't get here"),
+            _ => {
+                ()
+                // ???? what panic!("APU: Can't get here");
+            }
         }
     }
 

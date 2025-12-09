@@ -94,7 +94,7 @@ impl Txrom {
                 0b101 => unimplemented!(),
                 0b110 => unimplemented!(),
                 0b111 => unimplemented!(),
-                _ => panic!("Can't get here"),
+                _ => panic!("TXROM: Can't get here"),
             }
         }
     }

@@ -15,3 +15,4 @@ bitfield = "*"
 [dev-dependencies]
 serde_json = "*"
 serde = { version = "*" }
+utilities = { path = "./utilities/" }
