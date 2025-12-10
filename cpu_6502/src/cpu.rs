@@ -465,8 +465,6 @@ impl Cpu {
             self.incr_cc();
             let new_addr = self.regs.pc.get_addr();
             mem.ld8(new_addr);
-        } else {
-            mem.store(0, 0);
         }
     }
 
