@@ -77,7 +77,7 @@ hash_test! {
     ("1cf5bf323cdb11b2aac8cd23e41cb391b76916cc523732454a04bf98118bb84e", 182,
      "./tests/nes_test_roms/vbl_nmi_timing/1.frame_basics.nes",
      frame_basics),
-    ("e8f42f51deceecdb188c407dde9160ee2a4d10d6c80afdf966a6366a2807e1b1", 148,
+    ("e8f42f51deceecdb188c407dde9160ee2a4d10d6c80afdf966a6366a2807e1b1", 250,
      "./tests/nes_test_roms/vbl_nmi_timing/2.vbl_timing.nes",
      vbl_timing),
     ("1caeb37376173ff09101b6984f6c523bc153dc9eef7558e13e524a7688ff1669", 131,

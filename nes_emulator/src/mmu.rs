@@ -15,6 +15,9 @@ const PPU_END: u16 = 0x3FFF;
 const ROM_START: u16 = 0x4020;
 const ROM_END: u16 = 0xFFFF;
 
+pub const OAM_DMA: u16 = 0x4014;
+pub const OAM_DATA: u16 = 0x2004;
+
 pub struct Mmu {
     pub ppu: Ppu,
     pub apu: Apu,
@@ -23,10 +26,14 @@ pub struct Mmu {
     pub ctrl0: Controller,
     pub ctrl1: Controller,
     open_bus: u8,
+    pub oam_dma: Option<u8>,
+    _dmc_dma: bool,
+    pub cycles_elapsed: usize,
 }
 
 impl Memory for Mmu {
     fn ld8(&mut self, address: u16) -> u8 {
+        self.cycles_elapsed += 1;
         match address {
             WRAM_START..=WRAM_END => self.ram.load(address & 0x7FF),
             PPU_START..=PPU_END => {
@@ -61,10 +68,7 @@ impl Memory for Mmu {
             0x4015 => self.apu.load(address - 0x4000),
             0x4016 => self.ctrl0.ld8(),
             0x4017 => self.ctrl1.ld8(),
-            0x4000..=0x4014 | 0x4018..=0x401F => {
-                log::debug!("Tried to read from {:X}", address);
-                0
-            }
+            0x4000..=0x4014 | 0x4018..=0x401F => self.open_bus,
             ROM_START..=ROM_END => {
                 let mapper = self.mapper.borrow();
                 mapper.ld_prg(address)
@@ -79,9 +83,13 @@ impl Memory for Mmu {
     }
 
     fn store(&mut self, address: u16, val: u8) {
+        self.cycles_elapsed += 1;
         match address {
             WRAM_START..=WRAM_END => self.ram.store(address & 0x7FF, val),
             PPU_START..=PPU_END => self.ppu_store(address, val),
+            OAM_DMA => {
+                self.oam_dma = Some(val);
+            }
             0x4016 => self.ctrl_store(val),
             0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
             0x4018..=0x401F => {
@@ -129,6 +137,9 @@ impl Mmu {
             ctrl0: Controller::default(),
             ctrl1: Controller::default(),
             open_bus: 0,
+            cycles_elapsed: 0,
+            oam_dma: None,
+            _dmc_dma: false,
         }
     }
 

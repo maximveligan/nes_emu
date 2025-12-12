@@ -6,6 +6,7 @@ pub mod ppu;
 pub mod rom;
 pub mod state;
 
+use crate::mmu::OAM_DATA;
 use apu::Apu;
 use cpu_6502::cpu::Cpu;
 use mapper::Mapper;
@@ -76,10 +77,17 @@ impl NesEmulator {
     pub fn step(&mut self) -> bool {
         let cc = self.cpu.step(&mut self.mmu);
         self.mmu.ppu.emulate_cycles(cc);
+        self.mmu.cycles_elapsed = 0;
         if self.mmu.ppu.nmi_pending {
             self.cpu.proc_nmi(&mut self.mmu);
             self.mmu.ppu.nmi_pending = false;
         }
+
+        if let Some(val) = self.mmu.oam_dma {
+            self.cpu.dma(val, &mut self.mmu, OAM_DATA);
+            self.mmu.oam_dma = None;
+        }
+
         let draw_frame = self.mmu.ppu.frame_ready;
         if draw_frame {
             self.mmu.ppu.frame_ready = false;
