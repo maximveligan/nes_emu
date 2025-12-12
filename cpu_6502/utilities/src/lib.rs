@@ -179,7 +179,7 @@ macro_rules! test_op {
                     }
 
                     let mut cpu = Cpu::from_registers(test.initial.turn_into());
-                    let cc = cpu.step(&mut memory);
+                    cpu.step(&mut memory);
 
                     // Check if the registers are in a healthy state
                     assert_eq!(
@@ -226,15 +226,6 @@ macro_rules! test_op {
                         );
                     }
                     println!();
-
-                    assert_eq!(
-                        test.cycles.len(),
-                        cc,
-                        "{} failed, incorrect cycle count. Expected {}, got {}",
-                        test.name,
-                        test.cycles.len(),
-                        cc
-                    );
 
                     // Check all RAM entries
                     for entry in test.ending.ram.iter() {

@@ -97,8 +97,6 @@ bitfield! {
 
 pub struct Cpu {
     pub regs: Registers,
-    pub delta_cycles: usize,
-    total_cycles: usize,
 }
 
 #[derive(Clone)]
@@ -121,8 +119,6 @@ pub enum Mode {
 impl Cpu {
     pub fn new<M: Memory>(mem: &mut M) -> Cpu {
         let mut cpu = Cpu {
-            delta_cycles: 2,
-            total_cycles: 2,
             regs: Registers {
                 acc: 0,
                 x: 0,
@@ -137,16 +133,10 @@ impl Cpu {
     }
 
     pub fn from_registers(regs: Registers) -> Cpu {
-        Cpu {
-            delta_cycles: 0,
-            total_cycles: 0,
-            regs,
-        }
+        Cpu { regs }
     }
 
     pub fn reset<M: Memory>(&mut self, mem: &mut M) {
-        self.delta_cycles = 0;
-        self.total_cycles = 0;
         let addr = mem.ld16(RESET_VEC);
         self.regs.reset(addr);
     }
@@ -155,13 +145,8 @@ impl Cpu {
         let (new_low, overflowed) = low.overflowing_add(offset);
         if overflowed {
             mem.ld8((high as u16) << 8 | new_low as u16);
-            self.incr_cc();
         }
         ((high as u16) << 8 | (low as u16)) + offset as u16
-    }
-
-    fn incr_cc(&mut self) {
-        self.delta_cycles += 1;
     }
 
     fn address_mem<M: Memory>(&mut self, mode: Mode, mem: &mut M) -> u16 {
@@ -250,11 +235,24 @@ impl Cpu {
         }
     }
 
-    pub fn proc_nmi<M: Memory>(&mut self, mem: &mut M) {
-        let flags = self.regs.flags;
+    pub fn intr_handler<M: Memory>(&mut self, mem: &mut M, intr_vec: u16) {
+        // We read 2 bytes and discard, PC does NOT go up here
+        // Cycle 1 and 2
+        mem.ld8(self.regs.pc.get_addr());
+        mem.ld8(self.regs.pc.get_addr());
+        // Cycle 3 and 4
         self.push_pc(mem);
+
+        // Clear break flag
+        self.regs.flags.set_brk(false);
+        let flags = self.regs.flags;
+
+        // Cycle 5
         self.push(flags.as_byte(), mem);
-        self.regs.pc.set_addr(mem.ld16(NMI_VEC));
+
+        // Cycle 6 and 7
+        self.regs.pc.set_addr(mem.ld16(intr_vec));
+        self.regs.flags.set_itr(true);
     }
 
     fn read_op<M: Memory>(&mut self, mode: Mode, mem: &mut M) -> u8 {
@@ -262,13 +260,16 @@ impl Cpu {
         mem.ld8(addr)
     }
 
-    pub fn dma<M: Memory>(&mut self, high_nyb: u8, mem: &mut M, addr: u16) {
-        self.delta_cycles += 513 + (self.delta_cycles % 2);
+    pub fn dma<M: Memory>(&mut self, high_nyb: u8, mem: &mut M, addr: u16) -> bool {
+        // let off_cycle = self.delta_cycles % 2;
+
         let page_num = (high_nyb as u16) << 8;
         for address in page_num..=page_num + 0xFF {
             let tmp = mem.ld8(address);
             mem.store(addr, tmp);
         }
+        true
+        // off_cycle == 1
     }
 
     fn and<M: Memory>(&mut self, mode: Mode, mem: &mut M) {
@@ -450,12 +451,10 @@ impl Cpu {
             }
 
             if carry {
-                self.incr_cc();
                 mem.ld8((addr & 0xFF00) | overflow_low as u16);
             }
 
             self.regs.pc.add_signed(val as i8);
-            self.incr_cc();
         }
     }
 
@@ -747,23 +746,12 @@ impl Cpu {
         self.regs.flags.set_zero(val == 0);
     }
 
-    pub fn step<M: Memory>(&mut self, mem: &mut M) -> usize {
+    pub fn step<M: Memory>(&mut self, mem: &mut M) {
         let byte = self.ld8_pc_up(mem);
-        self.delta_cycles += CYCLES[byte as usize] as usize;
         self.execute_op(byte, mem);
         if log_enabled!(Level::Debug) {
-            debug!(
-                "INST: {:X} {:?} CYC:{}",
-                byte,
-                self.regs.clone(),
-                self.total_cycles
-            );
+            debug!("INST: {:X} {:?}", byte, self.regs.clone(),);
         }
-
-        self.total_cycles += self.delta_cycles as usize;
-        let tmp = self.delta_cycles;
-        self.delta_cycles = 0;
-        tmp
     }
 
     fn ld8_pc_up<M: Memory>(&mut self, mem: &mut M) -> u8 {

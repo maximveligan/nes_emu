@@ -9,6 +9,7 @@ pub mod state;
 use crate::mmu::OAM_DATA;
 use apu::Apu;
 use cpu_6502::cpu::Cpu;
+use cpu_6502::cpu_const::NMI_VEC;
 use mapper::Mapper;
 use mmu::Mmu;
 use ppu::Ppu;
@@ -42,16 +43,22 @@ impl NesEmulator {
         let mapper = Rc::new(RefCell::new(Mapper::from_rom(rom)));
         let mut mmu =
             Mmu::new(Apu::default(), Ppu::new(mapper.clone()), mapper);
-        NesEmulator {
-            cpu: Cpu::new(&mut mmu),
-            mmu: mmu,
-        }
+        let cpu = Cpu::new(&mut mmu);
+
+        // Creating a new CPU also loads the interrupt vector, which increments
+        // the cycle counter by 2, the ppu needs to catch up
+        mmu.ppu.emulate_cycles(mmu.get_cc());
+        mmu.reset_cc();
+
+        NesEmulator { mmu, cpu }
     }
 
     pub fn reset(&mut self) {
         self.mmu.mapper.borrow_mut().reset();
-        self.mmu.ppu.reset();
         self.cpu.reset(&mut self.mmu);
+        self.mmu.ppu.reset();
+        self.mmu.ppu.emulate_cycles(self.mmu.get_cc());
+        self.mmu.reset_cc();
     }
 
     pub fn get_state(&self) -> State {
@@ -75,16 +82,20 @@ impl NesEmulator {
     }
 
     pub fn step(&mut self) -> bool {
-        let cc = self.cpu.step(&mut self.mmu);
-        self.mmu.ppu.emulate_cycles(cc);
-        self.mmu.cycles_elapsed = 0;
+        self.cpu.step(&mut self.mmu);
+
+        self.mmu.ppu.emulate_cycles(self.mmu.get_cc());
+        self.mmu.reset_cc();
+
         if self.mmu.ppu.nmi_pending {
-            self.cpu.proc_nmi(&mut self.mmu);
+            self.cpu.intr_handler(&mut self.mmu, NMI_VEC);
             self.mmu.ppu.nmi_pending = false;
         }
 
         if let Some(val) = self.mmu.oam_dma {
-            self.cpu.dma(val, &mut self.mmu, OAM_DATA);
+            if self.cpu.dma(val, &mut self.mmu, OAM_DATA) {
+                self.mmu.incr_cc();
+            }
             self.mmu.oam_dma = None;
         }
 

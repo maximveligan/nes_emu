@@ -28,15 +28,16 @@ pub struct Mmu {
     open_bus: u8,
     pub oam_dma: Option<u8>,
     _dmc_dma: bool,
-    pub cycles_elapsed: usize,
+    cycles_elapsed: usize,
 }
 
 impl Memory for Mmu {
     fn ld8(&mut self, address: u16) -> u8 {
-        self.cycles_elapsed += 1;
-        match address {
+        let read = match address {
             WRAM_START..=WRAM_END => self.ram.load(address & 0x7FF),
             PPU_START..=PPU_END => {
+                self.ppu.emulate_cycles(self.cycles_elapsed);
+                self.reset_cc();
                 let ppu_reg = address & 0b111;
 
                 match ppu_reg {
@@ -73,7 +74,9 @@ impl Memory for Mmu {
                 let mapper = self.mapper.borrow();
                 mapper.ld_prg(address)
             }
-        }
+        };
+        self.incr_cc();
+        read
     }
 
     fn ld16(&mut self, address: u16) -> u16 {
@@ -83,10 +86,13 @@ impl Memory for Mmu {
     }
 
     fn store(&mut self, address: u16, val: u8) {
-        self.cycles_elapsed += 1;
         match address {
             WRAM_START..=WRAM_END => self.ram.store(address & 0x7FF, val),
-            PPU_START..=PPU_END => self.ppu_store(address, val),
+            PPU_START..=PPU_END => {
+                self.ppu.emulate_cycles(self.cycles_elapsed);
+                self.reset_cc();
+                self.ppu_store(address, val);
+            }
             OAM_DMA => {
                 self.oam_dma = Some(val);
             }
@@ -103,6 +109,7 @@ impl Memory for Mmu {
                 self.mapper.borrow_mut().store_prg(address, val)
             }
         }
+        self.incr_cc();
     }
 }
 
@@ -151,5 +158,17 @@ impl Mmu {
     fn ctrl_store(&mut self, val: u8) {
         self.ctrl0.store(val);
         self.ctrl1.store(val);
+    }
+
+    pub fn incr_cc(&mut self) {
+        self.cycles_elapsed += 1;
+    }
+
+    pub fn reset_cc(&mut self) {
+        self.cycles_elapsed = 0;
+    }
+
+    pub fn get_cc(&self) -> usize {
+        self.cycles_elapsed
     }
 }
