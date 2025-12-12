@@ -81,6 +81,10 @@ pub struct Ppu {
     fine_x: u8,
     // Used to force an nmi when in vblank and a write to CTRL enables NMI
     trip_nmi: bool,
+    // When an NMI is tripped, the NMI shouldn't execute until after the NEXT
+    // instruction. This flag is used to differentiate between a regular NMI
+    // and a forced NMI.
+    pub queued_nmi: bool,
     // Used to correctly emulate the race condition when reading from STATUS
     // disables NMI for that frame
     vblank_off: bool,
@@ -112,6 +116,7 @@ impl Ppu {
             odd_frame: false,
             frame_ready: false,
             nmi_pending: false,
+            queued_nmi: false,
         }
     }
 
@@ -223,10 +228,7 @@ impl Ppu {
 
     fn write_ctrl(&mut self, val: u8) {
         let ctrl = Ctrl(val);
-        if !self.regs.ctrl.nmi_on() && ctrl.nmi_on() {
-            self.trip_nmi = true;
-        }
-
+        self.trip_nmi = !self.regs.ctrl.nmi_on() && ctrl.nmi_on();
         self.regs.ctrl = ctrl;
         self.t_addr.set_nt(self.regs.ctrl.nametable());
     }
@@ -525,7 +527,7 @@ impl Ppu {
         };
 
         // This is the logic for forcing nmi
-        self.nmi_pending |=
+        self.queued_nmi |=
             self.trip_nmi && self.regs.status.vblank() && !self.vblank_off;
 
         self.trip_nmi = false;

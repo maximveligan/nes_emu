@@ -90,6 +90,13 @@ impl NesEmulator {
         if self.mmu.ppu.nmi_pending {
             self.cpu.intr_handler(&mut self.mmu, NMI_VEC);
             self.mmu.ppu.nmi_pending = false;
+        } else if self.mmu.ppu.queued_nmi {
+            self.cpu.step(&mut self.mmu);
+            self.mmu.ppu.emulate_cycles(self.mmu.get_cc());
+            self.mmu.reset_cc();
+            self.cpu.intr_handler(&mut self.mmu, NMI_VEC);
+            self.mmu.ppu.nmi_pending = false;
+            self.mmu.ppu.queued_nmi = false;
         }
 
         if let Some(val) = self.mmu.oam_dma {
