@@ -3,6 +3,7 @@ use config::{ButtonLayout, Config};
 use glfw::{Action, Context, Glfw, GlfwReceiver, Key, PWindow, WindowEvent, fail_on_errors};
 use log::Level;
 use nes_emu::{NesEmulator, controller::Button, rom::load_rom};
+use sha3::{Digest, Sha3_256};
 use std::{
     collections::HashMap, env, error::Error, fs::File, io::Read, path::PathBuf, str, time::Instant,
 };
@@ -29,6 +30,7 @@ struct NesFrontEnd {
     state_path: PathBuf,
     vsync: bool,
     window: PWindow,
+    frame_count: usize,
 }
 
 impl NesFrontEnd {
@@ -80,6 +82,7 @@ impl NesFrontEnd {
                 vsync: cfg.vsync,
                 glfw,
                 window,
+                frame_count: 0,
             },
             events,
         ))
@@ -87,6 +90,13 @@ impl NesFrontEnd {
 
     fn next_frame(&mut self) -> &[u8] {
         self.nes.next_frame()
+    }
+
+    fn frame_info(&self) -> (String, usize) {
+        (
+            hex::encode(Sha3_256::digest(self.nes.cur_frame())),
+            self.frame_count,
+        )
     }
 
     fn set_ctrl_state(&mut self, key: Key, action: Action) {
@@ -152,6 +162,10 @@ impl NesFrontEnd {
                 }
                 &EmuControl::SaveState => self.save_state(),
                 &EmuControl::LoadState => self.load_state(),
+                &EmuControl::Hash => {
+                    println!("{:?}", self.frame_info());
+                    Ok(())
+                }
                 _ => Ok(()),
             }
         } else {
@@ -207,6 +221,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         if nes_fe.uncapped || (Instant::now() - ts).as_micros() > FPS_TIMER {
+            nes_fe.frame_count += 1;
             ogl::update_texture(texture, nes_fe.next_frame());
             ts = Instant::now();
             nes_fe.window.swap_buffers();

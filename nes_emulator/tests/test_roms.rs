@@ -85,5 +85,11 @@ hash_test! {
      vbl_set_time),
     ("2a64667e1cf639022a8c7c1821132ad2072bb1e12f4b76f0d8ddf16ffa0a05c1", 185,
      "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
-     vbl_clear_time)
+     vbl_clear_time),
+    ("807c87797a98f160664e28a62e8d009560d781a6dbc384dc4f7e243994954fc0", 171,
+     "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/04-nmi_control.nes",
+     nmi_control),
+    ("e83c004cb2aacd68eb2d38cf9166e268483074ed57b40c68478b86c5a3022809", 208,
+     "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes",
+     nmi_on_timing)
 }

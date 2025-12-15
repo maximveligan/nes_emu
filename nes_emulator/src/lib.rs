@@ -47,8 +47,6 @@ impl NesEmulator {
 
         // Creating a new CPU also loads the interrupt vector, which increments
         // the cycle counter by 2, the ppu needs to catch up
-        mmu.ppu.emulate_cycles(mmu.get_cc());
-        mmu.reset_cc();
 
         NesEmulator { mmu, cpu }
     }
@@ -57,8 +55,6 @@ impl NesEmulator {
         self.mmu.mapper.borrow_mut().reset();
         self.cpu.reset(&mut self.mmu);
         self.mmu.ppu.reset();
-        self.mmu.ppu.emulate_cycles(self.mmu.get_cc());
-        self.mmu.reset_cc();
     }
 
     pub fn get_state(&self) -> State {
@@ -84,16 +80,11 @@ impl NesEmulator {
     pub fn step(&mut self) -> bool {
         self.cpu.step(&mut self.mmu);
 
-        self.mmu.ppu.emulate_cycles(self.mmu.get_cc());
-        self.mmu.reset_cc();
-
         if self.mmu.ppu.nmi_pending {
             self.cpu.intr_handler(&mut self.mmu, NMI_VEC);
             self.mmu.ppu.nmi_pending = false;
         } else if self.mmu.ppu.queued_nmi {
             self.cpu.step(&mut self.mmu);
-            self.mmu.ppu.emulate_cycles(self.mmu.get_cc());
-            self.mmu.reset_cc();
             self.cpu.intr_handler(&mut self.mmu, NMI_VEC);
             self.mmu.ppu.nmi_pending = false;
             self.mmu.ppu.queued_nmi = false;
@@ -101,7 +92,7 @@ impl NesEmulator {
 
         if let Some(val) = self.mmu.oam_dma {
             if self.cpu.dma(val, &mut self.mmu, OAM_DATA) {
-                self.mmu.incr_cc();
+                self.mmu.ppu.emulate_cycles(1);
             }
             self.mmu.oam_dma = None;
         }
@@ -117,6 +108,10 @@ impl NesEmulator {
 
     pub fn next_frame(&mut self) -> &[u8] {
         while !self.step() {}
+        self.mmu.ppu.get_buffer()
+    }
+
+    pub fn cur_frame(&self) -> &[u8] {
         self.mmu.ppu.get_buffer()
     }
 

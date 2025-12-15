@@ -31,6 +31,7 @@ pub enum EmuControl {
     SpeedSwap,
     SaveState,
     LoadState,
+    Hash,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -41,6 +42,7 @@ pub struct EmuControlLayout {
     stop: String,
     save_state: String,
     load_state: String,
+    hash: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -125,6 +127,7 @@ impl EmuControlLayout {
         emu_ctrl_map.insert(str_to_keycode(&self.speed_swap)?, EmuControl::SpeedSwap);
         emu_ctrl_map.insert(str_to_keycode(&self.save_state)?, EmuControl::SaveState);
         emu_ctrl_map.insert(str_to_keycode(&self.load_state)?, EmuControl::LoadState);
+        emu_ctrl_map.insert(str_to_keycode(&self.hash)?, EmuControl::Hash);
         Ok(emu_ctrl_map)
     }
 }
@@ -166,6 +169,7 @@ impl Config {
             reset: "R".to_string(),
             save_state: "E".to_string(),
             load_state: "Q".to_string(),
+            hash: "H".to_string(),
         };
 
         let overscan = Overscan { top: 8, bottom: 8 };
