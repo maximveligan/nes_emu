@@ -365,7 +365,9 @@ impl Ppu {
                 }
             }
             257 => {
-                self.get_sprites();
+                if !self.is_prerender() {
+                    self.get_sprites();
+                }
                 self.regs.oam_addr = 0;
             }
             258..=320 => {
@@ -407,7 +409,7 @@ impl Ppu {
     ) -> (u8, Option<Priority>) {
         for sprite in self.main_oam.iter() {
             if !self.regs.mask.show_sprites()
-                || (sprite.x < 8 && !self.regs.mask.left8_sprite())
+                || (x < 8 && !self.regs.mask.left8_sprite())
                 || !sprite.in_bounding_box(x)
             {
                 continue;
@@ -427,7 +429,7 @@ impl Ppu {
                 continue;
             }
 
-            if sprite.index == 0 && bg_opaque && sprite.x != 255 {
+            if sprite.index == 0 && bg_opaque && x != 255 {
                 self.regs.status.set_sprite_0_hit(true);
             }
 
@@ -497,7 +499,7 @@ impl Ppu {
     }
 
     fn bg_pixel(&self, x: u8) -> u8 {
-        if (x <= 8 && !self.regs.mask.left8_bg()) || !self.regs.mask.show_bg() {
+        if (x < 8 && !self.regs.mask.left8_bg()) || !self.regs.mask.show_bg() {
             return 0;
         }
         let bg_off = 15 - self.fine_x;

@@ -37,7 +37,9 @@ impl Sprite {
     }
 
     pub fn in_bounding_box(&self, x: u8) -> bool {
-        !(self.x > x || self.x + 8 <= x)
+        let x = x as u16;
+        let sprite_x = self.x as u16;
+        x >= sprite_x && x < sprite_x + 8
     }
 
     pub fn get_pt_address(&self, ctrl: &Ctrl, y: u16) -> u16 {
