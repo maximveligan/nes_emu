@@ -21,6 +21,9 @@ const SPRITE_NUM: usize = 64;
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 const PRERENDER: u16 = 261;
+// The PPU's vblank flag reaches the CPU-facing NMI line after several dots.
+const NMI_EDGE_DELAY_DOTS: u8 = 5;
+const RENDERING_SIGNAL_DELAY_DOTS: u8 = 1;
 
 pub const PALETTE: [u32; 64] = [
     0x808080, 0x003DA6, 0x0012B0, 0x440096, 0xA1005E, 0xC70028, 0xBA0600,
@@ -52,6 +55,9 @@ pub struct PpuState {
     t_addr: VramAddr,
     trip_nmi: bool,
     vblank_off: bool,
+    nmi_delay: u8,
+    rendering_for_skip: bool,
+    rendering_delay: u8,
     at_entry: u8,
 }
 
@@ -59,6 +65,9 @@ pub struct Ppu {
     pub regs: PRegisters,
     pub frame_ready: bool,
     pub nmi_pending: bool,
+    nmi_delay: u8,
+    rendering_for_skip: bool,
+    rendering_delay: u8,
     vram: Vram,
     // multiply by 3 to account for r g b
     screen_buff: Box<[u8]>,
@@ -116,6 +125,9 @@ impl Ppu {
             odd_frame: false,
             frame_ready: false,
             nmi_pending: false,
+            nmi_delay: 0,
+            rendering_for_skip: false,
+            rendering_delay: 0,
             queued_nmi: false,
         }
     }
@@ -132,6 +144,9 @@ impl Ppu {
             t_addr: self.t_addr,
             trip_nmi: self.trip_nmi,
             vblank_off: self.vblank_off,
+            nmi_delay: self.nmi_delay,
+            rendering_for_skip: self.rendering_for_skip,
+            rendering_delay: self.rendering_delay,
             at_entry: self.at_entry,
         }
     }
@@ -147,12 +162,18 @@ impl Ppu {
         self.t_addr = ppu_state.t_addr;
         self.trip_nmi = ppu_state.trip_nmi;
         self.vblank_off = ppu_state.vblank_off;
+        self.nmi_delay = ppu_state.nmi_delay;
+        self.rendering_for_skip = ppu_state.rendering_for_skip;
+        self.rendering_delay = ppu_state.rendering_delay;
         self.at_entry = ppu_state.at_entry;
     }
 
     pub fn reset(&mut self) {
         self.trip_nmi = false;
         self.vblank_off = false;
+        self.nmi_delay = 0;
+        self.rendering_for_skip = false;
+        self.rendering_delay = 0;
         self.regs = PRegisters::default();
         self.vram.reset();
         self.screen_buff = Box::new([0; SCREEN_WIDTH * 3 * SCREEN_HEIGHT]);
@@ -195,7 +216,25 @@ impl Ppu {
     fn read_ppustatus(&mut self) -> u8 {
         self.write_latch = false;
         let tmp = self.regs.status.load();
+        if self.scanline == 241 && self.cc <= 3 {
+            log::debug!(
+                "PPUSTATUS read near vblank: scanline={} dot={} value={:02X} nmi_pending={}",
+                self.scanline,
+                self.cc,
+                tmp,
+                self.nmi_pending,
+            );
+        }
         self.regs.status.set_vblank(false);
+        // A status read in the vblank race window can cancel the NMI edge.
+        if self.nmi_delay > 0 && self.scanline == 241 && self.cc <= 3 {
+            log::debug!(
+                "PPUSTATUS read cancels pending NMI edge: scanline={} dot={}",
+                self.scanline,
+                self.cc,
+            );
+            self.nmi_delay = 0;
+        }
         self.vblank_off = true;
         tmp
     }
@@ -214,7 +253,26 @@ impl Ppu {
                 self.write_ctrl(val);
             }
             1 => {
+                let old_bg = self.regs.mask.show_bg();
+                let old_rendering = old_bg || self.regs.mask.show_sprites();
                 self.regs.mask.store(val);
+                let new_rendering =
+                    self.regs.mask.show_bg() || self.regs.mask.show_sprites();
+                if new_rendering != self.rendering_for_skip {
+                    self.rendering_delay = RENDERING_SIGNAL_DELAY_DOTS;
+                } else {
+                    self.rendering_delay = 0;
+                }
+                log::debug!(
+                    "PPUMASK write: scanline={} dot={} value={:02X} old_bg={} new_bg={} old_rendering={} new_rendering={}",
+                    self.scanline,
+                    self.cc,
+                    val,
+                    old_bg,
+                    self.regs.mask.show_bg(),
+                    old_rendering,
+                    new_rendering,
+                );
             }
             2 => (),
             3 => self.write_oamaddr(val),
@@ -229,6 +287,29 @@ impl Ppu {
     fn write_ctrl(&mut self, val: u8) {
         let ctrl = Ctrl(val);
         self.trip_nmi = !self.regs.ctrl.nmi_on() && ctrl.nmi_on();
+        if !ctrl.nmi_on()
+            && self.nmi_delay > 0
+            && self.scanline == 241
+            && self.cc <= 3
+        {
+            log::debug!(
+                "PPUCTRL write cancels pending NMI edge: scanline={} dot={}",
+                self.scanline,
+                self.cc,
+            );
+            self.nmi_delay = 0;
+        }
+        log::debug!(
+            "PPUCTRL write: scanline={} dot={} value={:02X} old_nmi={} new_nmi={} vblank={} vblank_off={} trip_nmi={}",
+            self.scanline,
+            self.cc,
+            val,
+            self.regs.ctrl.nmi_on(),
+            ctrl.nmi_on(),
+            self.regs.status.vblank(),
+            self.vblank_off,
+            self.trip_nmi,
+        );
         self.regs.ctrl = ctrl;
         self.t_addr.set_nt(self.regs.ctrl.nametable());
     }
@@ -473,7 +554,18 @@ impl Ppu {
 
     fn step_cc(&mut self) {
         self.cc += 1;
-        if self.odd_frame && self.is_prerender() && (self.cc == 340) {
+        if self.odd_frame && self.is_prerender() && self.cc == 340 {
+            log::debug!(
+                "Odd-frame skip decision: scanline={} dot=339 rendering_enabled={}",
+                self.scanline,
+                self.rendering_for_skip,
+            );
+        }
+        if self.odd_frame
+            && self.is_prerender()
+            && self.cc == 340
+            && self.rendering_for_skip
+        {
             self.scanline = 0;
             self.cc = 0;
             self.odd_frame = !self.odd_frame;
@@ -481,15 +573,25 @@ impl Ppu {
             self.cc = 0;
             self.scanline += 1;
             if self.scanline > PRERENDER {
-                if self.regs.mask.show_bg() {
-                    self.odd_frame = !self.odd_frame;
-                }
+                self.odd_frame = !self.odd_frame;
                 self.scanline = 0;
             }
         }
     }
 
     fn step(&mut self) {
+        if self.nmi_delay > 0 {
+            self.nmi_delay -= 1;
+            if self.nmi_delay == 0 {
+                self.nmi_pending = true;
+                log::debug!(
+                    "NMI delay elapsed: scanline={} dot={} nmi_pending=true",
+                    self.scanline,
+                    self.cc,
+                );
+            }
+        }
+
         match self.scanline {
             0..=239 => {
                 self.step_sprites();
@@ -502,11 +604,22 @@ impl Ppu {
                 }
             }
             241 => {
-                if self.cc == 1 && !self.vblank_off {
-                    self.regs.status.set_vblank(true);
-                    if self.regs.ctrl.nmi_on() {
-                        self.nmi_pending = true;
+                if self.cc == 1 {
+                    if !self.vblank_off {
+                        self.regs.status.set_vblank(true);
                     }
+                    if !self.vblank_off && self.regs.ctrl.nmi_on() {
+                        self.nmi_delay = NMI_EDGE_DELAY_DOTS;
+                    }
+                    log::debug!(
+                        "VBLANK edge: scanline={} dot={} suppressed={} nmi_enabled={} nmi_delay={} nmi_pending={}",
+                        self.scanline,
+                        self.cc,
+                        self.vblank_off,
+                        self.regs.ctrl.nmi_on(),
+                        self.nmi_delay > 0,
+                        self.nmi_pending,
+                    );
                 }
             }
             242..=260 => (),
@@ -527,13 +640,31 @@ impl Ppu {
         };
 
         // This is the logic for forcing nmi
-        self.queued_nmi |=
+        let force_nmi =
             self.trip_nmi && self.regs.status.vblank() && !self.vblank_off;
+        if force_nmi {
+            log::debug!(
+                "Queue forced NMI: scanline={} dot={} vblank={} vblank_off={}",
+                self.scanline,
+                self.cc,
+                self.regs.status.vblank(),
+                self.vblank_off,
+            );
+        }
+        self.queued_nmi |= force_nmi;
 
         self.trip_nmi = false;
         self.vblank_off = false;
 
         self.step_cc();
+
+        if self.rendering_delay > 0 {
+            self.rendering_delay -= 1;
+            if self.rendering_delay == 0 {
+                self.rendering_for_skip =
+                    self.regs.mask.show_bg() || self.regs.mask.show_sprites();
+            }
+        }
     }
 
     pub fn emulate_cycles(&mut self, cyc_elapsed: usize) {

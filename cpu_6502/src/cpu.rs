@@ -260,16 +260,21 @@ impl Cpu {
         mem.ld8(addr)
     }
 
-    pub fn dma<M: Memory>(&mut self, high_nyb: u8, mem: &mut M, addr: u16) -> bool {
-        // let off_cycle = self.delta_cycles % 2;
+    pub fn dma<M: Memory>(&mut self, high_nyb: u8, mem: &mut M, addr: u16, needs_alignment: bool) {
+        // The DMA halt cycle repeats the CPU's next read. The PC already
+        // points at the next opcode because the $4014 write completed the
+        // previous instruction.
+        let halt_addr = self.regs.pc.get_addr();
+        mem.ld8(halt_addr);
+        if needs_alignment {
+            mem.ld8(halt_addr);
+        }
 
         let page_num = (high_nyb as u16) << 8;
         for address in page_num..=page_num + 0xFF {
             let tmp = mem.ld8(address);
             mem.store(addr, tmp);
         }
-        true
-        // off_cycle == 1
     }
 
     fn and<M: Memory>(&mut self, mode: Mode, mem: &mut M) {

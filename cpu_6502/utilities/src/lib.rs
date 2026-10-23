@@ -159,7 +159,6 @@ macro_rules! test_op {
     ( $(($test_name:ident, $path:literal)),* ) => {
         $(
             #[test]
-            #[ignore]
             fn $test_name() {
                 let path = format!("./tests/65x02/nes6502/v1/{}.json", $path);
                 println!("{}", path);

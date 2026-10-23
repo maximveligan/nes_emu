@@ -27,6 +27,9 @@ pub struct Mmu {
     pub ctrl1: Controller,
     open_bus: u8,
     pub oam_dma: Option<u8>,
+    pub oam_dma_needs_alignment: bool,
+    // Deterministic starting phase for the CPU/APU get-put cycle sequence.
+    cpu_cycle_is_get: bool,
     _dmc_dma: bool,
 }
 
@@ -72,7 +75,7 @@ impl Memory for Mmu {
                 mapper.ld_prg(address)
             }
         };
-        self.ppu.emulate_cycles(1);
+        self.tick_cpu_cycle();
         read
     }
 
@@ -90,6 +93,9 @@ impl Memory for Mmu {
             }
             OAM_DMA => {
                 self.oam_dma = Some(val);
+                // If the $4014 write is on a put cycle, DMA's halt cycle is
+                // followed by an alignment read before the first DMA get.
+                self.oam_dma_needs_alignment = !self.cpu_cycle_is_get;
             }
             0x4016 => self.ctrl_store(val),
             0x4000..=0x4017 => self.apu.store(address - 0x4000, val),
@@ -104,7 +110,7 @@ impl Memory for Mmu {
                 self.mapper.borrow_mut().store_prg(address, val)
             }
         }
-        self.ppu.emulate_cycles(1);
+        self.tick_cpu_cycle();
     }
 }
 
@@ -140,8 +146,15 @@ impl Mmu {
             ctrl1: Controller::default(),
             open_bus: 0,
             oam_dma: None,
+            oam_dma_needs_alignment: false,
+            cpu_cycle_is_get: true,
             _dmc_dma: false,
         }
+    }
+
+    fn tick_cpu_cycle(&mut self) {
+        self.ppu.emulate_cycles(1);
+        self.cpu_cycle_is_get = !self.cpu_cycle_is_get;
     }
 
     fn ppu_store(&mut self, address: u16, val: u8) {

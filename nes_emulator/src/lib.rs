@@ -91,10 +91,10 @@ impl NesEmulator {
         }
 
         if let Some(val) = self.mmu.oam_dma {
-            if self.cpu.dma(val, &mut self.mmu, OAM_DATA) {
-                self.mmu.ppu.emulate_cycles(1);
-            }
+            let needs_alignment = self.mmu.oam_dma_needs_alignment;
+            self.cpu.dma(val, &mut self.mmu, OAM_DATA, needs_alignment);
             self.mmu.oam_dma = None;
+            self.mmu.oam_dma_needs_alignment = false;
         }
 
         let draw_frame = self.mmu.ppu.frame_ready;

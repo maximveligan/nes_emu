@@ -91,5 +91,20 @@ hash_test! {
      nmi_control),
     ("e83c004cb2aacd68eb2d38cf9166e268483074ed57b40c68478b86c5a3022809", 208,
      "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes",
-     nmi_on_timing)
+     nmi_on_timing),
+    ("84c4f8b49bd80bce35929a93248ebe49d5648b0b38b0a90a3aa1aa3bce0c42c1", 1000,
+     "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/05-nmi_timing.nes",
+     nmi_timing),
+    ("e277e2567795b4b0abd70d1ea542c8bc65464f81f0481297d9171f5c06185457", 1000,
+     "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/06-suppression.nes",
+     suppression),
+    ("023bd5d75bbef503124259c5d979e0d87c2c275c86cc75abd1501ed20a9c0729", 1000,
+     "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/08-nmi_off_timing.nes",
+     nmi_off_timing),
+    ("f48a2f095a2848d28607d6c5183361fced08087eb02f2d4f43ca056321667760", 1000,
+     "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/09-even_odd_frames.nes",
+     even_odd_frames),
+    ("03ea179ddf072cc0c33a0631045f3ded02236258ec345672cafcec9eb34c7435", 1000,
+     "./tests/nes_test_roms/ppu_vbl_nmi/rom_singles/10-even_odd_timing.nes",
+     even_odd_timing)
 }
