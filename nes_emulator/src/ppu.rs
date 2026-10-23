@@ -59,6 +59,9 @@ pub struct PpuState {
     rendering_for_skip: bool,
     rendering_delay: u8,
     at_entry: u8,
+    oam_eval_n: u8,
+    oam_eval_m: u8,
+    oam_eval_latch: u8,
 }
 
 pub struct Ppu {
@@ -74,6 +77,12 @@ pub struct Ppu {
     oam: [u8; 256],
     tmp_oam: Vec<Sprite>,
     main_oam: Vec<Sprite>,
+    // Sprite evaluation walks primary OAM over dots 65-256. `n` selects the
+    // sprite and `m` selects its byte; odd dots read OAM and even dots
+    // process the latched byte.
+    oam_eval_n: u8,
+    oam_eval_m: u8,
+    oam_eval_latch: u8,
     cc: u16,
     scanline: u16,
     // Internal registers
@@ -115,6 +124,9 @@ impl Ppu {
             oam: [0; 256],
             tmp_oam: Vec::with_capacity(8),
             main_oam: Vec::with_capacity(8),
+            oam_eval_n: 0,
+            oam_eval_m: 0,
+            oam_eval_latch: 0,
             cc: 0,
             scanline: 0,
             write_latch: false,
@@ -148,6 +160,9 @@ impl Ppu {
             rendering_for_skip: self.rendering_for_skip,
             rendering_delay: self.rendering_delay,
             at_entry: self.at_entry,
+            oam_eval_n: self.oam_eval_n,
+            oam_eval_m: self.oam_eval_m,
+            oam_eval_latch: self.oam_eval_latch,
         }
     }
 
@@ -166,6 +181,9 @@ impl Ppu {
         self.rendering_for_skip = ppu_state.rendering_for_skip;
         self.rendering_delay = ppu_state.rendering_delay;
         self.at_entry = ppu_state.at_entry;
+        self.oam_eval_n = ppu_state.oam_eval_n;
+        self.oam_eval_m = ppu_state.oam_eval_m;
+        self.oam_eval_latch = ppu_state.oam_eval_latch;
     }
 
     pub fn reset(&mut self) {
@@ -180,6 +198,9 @@ impl Ppu {
         self.oam = [0; 256];
         self.tmp_oam = Vec::with_capacity(8);
         self.main_oam = Vec::with_capacity(8);
+        self.oam_eval_n = 0;
+        self.oam_eval_m = 0;
+        self.oam_eval_latch = 0;
         self.cc = 0;
         self.scanline = 0;
         self.write_latch = false;
@@ -356,49 +377,118 @@ impl Ppu {
     }
 
     fn step_sprites(&mut self) {
+        let rendering_enabled =
+            self.regs.mask.show_bg() || self.regs.mask.show_sprites();
         match self.cc {
             1 => {
                 self.tmp_oam.clear();
+                self.oam_eval_n = 0;
+                self.oam_eval_m = 0;
+                self.oam_eval_latch = 0;
                 if self.is_prerender() {
                     self.regs.status.set_sprite_o_f(false);
                     self.regs.status.set_sprite_0_hit(false);
                 }
             }
-            257 => {
-                if !self.is_prerender() {
-                    self.get_sprites();
-                }
+            65..=256 if !self.is_prerender() => {
+                self.step_sprite_evaluation();
+            }
+            257 if rendering_enabled => {
                 self.regs.oam_addr = 0;
             }
-            258..=320 => {
+            258..=320 if rendering_enabled => {
                 self.regs.oam_addr = 0;
+                let fetch_dot = (self.cc - 257) % 8;
+                let sprite_index = ((self.cc - 257) / 8) as usize;
+                if let Some(sprite) = self.tmp_oam.get_mut(sprite_index) {
+                    if fetch_dot == 4 || fetch_dot == 6 {
+                        let address = sprite
+                            .get_pt_address(&self.regs.ctrl, self.scanline);
+                        if fetch_dot == 4 {
+                            sprite.low_byte = self.vram.ld8(address);
+                        } else {
+                            sprite.high_byte = self.vram.ld8(address + 8);
+                        }
+                    }
+                }
             }
             321 => {
                 self.main_oam = self.tmp_oam.clone();
-                for sprite in self.main_oam.iter_mut() {
-                    let address =
-                        sprite.get_pt_address(&self.regs.ctrl, self.scanline);
-                    sprite.low_byte = self.vram.ld8(address);
-                    sprite.high_byte = self.vram.ld8(address + 8);
-                }
             }
             _ => (),
         }
     }
 
-    fn get_sprites(&mut self) {
-        self.tmp_oam.clear();
-        for sprite_index in 0..SPRITE_NUM {
-            if self.tmp_oam.len() == 8 {
-                self.regs.status.set_sprite_o_f(true);
-                return;
+    fn step_sprite_evaluation(&mut self) {
+        if !self.regs.mask.show_bg() && !self.regs.mask.show_sprites() {
+            return;
+        }
+
+        // Evaluation reads primary OAM on odd dots and processes that byte on
+        // the following even dot.
+        if self.cc % 2 == 1 {
+            if (self.oam_eval_n as usize) < SPRITE_NUM {
+                let oam_index =
+                    self.oam_eval_n as usize * 4 + self.oam_eval_m as usize;
+                self.oam_eval_latch = self.oam[oam_index];
             }
-            let sprite_y = self.oam[sprite_index * 4] as u16;
-            if sprite_y <= self.scanline
-                && sprite_y + self.regs.ctrl.sprite_size() > self.scanline
-            {
-                self.tmp_oam.push(Sprite::new(sprite_index, &self.oam));
+            return;
+        }
+
+        if self.oam_eval_n as usize >= SPRITE_NUM {
+            return;
+        }
+
+        let in_range = (self.oam_eval_latch as u16) <= self.scanline
+            && (self.oam_eval_latch as u16 + self.regs.ctrl.sprite_size())
+                > self.scanline;
+
+        // Finish copying a selected sprite even if its Y byte filled the
+        // eighth slot. Overflow evaluation begins at the next sprite.
+        let copying_selected_sprite = self.oam_eval_m != 0
+            && self.tmp_oam.last().is_some_and(|sprite| {
+                sprite.index == self.oam_eval_n
+            });
+        if copying_selected_sprite {
+            if let Some(sprite) = self.tmp_oam.last_mut() {
+                sprite.set_oam_byte(self.oam_eval_m, self.oam_eval_latch);
             }
+            if self.oam_eval_m == 3 {
+                self.oam_eval_n += 1;
+                self.oam_eval_m = 0;
+            } else {
+                self.oam_eval_m += 1;
+            }
+            return;
+        }
+
+        if self.tmp_oam.len() < 8 {
+            if in_range {
+                self.tmp_oam.push(Sprite::with_y(
+                    self.oam_eval_n as usize,
+                    self.oam_eval_latch,
+                ));
+                self.oam_eval_m = 1;
+            } else {
+                self.oam_eval_n += 1;
+            }
+            return;
+        }
+
+        // After eight sprites, the PPU keeps scanning. The first extra
+        // in-range value sets overflow. On misses, n and m advance
+        // independently, reproducing the diagonal OAM scan bug.
+        if in_range {
+            self.regs.status.set_sprite_o_f(true);
+            if self.oam_eval_m == 3 {
+                self.oam_eval_n += 1;
+                self.oam_eval_m = 0;
+            } else {
+                self.oam_eval_m += 1;
+            }
+        } else {
+            self.oam_eval_n += 1;
+            self.oam_eval_m = (self.oam_eval_m + 1) & 3;
         }
     }
 

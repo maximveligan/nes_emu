@@ -24,6 +24,27 @@ bitfield! {
 }
 
 impl Sprite {
+    pub fn with_y(index: usize, y: u8) -> Sprite {
+        Sprite {
+            index: index as u8,
+            x: 0,
+            y,
+            pt_index: 0,
+            attributes: SpriteAttr(0),
+            low_byte: 0,
+            high_byte: 0,
+        }
+    }
+
+    pub fn set_oam_byte(&mut self, byte_index: u8, value: u8) {
+        match byte_index {
+            1 => self.pt_index = value,
+            2 => self.attributes = SpriteAttr(value),
+            3 => self.x = value,
+            _ => unreachable!("sprite evaluation only copies bytes 1-3 here"),
+        }
+    }
+
     pub fn new(index: usize, oam: &[u8; 256]) -> Sprite {
         Sprite {
             index: index as u8,
