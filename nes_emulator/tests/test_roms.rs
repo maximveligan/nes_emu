@@ -35,6 +35,15 @@ macro_rules! hash_test {
 }
 
 hash_test! {
+    ("997c4d00397e4179dd43e1146a7eed756fedba7ea405f5e7faa5f0e7b2ef82b0", 2400,
+     "./tests/nes_test_roms/oam_stress/oam_stress.nes",
+     oam_stress),
+    ("e9f600fd64251c4b3406c43b29bbc9063beb66cd794087f72dc798c8cb5f478b", 300,
+     "./tests/nes_test_roms/blargg_ppu_tests_2005.09.15b/sprite_ram.nes",
+     sprite_ram),
+    ("0400ded1871351ea4fc54dff6facd3fcfdab1f28e93710421f7cda2dce1688d5", 300,
+     "./tests/nes_test_roms/oam_read/oam_read.nes",
+     oam_read),
     ("a96ed5458e27b41e7b87dc9d77cdc62cdcf2762bacf9183e4acb4fd09a1b8b31", 54,
      "./tests/nes_test_roms/sprite_hit_tests_2005.10.05/01.basics.nes",
      sprite_basics),

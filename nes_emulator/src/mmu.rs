@@ -49,9 +49,14 @@ impl Memory for Mmu {
                         self.open_bus
                     }
                     4 => {
-                        let (read_val, _) = self.ppu.ld(ppu_reg);
+                        let (mut read_val, _) = self.ppu.ld(ppu_reg);
+                        // Bits 2–4 are unimplemented only in each sprite's
+                        // attribute byte, not in every OAM byte.
+                        if self.ppu.regs.oam_addr & 0b11 == 2 {
+                            read_val &= 0b1110_0011;
+                        }
                         self.open_bus = read_val;
-                        read_val & 0b11100011
+                        read_val
                     }
                     7 => {
                         let (read_val, pal_read) = self.ppu.ld(ppu_reg);
